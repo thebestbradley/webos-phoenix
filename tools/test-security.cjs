@@ -55,6 +55,15 @@ function check(cond, what) {
     return cond;
 }
 
+// fn's first truthy value, asked every 50 ms for up to ms; null if none.
+async function until(fn, ms) {
+    for (const end = Date.now() + ms; ;) {
+        const v = await fn();
+        if (v || Date.now() > end) return v || null;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+}
+
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
@@ -173,8 +182,9 @@ async function main() {
         check(!r.succeeded && r.retriesLeft === 1, "one left");
         r = await luna(SM + "matchDevicePasscode", { passCode: "000000" });
         check(!r.succeeded && r.retriesLeft === 0, "none left");
-        await page.waitForTimeout(500);
-        mode = await luna(SM + "getDeviceLockMode", {});
+        // The wipe (com.palm.storage/erase/Wipe) done: no passcode any more.
+        mode = await until(async () => { const m = await luna(SM + "getDeviceLockMode", {}); return m.lockMode === "none" ? m : null; }, 5000)
+            || await luna(SM + "getDeviceLockMode", {});
         const prefs = await luna("luna://com.webos.service.systemservice/getPreferences", { keys: ["firstUseComplete", "wallpaper"] });
         check(mode.lockMode === "none" && mode.policyState === "none" && !prefs.firstUseComplete && prefs.wallpaper !== "phoenix-test",
               "wiped: no passcode, no policy (the account is gone), First Use again (" + JSON.stringify({ mode, prefs }) + ")");
@@ -223,7 +233,7 @@ async function main() {
         await page.screenshot({ path: path.join(outDir, "devmode-debugging.png") });
         host.length = 0;
         await page.click("[data-testid=devmode-touchplot]");
-        await page.waitForTimeout(300);
+        await until(() => hostOf("debugOverlay").length > 0, 5000);
         const tp = hostOf("debugOverlay").map((m) => m.payload);
         check(tp.length === 1 && tp[0].touchPlot.trails === true && tp[0].touchPlot.crosshairs === true,
               "Debugging > Touch plot turns on trails and crosshairs (" + JSON.stringify(tp) + ")");

@@ -104,6 +104,14 @@ async function main() {
             }
             throw new Error(`no dictation ${op} #${n}`);
         };
+        // The first host message pred matches, once the page has posted it (up to 5 s).
+        const hostSays = async (pred) => {
+            for (const end = Date.now() + 5000; ;) {
+                const m = host.find(pred);
+                if (m || Date.now() > end) return m || null;
+                await page.waitForTimeout(50);
+            }
+        };
         const say = (ev) => page.evaluate((e) => window.__phoenixRuntime.dictationEvent(e), ev);
         const hear = async (text) => {
             await say({ state: "listening" });
@@ -153,8 +161,7 @@ async function main() {
         await shot("voicedial-confirm");
         await say({ state: "done", text: "Yes." });
         await page.waitForFunction(() => document.querySelector("[data-testid='voicedial']")?.getAttribute("data-stage") === "calling");
-        await page.waitForTimeout(200);
-        const toPhone = host.find((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone");
+        const toPhone = await hostSays((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone");
         check(!!toPhone && toPhone.payload.params.number === "(408) 555-0142" && toPhone.payload.params.dial === true,
             "\"Yes\": Phone is asked to call her ({number, dial: true})");
         await shot("voicedial-calling");
@@ -213,8 +220,7 @@ async function main() {
         await page.click("[data-testid='call']");
         await page.waitForFunction(() => document.querySelector("[data-testid='voicedial']")?.getAttribute("data-stage") === "calling");
         check(true, "a choice, then Call (the button)");
-        await page.waitForTimeout(200);
-        check(host.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone" && m.payload.params.number === "(212) 555-0164"),
+        check(!!(await hostSays((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone" && m.payload.params.number === "(212) 555-0164")),
             "calls Lena");
 
         // ---- No one by that name; nothing heard; the microphone button --------------------------------------------
@@ -252,6 +258,7 @@ async function main() {
         host.length = 0;
         await luna("palm://com.palm.pmvoicecommand/startVoiceCommand", { source: "appicon" });
         await luna("palm://com.palm.applicationManager/launch", { id: "com.palm.sysapp.voicedial" });
+        await hostSays(() => host.filter((m) => m.type === "launch").length >= 2);
         const launches = host.filter((m) => m.type === "launch").map((m) => m.payload.id);
         check(launches.length === 2 && launches.every((id) => id === "org.webosphoenix.voicedial"),
             "com.palm.pmvoicecommand/startVoiceCommand and com.palm.sysapp.voicedial open Voice Dial");

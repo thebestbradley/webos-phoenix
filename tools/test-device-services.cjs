@@ -165,16 +165,24 @@ async function main() {
         check(await closed, "Power snoozes it too");
 
         // 5. The display as apps see it, from the shell.
+        // Once subscribed (its first reply; the subscription is kept as the
+        // call returns, so just after it), the shell dims the display, then
+        // turns it off; done at the third reply (or with what came in 5 s).
         const statuses = await page.evaluate(() => new Promise((resolve) => {
             const seen = [];
             const b = new PalmServiceBridge();
-            b.onservicecallback = (j) => seen.push(JSON.parse(j));
+            let over = false;
+            const end = () => { if (!over) { over = true; b.cancel(); resolve(seen); } };
+            b.onservicecallback = (j) => {
+                seen.push(JSON.parse(j));
+                if (seen.length === 1) queueMicrotask(() => {
+                    __phoenixRuntime.devices.hostEvent({ display: { state: "dim" } });
+                    __phoenixRuntime.devices.hostEvent({ display: { state: "off", active: false } });
+                });
+                if (seen.length >= 3) end();
+            };
             b.call("palm://com.palm.display/status", JSON.stringify({ subscribe: true }));
-            setTimeout(() => {
-                __phoenixRuntime.devices.hostEvent({ display: { state: "dim" } });
-                __phoenixRuntime.devices.hostEvent({ display: { state: "off", active: false } });
-                setTimeout(() => { b.cancel(); resolve(seen); }, 50);
-            }, 50);
+            setTimeout(end, 5000);
         }));
         check(statuses.map((s) => s.event).join() === "request,displayDimmed,displayOff",
               "com.palm.display/status: the shell dims, then turns off the display");
