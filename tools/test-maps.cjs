@@ -344,14 +344,22 @@ async function main() {
         await page.waitForSelector(tid("nav-banner"));
         check(/Turn left onto West Santa Clara Street/.test(await page.textContent(tid("nav-instruction"))), "navigation shows the next turn");
         check(await saidSoon(/Drive northwest on South Market Street/), "and says the first direction (com.webos.service.tts)");
-        // Drive along: shape points 8 and 14 (before the first turn), then past it.
+        // Drive along: shape points 8 and 14 (before the first turn), then past it. A
+        // position reaches the app a moment after it is set (the location service answers on
+        // a timer, as on a device), later on a loaded machine: wait for the banner to change,
+        // as the checks after the turn do, not for a fixed time.
+        const navDistance = () => page.textContent(tid("nav-distance"));
+        const distanceChanges = (from) => page.waitForFunction(
+            (prev) => document.querySelector("[data-testid='nav-distance']").textContent !== prev, from, { timeout: 5000 })
+            .then(() => true, () => false);
+        const d0 = await navDistance();
         await setLocation(geometry[8][1], geometry[8][0], { speed: 10, direction: 330 });
-        await page.waitForTimeout(400);
-        const d1 = await page.textContent(tid("nav-distance"));
+        await distanceChanges(d0);
+        const d1 = await navDistance();
         await setLocation(geometry[14][1], geometry[14][0], { speed: 10, direction: 330 });
-        await page.waitForTimeout(400);
-        const d2 = await page.textContent(tid("nav-distance"));
-        check(d1 !== d2, `the distance to the turn counts down (${d1} -> ${d2})`);
+        const counted = await distanceChanges(d1);
+        const d2 = await navDistance();
+        check(counted && d1 !== d2, `the distance to the turn counts down (${d1} -> ${d2})`);
         check(await saidSoon(/turn left onto West Santa Clara Street/), "announces the turn ahead");
         await page.waitForTimeout(500);
         await shot("navigation");
