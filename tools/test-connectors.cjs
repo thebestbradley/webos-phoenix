@@ -87,7 +87,21 @@ async function main() {
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
     const packDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-connectors-pack-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The device as this test has it, served by serve-rootfs itself: the host
+    // runs the Marketplace's catalog (host.json), the catalog the device ships
+    // with ("phoenix") is this one (servers.json's feeds; the built-in Phoenix
+    // catalog's address comes from there, not from sources.json:
+    // docs/PLATFORM-CLIENT.md). Not answered by a Playwright route: a browser
+    // that intercepts requests deadlocks a page making a synchronous request
+    // (the packages service reads servers.json with PalmSystem.getResource)
+    // while it is navigated away from, and the next page never loads.
+    const device = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-device-"));
+    const serversJson = JSON.parse(fs.readFileSync(path.join(REPO, "services/account/etc/palm/phoenix/servers.json"), "utf8"));
+    serversJson.feeds = catalog.url + "/";
+    fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     "--extra-rootfs", device, "--host-json", JSON.stringify({ marketplaceCatalog: true }), "--no-tcp"], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -103,16 +117,6 @@ async function main() {
 
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
-        await context.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
-        // The device's servers.json, its feeds at this test's catalog (the
-        // built-in Phoenix catalog's address comes from there, not from
-        // sources.json: docs/PLATFORM-CLIENT.md).
-        await context.route("**/etc/palm/phoenix/servers.json", async (r) => {
-            const res = await r.fetch();
-            const json = await res.json();
-            json.feeds = catalog.url + "/";
-            await r.fulfill({ response: res, body: JSON.stringify(json) });
-        });
         const errors = [], host = [];
         context.on("page", (p) => {
             p.on("pageerror", (e) => errors.push(p.url().replace(/\?.*$/, "").replace(/^.*\/applications\//, "") + ": " + e.message));
@@ -362,6 +366,7 @@ async function main() {
         catalog.stop && catalog.stop();
         await fake.stop();
         fs.rmSync(installedDir, { recursive: true, force: true });
+        fs.rmSync(device, { recursive: true, force: true });
         fs.rmSync(packDir, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed; screenshots in ${outDir}` : `\nall checks passed; screenshots in ${outDir}`);

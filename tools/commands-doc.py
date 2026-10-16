@@ -396,8 +396,8 @@ it("Update feed", "The catalog server also serves `/updates/` (from the catalog'
     "server/updates/bin/serve.sh", ("php server/updates/bin/updates.php show", "also publish, withdraw")])
 it("Driver catalog", "Port 8090. `DRIVERS_DATA=sample` serves the simulator's sample catalog.", B, WP, "webos-phoenix/server/drivers/bin/serve.sh:5-9 · README.md:36-41",
    ["server/drivers/bin/serve.sh", ("php server/drivers/bin/drivers.php init", "also add, remove, publish, show, verify, reports, sample, keygen, pubkey, build, sign, attach, handover")])
-it("The apps in a browser", "Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `-v`.", B, WP,
-   "webos-phoenix/tools/serve-rootfs.py:10-11,1156-1166",
+it("The apps in a browser", "Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `--host-json JSON` (what the host offers, in `host.json`), `-v`.", B, WP,
+   "webos-phoenix/tools/serve-rootfs.py:10-11,1227-1239",
    ["python3 tools/serve-rootfs.py", "python3 tools/serve-rootfs.py --port 8765 --host 127.0.0.1 --terminal"])
 it("Platform mock", "Then set Settings > Developer Mode > Platform Servers to `http://127.0.0.1:8099/api/v1/servers.json`.", B, WP, "webos-phoenix/docs/PLATFORM-CLIENT.md:346 · tools/platform-mock/server.cjs:22-23",
    ["node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/servers.json"])

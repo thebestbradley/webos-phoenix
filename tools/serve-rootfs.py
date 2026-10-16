@@ -60,6 +60,13 @@ ways. The token and the origin are checked as the terminal's are; the
 page learns the address from host.json ("tcp": "websocket", "tcpUrl").
 It reaches what this computer reaches, as /__phoenix/proxy does; --no-tcp
 turns it off.
+
+--host-json JSON adds its keys to /usr/share/phoenix/host.json, where
+phoenix-sim says what its host offers ({"marketplaceCatalog": true}: the
+shell runs the Marketplace's catalog). Tests set it here rather than
+answer the request themselves in the browser: a browser that intercepts
+requests (Playwright's route) can deadlock a page that makes a synchronous
+request (PalmSystem.getResource) while it is being navigated away from.
 """
 
 import argparse
@@ -644,6 +651,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.server.tcp:
                 info["tcp"] = "websocket"
                 info["tcpUrl"] = "ws://%s/__phoenix/tcp?token=%s" % (self.headers.get("Host", ""), self.server.token)
+            info.update(getattr(self.server, "host_json", {}))
             return self.send(200, "application/json", json.dumps(info).encode())
         if path in ("/__phoenix/pty", "/__phoenix/pty/shells"):
             return pty_request(self, path)
@@ -1227,7 +1235,15 @@ def main():
     ap.add_argument("--extra-rootfs", action="append", default=[], metavar="DIR",
                     help="another folder laid out like the device's root (repeatable): its apps replace the built-in ones "
                          "with their ids, its other files are served over the checkout's")
+    ap.add_argument("--host-json", metavar="JSON", default="{}",
+                    help="keys to add to /usr/share/phoenix/host.json, what the host offers (e.g. '{\"marketplaceCatalog\": true}')")
     args = ap.parse_args()
+    try:
+        host_json = json.loads(args.host_json)
+    except ValueError as e:
+        ap.error("--host-json: %s" % e)
+    if not isinstance(host_json, dict):
+        ap.error("--host-json: a JSON object")
     for folder in args.extra_rootfs:
         if not os.path.isdir(folder):
             ap.error("--extra-rootfs %s: no such folder" % folder)
@@ -1243,6 +1259,7 @@ def main():
     srv.terminal_shell = args.terminal_shell
     srv.tcp = not args.no_tcp
     srv.token = secrets.token_urlsafe(24)
+    srv.host_json = host_json
     print("Serving %d apps at http://%s:%d/" % (len(APPS), args.host, args.port))
     if args.terminal:
         print("Terminal: real shells on this computer for pages served here (--terminal)")

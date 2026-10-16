@@ -2562,9 +2562,9 @@ php server/drivers/bin/drivers.php init
 
 ### The apps in a browser
 
-Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `-v`.
+Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `--host-json JSON` (what the host offers, in `host.json`), `-v`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/serve-rootfs.py:10-11,1156-1166`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/serve-rootfs.py:10-11,1227-1239`
 
 ```sh
 python3 tools/serve-rootfs.py
