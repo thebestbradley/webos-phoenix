@@ -235,7 +235,7 @@ tests = [("accounts","Account templates as connectors install and go, Find More,
 ("enact-notes","The Enact Notes demos (build them first)"),("exhibition","Dock-mode exhibitions and their Settings pane"),("fediverse","Fediverse against a fake Mastodon (needs PHP)"),
 ("filepicker","File pickers"),("files","Files"),("firstuse","First Use, every step"),("flashlight","Flashlight with the simulated torch"),("flutter-notes","The Flutter Notes demo (build it first)"),
 ("hardware","Settings > Hardware and the driver catalog (needs PHP)"),("help","Help, and Just Type finding it"),("hidpi","The original apps' art at pixel ratios 2 and 3"),
-("index-sim","Search your phone in phoenix-sim (needs --model FILE.gguf and llama-server)"),("ionic-notes","The Ionic Notes demo"),("justtype","The original Just Type"),
+("index-sim","Search your phone in phoenix-sim (python3 tools/get-index-model.py first: its model and llama-server)"),("ionic-notes","The Ionic Notes demo"),("justtype","The original Just Type"),
 ("keyboard","Web fields and the on-screen keyboard"),("launch-contracts","App-to-app launch buttons"),("links","Links between apps: web, mailto:, tel:, sms:"),("location","Location Services and permissions"),
 ("maps","Maps, with no live servers"),("marketplace","Marketplace against the real PHP catalog"),("matrix","A Matrix account"),("media-index","The media indexer's EXIF date and place"),
 ("media","Camera, Photos, Music"),("notification-stacks","Notification stacks"),("notificationlab","Notification Lab"),("orientation","Apps asking for an orientation"),("passwords","Passwords (KeePass)"),
@@ -403,6 +403,9 @@ it("Platform mock", "Then set Settings > Developer Mode > Platform Servers to `h
    ["node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/servers.json"])
 it("The assistant's models", "`./phoenix` fetches these itself.", B, WP, "webos-phoenix/phoenix:614,624,637,645 · tools/get-whisper-model.py:33-34",
    [("python3 tools/get-whisper-model.py", "--model base.en or tiny.en"), "python3 tools/get-wakeword.py", "python3 tools/get-kitten.py", "python3 tools/get-base-model.py"])
+it("Search your phone's model, for its test", "EmbeddingGemma 2 and, on Linux x86-64, llama.cpp's own build of `llama-server`, into `build/index`, where `tools/test-index-sim.cjs` finds them. The simulator downloads the model itself when Search your phone is turned on.", B, WP,
+   "webos-phoenix/tools/get-index-model.py:16 · tools/test-index-sim.cjs:21-22",
+   ["python3 tools/get-index-model.py"])
 it("Evaluate the assistant", "`laya-server.py` needs `pip install laya`.", B, WP, "webos-phoenix/docs/AI-AND-MCP.md:953-961 · tools/laya-server.py:9-10",
    ["llama-server -m build/models/qwen3-0.6b-q8_0.gguf --port 8091 --jinja -c 4096 -np 1 -fa on -b 512",
     "node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1", "tools/laya-server.py --port 8093"])

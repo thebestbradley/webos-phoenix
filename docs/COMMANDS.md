@@ -1320,7 +1320,7 @@ The original apps' art at pixel ratios 2 and 3:
 NODE_PATH="$(npm root -g)" node tools/test-hidpi.cjs
 ```
 
-Search your phone in phoenix-sim (needs --model FILE.gguf and llama-server):
+Search your phone in phoenix-sim (python3 tools/get-index-model.py first: its model and llama-server):
 
 ```sh
 NODE_PATH="$(npm root -g)" node tools/test-index-sim.cjs
@@ -2606,6 +2606,16 @@ python3 tools/get-kitten.py
 
 ```sh
 python3 tools/get-base-model.py
+```
+
+### Search your phone's model, for its test
+
+EmbeddingGemma 2 and, on Linux x86-64, llama.cpp's own build of `llama-server`, into `build/index`, where `tools/test-index-sim.cjs` finds them. The simulator downloads the model itself when Search your phone is turned on.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/get-index-model.py:16 · tools/test-index-sim.cjs:21-22`
+
+```sh
+python3 tools/get-index-model.py
 ```
 
 ### Evaluate the assistant
