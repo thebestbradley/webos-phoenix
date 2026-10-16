@@ -98,7 +98,7 @@ it("Start the build over", "", B, WP, "webos-phoenix/docs/GETTING-STARTED.md:395
 it("Rebuild only the web apps", "", B, AP, "webos-phoenix/docs/GETTING-STARTED.md:409-411", ["npm run build"])
 it("Build into another folder", "Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.", B, WP, "webos-phoenix/phoenix:80-82",
    ["PHOENIX_BUILD_DIR=build-other ./phoenix"])
-it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoenix:699,715",
+it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoenix:699,723",
    [("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\"", "", {"os": M}),
     ("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64", "", {"os": L}),
     ("cmake --build build --parallel", "")])
@@ -119,7 +119,7 @@ it("Run two simulators at once", "Each `--instance` is a device of its own: its 
    "webos-phoenix/shell/sim/main.cpp:226-257,749-782 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:234-257",
    [("./build/phoenix-sim --tablet --instance v1", "1.0"),
     ("./build/phoenix-sim --tablet --instance v2 --extra-rootfs ../phoenix-default-apps/build/rootfs -- --look ember-glass", "2.0, with the rebuilt apps", {"r": "phoenix-ember-glass-ui"})])
-it("Run without a display", "SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.", L, WP, "webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:751-763",
+it("Run without a display", "SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.", L, WP, "webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:759-771",
    [X + "./build/phoenix-sim --tablet --scene cards --screenshot out.png"])
 
 sec("Simulator: devices and layouts")
