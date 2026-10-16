@@ -87,7 +87,21 @@ async function main() {
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
     const packDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-connectors-pack-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The device as this test has it, served by serve-rootfs itself: the host
+    // runs the Marketplace's catalog (host.json), the catalog the device ships
+    // with ("phoenix") is this one (servers.json's feeds; the built-in Phoenix
+    // catalog's address comes from there, not from sources.json:
+    // docs/PLATFORM-CLIENT.md). Not answered by a Playwright route: a browser
+    // that intercepts requests deadlocks a page making a synchronous request
+    // (the packages service reads servers.json with PalmSystem.getResource)
+    // while it is navigated away from, and the next page never loads.
+    const device = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-device-"));
+    const serversJson = JSON.parse(fs.readFileSync(path.join(REPO, "services/account/etc/palm/phoenix/servers.json"), "utf8"));
+    serversJson.feeds = catalog.url + "/";
+    fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     "--extra-rootfs", device, "--host-json", JSON.stringify({ marketplaceCatalog: true }), "--no-tcp"], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -103,16 +117,6 @@ async function main() {
 
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
-        await context.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
-        // The device's servers.json, its feeds at this test's catalog (the
-        // built-in Phoenix catalog's address comes from there, not from
-        // sources.json: docs/PLATFORM-CLIENT.md).
-        await context.route("**/etc/palm/phoenix/servers.json", async (r) => {
-            const res = await r.fetch();
-            const json = await res.json();
-            json.feeds = catalog.url + "/";
-            await r.fulfill({ response: res, body: JSON.stringify(json) });
-        });
         const errors = [], host = [];
         context.on("page", (p) => {
             p.on("pageerror", (e) => errors.push(p.url().replace(/\?.*$/, "").replace(/^.*\/applications\//, "") + ": " + e.message));
@@ -195,8 +199,25 @@ async function main() {
             if (!w) throw new Error("no sign-in page for " + templateId);
             await w.waitForSelector(".connector-wizard", { timeout: 10000 }).catch(async (e) => { await shot(accounts, "wizard-failed"); console.log("errors: " + JSON.stringify(errors)); throw e; });
             await w.waitForSelector(".connector-unavailable", { state: "visible", timeout: 8000 }).catch(() => {});
-            await accounts.waitForTimeout(600);
             return w;
+        };
+        // Sign In ends the form, inside Enyo 1.0's scroller, below the fold on
+        // a phone. Playwright's scroll into view moves the DOM, which
+        // BasicScroller undoes at its next scroll event (scrollHandler, enyo-1.0
+        // BasicScroller.js:158-164), so on a loaded runner the tap lands on the
+        // field the scroller puts back there. Scroll to the end as the page
+        // itself does (scrollToBottom) and tap once the button is what is under
+        // the finger, as tools/test-sftp.cjs does.
+        const tapSignIn = async (w, wizard) => {
+            const reachable = await until(() => w.evaluate((id) => {
+                const c = enyo.$[id + "_signInButton"], n = c && c.hasNode();
+                if (!n) return false;
+                for (let s = c.parent; s; s = s.parent) if (typeof s.scrollToBottom === "function") { s.scrollToBottom(); break; }
+                const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !!hit && n.contains(hit);
+            }, wizard), 15000, 200);
+            if (!reachable) throw new Error("Sign In stays out of reach");
+            await w.getByText("Sign In", { exact: true }).click();
         };
         const createAccount = async (templateId, name, stateKind) => {
             const create = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
@@ -220,7 +241,7 @@ async function main() {
         await w.locator("input[type=password]").first().fill(td.token);
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "3-todoist-sign-in");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w, "connectorWizard");
         const todo = await createAccount(TODOIST, "4-todoist-create");
         check(todo && todo.username === "anna@example.com", "the Todoist account exists (" + (todo && todo.username) + ")");
         if (!todo) throw new Error("no Todoist account");
@@ -243,7 +264,9 @@ async function main() {
         await tasks.press("[data-testid=quick-add]", "Enter");
         await tasks.waitForSelector("[data-testid='task-Buy eggs']", { timeout: 10000 });
         await tasks.click("[data-testid='check-Buy milk']");
-        await tasks.waitForTimeout(500);
+        // Ticked off once Tasks has written it (db8), not after a while: the sync sends what db8 has.
+        const ticked = await until(async () => (await db(tasks, "com.palm.task.todoist:1")).some((t) => t.summary === "Buy milk" && t.completed), 10000);
+        check(!!ticked, "the task ticked off in Tasks is done in db8");
         const eggs = (await db(tasks, "com.palm.task.todoist:1")).find((t) => t.summary === "Buy eggs");
         check(!!eggs && eggs.accountId === todo._id, "a task added in the list is the Todoist account's (com.palm.task.todoist:1)");
         await syncNow(tasks, "org.webosphoenix.service.todoist", todo._id);
@@ -254,8 +277,9 @@ async function main() {
         // ---- 4. Add to Todoist from the share sheet ------------------------------------------------------------
         const browserPage = await context.newPage();
         await browserPage.goto(appUrl("com.palm.app.browser"));
-        await browserPage.waitForFunction(() => !!window.__phoenixRuntime);
-        await browserPage.waitForTimeout(1500);
+        // The browser drawn: it tells the shell its stage is ready (PalmSystem.stageReady).
+        check(!!(await until(() => host.some((m) => m.type === "stageReady" && m.payload.appId === "com.palm.app.browser"), 15000)),
+              "the browser is up (its stage ready)");
         const shareTo = async (appId, shotName) => {
             host.length = 0;
             const shared = browserPage.evaluate(() => __phoenixRuntime.share({ title: "Phoenix release notes", url: "https://example.org/notes" }));
@@ -290,7 +314,7 @@ async function main() {
         await w.locator("input[type=password]").first().fill(bs.appPassword);
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "10-bluesky-sign-in");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w, "connectorWizard");
         const sky = await createAccount(BLUESKY, "11-bluesky-create", "org.webosphoenix.bluesky.state:1");
         check(sky && sky.username === "anna.test" && sky.capabilityProviders.length === 3, "the Bluesky account exists, with contacts, messages and notifications");
         if (!sky) throw new Error("no Bluesky account");
@@ -342,6 +366,7 @@ async function main() {
         catalog.stop && catalog.stop();
         await fake.stop();
         fs.rmSync(installedDir, { recursive: true, force: true });
+        fs.rmSync(device, { recursive: true, force: true });
         fs.rmSync(packDir, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed; screenshots in ${outDir}` : `\nall checks passed; screenshots in ${outDir}`);

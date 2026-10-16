@@ -100,16 +100,21 @@ function screenshot(name) {
     return file;
 }
 
-// The Assistant app: a request typed and sent; its answer, once the app shows it.
-async function ask(app, text) {
-    const before = await app.evaluate("document.querySelectorAll('.as-msg, [data-role=assistant], .as-bubble').length");
+// The Assistant app: a request typed and sent (once Send takes it: the
+// field's text in the app's state); its answer, once the app shows it: a
+// new bubble of the Assistant's, the request done (the field enabled
+// again), and its words on screen when the caller says what they are
+// (expect; the conversation's messages come a moment after the request).
+async function ask(app, text, expect) {
+    const before = await app.evaluate("document.querySelectorAll('.as-bubble.in').length");
     await app.evaluate("document.querySelector('[data-testid=as-input]').focus()");
     await app.send("Input.insertText", { text });
-    await sleep(150);
+    await until(() => app.evaluate(`document.querySelector('[data-testid=as-input]').value === ${JSON.stringify(text)} &&
+                                     !document.querySelector('[data-testid=as-send]').disabled`), 10000);
     await app.evaluate("document.querySelector('[data-testid=as-send]').click()");
-    await until(() => app.evaluate(`document.querySelectorAll('.as-msg, [data-role=assistant], .as-bubble').length > ${before} &&
-                                     !document.querySelector('[data-testid=as-input]').disabled`), 30000);
-    await sleep(700);
+    await until(async () => (await app.evaluate(`document.querySelectorAll('.as-bubble.in').length > ${before} &&
+                                                 !document.querySelector('[data-testid=as-input]').disabled`))
+                            && (!expect || expect.test((await app.evaluate("document.body.innerText")).replace(/\n/g, " "))), 30000);
     return app.evaluate("document.body.innerText");
 }
 
@@ -133,11 +138,14 @@ async function main() {
     let simLog = "";
     sim.stdout.on("data", (d) => { simLog += d; });
     sim.stderr.on("data", (d) => { simLog += d; });
-    const started = Date.now();
     try {
         const app = await pageMatching(/org\.webosphoenix\.assistant\/index\.html/, 90000);
         if (!check(!!app, form + ": phoenix-sim runs, the Assistant app is up")) throw new Error("no Assistant page");
-        await sleep(Math.max(1000, 10000 - (Date.now() - started)));
+        // The system UI up and listening for its events (it hosts the
+        // connectors' installs and accounts), as tools/test-activities-sim.cjs waits for it.
+        const sys = await pageMatching(/com\.palm\.systemui\/index\.html/, 30000);
+        if (!check(!!sys && !!(await until(() => sys.evaluate("Date.now() - JSON.parse(localStorage.getItem('phoenix:systemui:listening') || '0') < 30000"), 30000)),
+                   form + ": the system UI is up")) throw new Error("no system UI");
         // The image's settings that point the connectors at the stand-ins (no provider registration: tokens and app passwords).
         await app.evaluate(`(function (cfg) { Object.keys(cfg).forEach(function (k) { localStorage.setItem("phoenix:systemConfig:" + k, JSON.stringify(cfg[k])); }); })(${JSON.stringify(fake.systemConfig([]))})`);
 
@@ -152,7 +160,10 @@ async function main() {
             })()`);
             check(r === id, "the " + name + " connector is installed (" + r + ")");
         }
-        await sleep(3000);
+        // Their account types, as Accounts lists them.
+        const templateIds = ["com.webosphoenix.todoist", "com.webosphoenix.bluesky", "com.webosphoenix.xmpp"];
+        check(!!(await until(async () => { const t = ((await luna(app, "luna://com.palm.service.accounts/listAccountTemplates", {})).results || []).map((x) => x.templateId);
+                                          return templateIds.every((id) => t.includes(id)); }, 15000)), "their account templates are listed");
 
         // ---- The accounts, as their sign-in pages make them ------------------------------------------------
         async function account(templateId, service, signIn) {
@@ -167,30 +178,36 @@ async function main() {
         const todo = await account("com.webosphoenix.todoist", "org.webosphoenix.service.todoist", { password: fake.todoist.token });
         const sky = await account("com.webosphoenix.bluesky", "org.webosphoenix.service.bluesky", { username: fake.bluesky.handle, password: fake.bluesky.appPassword });
         const jabber = await account("com.webosphoenix.xmpp", "org.webosphoenix.service.xmpp", { username: "me@chat.example", password: "phoenix" });
-        await sleep(2500);
+        // The accounts service calls each connector's onCreate with the account's
+        // config 500 ms after createAccount (app-services notify-created.js; the
+        // runtime): Bluesky's sync needs it (as tools/test-connectors.cjs waits).
+        if (sky) await until(() => app.evaluate(`Object.keys(localStorage).filter((k) => k.startsWith("phoenix:db8:com.palm.db/obj/"))
+            .map((k) => JSON.parse(localStorage.getItem(k))).some((o) => o && !o._del && o._kind === "org.webosphoenix.bluesky.state:1"
+                && o.accountId === ${JSON.stringify(sky._id)} && Object.keys(o.config || {}).length > 0)`), 15000);
         if (todo) await luna(app, "luna://org.webosphoenix.service.todoist/sync", { accountId: todo._id });
         if (sky) await luna(app, "luna://org.webosphoenix.service.bluesky/sync", { accountId: sky._id });
         const db = (kind) => luna(app, "luna://com.palm.db/find", { query: { from: kind } }).then((r) => r.results || []);
         check(!!(await until(async () => (await db("com.palm.tasklist.todoist:1")).find((l) => l.name === "Groceries"), 20000)), "Todoist's projects are lists");
         check(!!(await until(async () => (await db("com.palm.person:1")).find((p) => (p.ims || []).some((i) => i.type === "type_jabber" && i.value === "ada.palmer@chat.example")), 30000)),
               "the Jabber roster is linked to people");
-        await app.evaluate("location.reload()");
-        await sleep(4000);
+        await app.evaluate("window.__beforeReload = true; location.reload()");
         const fresh = await pageMatching(/org\.webosphoenix\.assistant\/index\.html/, 20000);
+        // The reloaded page (not the one going away) ready for a request: its field there and enabled.
+        await until(() => fresh.evaluate("!window.__beforeReload && !!document.querySelector('[data-testid=as-input]') && !document.querySelector('[data-testid=as-input]').disabled"), 30000);
 
         // ---- 1-2. Todoist -------------------------------------------------------------------------------------
-        let said = await ask(fresh, "add oat milk to my todoist groceries list");
+        let said = await ask(fresh, "add oat milk to my todoist groceries list", /Added “Oat milk” to your Groceries list in Todoist/);
         check(/Added “Oat milk” to your Groceries list in Todoist/.test(said), "1. the task, in Todoist's list");
         screenshot("1-todoist-add.png");
         check(!!(await until(async () => (await db("com.palm.task.todoist:1")).find((x) => x.summary === "Oat milk"), 5000)), "in Todoist's kind");
         await luna(fresh, "luna://org.webosphoenix.service.todoist/sync", { accountId: todo._id });
         check(!!(await until(async () => fake.todoist.tasks.find((x) => x.content === "Oat milk" && x.project_id === "220474323"), 15000)), "and on Todoist after a sync");
-        said = await ask(fresh, "what's on my todoist groceries list");
+        said = await ask(fresh, "what's on my todoist groceries list", /Groceries \(Todoist\) list: “Buy milk” and “Oat milk”/);
         check(/Groceries \(Todoist\) list: “Buy milk” and “Oat milk”/.test(said), "2. Todoist's list read");
         screenshot("2-todoist-list.png");
 
         // ---- 3. Bluesky ---------------------------------------------------------------------------------------
-        said = await ask(fresh, "post to bluesky: Shipping the new launcher today");
+        said = await ask(fresh, "post to bluesky: Shipping the new launcher today", /Post to Bluesky as @anna\.test: “Shipping the new launcher today”\?/);
         check(/Post to Bluesky as @anna\.test: “Shipping the new launcher today”\?/.test(said), "3. the post read back, naming the account");
         screenshot("3-bluesky-readback.png");
         check(fake.bluesky.posts.length === 0, "nothing posted before Yes");
@@ -200,7 +217,7 @@ async function main() {
         screenshot("4-bluesky-posted.png");
 
         // ---- 4. Jabber ----------------------------------------------------------------------------------------
-        said = await ask(fresh, "message Ada on Jabber: the mock-ups are ready");
+        said = await ask(fresh, "message Ada on Jabber: the mock-ups are ready", /Send "the mock-ups are ready" to Ada Palmer on Jabber\?/);
         if (!check(/Send "the mock-ups are ready" to Ada Palmer on Jabber\?/.test(said), "4. the message read back")) {
             const all = await luna(fresh, "luna://com.palm.service.accounts/listAccounts", {});
             console.log("     accounts: " + JSON.stringify((all.results || []).map((a) => [a.templateId, a.username, (a.capabilityProviders || []).map((c) => [c.capability, c.serviceName, c.dbkinds])])));
@@ -237,7 +254,7 @@ async function main() {
         screenshot("6-jabber-sent.png");
 
         // ---- 5. The accounts ----------------------------------------------------------------------------------
-        said = await ask(fresh, "what accounts do I have");
+        said = await ask(fresh, "what accounts do I have", /Bluesky for contacts, messages and posts.*Jabber \(XMPP\) for contacts and messages.*Todoist for tasks/);
         check(/Bluesky for contacts, messages and posts.*Jabber \(XMPP\) for contacts and messages.*Todoist for tasks/.test(said.replace(/\n/g, " ")), "5. the accounts listed");
         screenshot("7-accounts.png");
     } catch (e) {

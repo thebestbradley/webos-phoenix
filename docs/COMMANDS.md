@@ -358,7 +358,7 @@ cmake --build build --parallel
 
 CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:161,248`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:165,252`
 
 ```sh
 cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
@@ -782,7 +782,7 @@ export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner
 
 ### Run the QML tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:171,185,189,509 · README.md:466`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:175,189,193,548 · README.md:481`
 
 **Mac:** All of them, as CI runs them on the Mac (offscreen Metal stalls animations):
 
@@ -818,7 +818,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:254-328,342,519-535,549 · shell/CMakeLists.txt:69-75,127-197`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:258-332,346,558-574,588 · shell/CMakeLists.txt:69-75,127-197`
 
 ```sh
 build/pty/pty-test
@@ -932,7 +932,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,89
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:78 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -1320,7 +1320,7 @@ The original apps' art at pixel ratios 2 and 3:
 NODE_PATH="$(npm root -g)" node tools/test-hidpi.cjs
 ```
 
-Search your phone in phoenix-sim (needs --model FILE.gguf and llama-server):
+Search your phone in phoenix-sim (python3 tools/get-index-model.py first: its model and llama-server):
 
 ```sh
 NODE_PATH="$(npm root -g)" node tools/test-index-sim.cjs
@@ -1616,7 +1616,7 @@ npm run dev -w settings
 
 Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.
 
-Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:88`
+Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:92`
 
 ```sh
 npm ci --no-audit --no-fund && npm run typecheck && npm run build
@@ -1632,7 +1632,7 @@ npm run serve
 
 Needs Flutter.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:103-113 · apps/flutter-notes/README.md:55-58`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:107-117 · apps/flutter-notes/README.md:55-58`
 
 ```sh
 (cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)
@@ -2206,7 +2206,7 @@ container volume delete webos-phoenix-work
 
 x86-64 Ubuntu with about 200 GB free. Naming several machines configures them all; `MCF_COMMAND=configure` only writes the configuration.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/README.md:534-538 · scripts/setup-build.sh:7-17`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/README.md:566-571 · scripts/setup-build.sh:7-17`
 
 ```sh
 scripts/setup-build.sh ../build-webos-phoenix qemux86-64 fairphone-fp6
@@ -2562,9 +2562,9 @@ php server/drivers/bin/drivers.php init
 
 ### The apps in a browser
 
-Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `-v`.
+Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `--host-json JSON` (what the host offers, in `host.json`), `-v`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/serve-rootfs.py:10-11,1156-1166`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/serve-rootfs.py:10-11,1227-1239`
 
 ```sh
 python3 tools/serve-rootfs.py
@@ -2606,6 +2606,16 @@ python3 tools/get-kitten.py
 
 ```sh
 python3 tools/get-base-model.py
+```
+
+### Search your phone's model, for its test
+
+EmbeddingGemma 2 and, on Linux x86-64, llama.cpp's own build of `llama-server`, into `build/index`, where `tools/test-index-sim.cjs` finds them. The simulator downloads the model itself when Search your phone is turned on.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/get-index-model.py:16 · tools/test-index-sim.cjs:21-22`
+
+```sh
+python3 tools/get-index-model.py
 ```
 
 ### Evaluate the assistant

@@ -103,7 +103,7 @@ it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoen
     ("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64", "", {"os": L}),
     ("cmake --build build --parallel", "")])
 it("A release build without the npm step", "CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.", M, WP,
-   "webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:161,248",
+   "webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:165,252",
    ["cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\""])
 
 sec("Simulator: start")
@@ -188,13 +188,13 @@ sec("Test: shell")
 it("Point QMLTEST at Qt's test runner", "Once per terminal.", B, WP, "webos-phoenix/CLAUDE.md:86-87 · docs/GETTING-STARTED.md:335-337",
    [("export QMLTEST=\"$(brew --prefix qt)/bin/qmltestrunner\"", "", {"os": M}),
     ("export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner", "", {"os": L})])
-it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:171,185,189,509 · README.md:466",
+it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:175,189,193,548 · README.md:481",
    [("QT_QUICK_BACKEND=software QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them, as CI runs them on the Mac (offscreen Metal stalls animations)", {"os": M}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them", {"os": L}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_launcher.qml", "one file"),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device", "the device shell over fake modules"),
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
-it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:254-328,342,519-535,549 · shell/CMakeLists.txt:69-75,127-197",
+it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:258-332,346,558-574,588 · shell/CMakeLists.txt:69-75,127-197",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
     ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
     ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
@@ -206,7 +206,7 @@ it("Run the C++ tests", "There's nothing for `ctest` to find: run each test prog
 it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,89-92 · tools/check-device.sh:8-15",
    ["./phoenix check-device", "./phoenix check-device --all", "./phoenix check-device --strict",
     ("./phoenix check-device --parse fairphone-fp6", "also BitBake's parse check of the named machines (Linux, not as root)", {"os": L})])
-it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:78 · tools/test-make-utm.py:10-11",
+it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
     "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
@@ -235,7 +235,7 @@ tests = [("accounts","Account templates as connectors install and go, Find More,
 ("enact-notes","The Enact Notes demos (build them first)"),("exhibition","Dock-mode exhibitions and their Settings pane"),("fediverse","Fediverse against a fake Mastodon (needs PHP)"),
 ("filepicker","File pickers"),("files","Files"),("firstuse","First Use, every step"),("flashlight","Flashlight with the simulated torch"),("flutter-notes","The Flutter Notes demo (build it first)"),
 ("hardware","Settings > Hardware and the driver catalog (needs PHP)"),("help","Help, and Just Type finding it"),("hidpi","The original apps' art at pixel ratios 2 and 3"),
-("index-sim","Search your phone in phoenix-sim (needs --model FILE.gguf and llama-server)"),("ionic-notes","The Ionic Notes demo"),("justtype","The original Just Type"),
+("index-sim","Search your phone in phoenix-sim (python3 tools/get-index-model.py first: its model and llama-server)"),("ionic-notes","The Ionic Notes demo"),("justtype","The original Just Type"),
 ("keyboard","Web fields and the on-screen keyboard"),("launch-contracts","App-to-app launch buttons"),("links","Links between apps: web, mailto:, tel:, sms:"),("location","Location Services and permissions"),
 ("maps","Maps, with no live servers"),("marketplace","Marketplace against the real PHP catalog"),("matrix","A Matrix account"),("media-index","The media indexer's EXIF date and place"),
 ("media","Camera, Photos, Music"),("notification-stacks","Notification stacks"),("notificationlab","Notification Lab"),("orientation","Apps asking for an orientation"),("passwords","Passwords (KeePass)"),
@@ -252,9 +252,9 @@ sec("Apps (webos-phoenix)")
 it("Install, build, typecheck, test", "", B, AP, "webos-phoenix/apps/package.json:54-59 · CLAUDE.md:56",
    ["npm ci --no-audit --no-fund", ("npm run build", "every app"), ("npm run build -w settings", "one app"), "npm run typecheck", "npm test", "npm run check",
     ("npm run dev -w settings", "Vite, without the webOS runtime (undocumented)")])
-it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:88",
+it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:92",
    ["npm ci --no-audit --no-fund && npm run typecheck && npm run build", ("npm run serve", "enact serve")])
-it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:103-113 · apps/flutter-notes/README.md:55-58",
+it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:107-117 · apps/flutter-notes/README.md:55-58",
    ["(cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)",
     "(cd apps/flutter-notes && flutter pub get --enforce-lockfile && dart analyze --fatal-infos && flutter test && tool/build.sh)"])
 it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix/apps/shared/connector-kit/src/tools/cli.ts:6-20 · docs/SYNERGY-SDK.md:719",
@@ -338,7 +338,7 @@ it("Copy images out, or start the build over", "", M, WP, "webos-phoenix/docs/BU
    [("cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/", "inside scripts/mac-build.sh --shell", {"r": "build container"}),
     ("container volume delete webos-phoenix-work", "deletes the whole build")])
 it("Build an image on Linux", "x86-64 Ubuntu with about 200 GB free. Naming several machines configures them all; `MCF_COMMAND=configure` only writes the configuration.", L, WP,
-   "webos-phoenix/README.md:534-538 · scripts/setup-build.sh:7-17",
+   "webos-phoenix/README.md:566-571 · scripts/setup-build.sh:7-17",
    ["scripts/setup-build.sh ../build-webos-phoenix qemux86-64 fairphone-fp6",
     ("cd ../build-webos-phoenix && . ./oe-init-build-env && bitbake webos-phoenix-image", ""),
     ("MACHINE=fairphone-fp6 bitbake webos-phoenix-image", "one machine", {"r": "build-webos-phoenix"})])
@@ -396,13 +396,16 @@ it("Update feed", "The catalog server also serves `/updates/` (from the catalog'
     "server/updates/bin/serve.sh", ("php server/updates/bin/updates.php show", "also publish, withdraw")])
 it("Driver catalog", "Port 8090. `DRIVERS_DATA=sample` serves the simulator's sample catalog.", B, WP, "webos-phoenix/server/drivers/bin/serve.sh:5-9 · README.md:36-41",
    ["server/drivers/bin/serve.sh", ("php server/drivers/bin/drivers.php init", "also add, remove, publish, show, verify, reports, sample, keygen, pubkey, build, sign, attach, handover")])
-it("The apps in a browser", "Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `-v`.", B, WP,
-   "webos-phoenix/tools/serve-rootfs.py:10-11,1156-1166",
+it("The apps in a browser", "Port 8765. `--terminal` gives the Terminal app a real shell on your computer, so keep it on 127.0.0.1. Also `--terminal-shell PATH`, `--installed-dir DIR`, `--no-tcp`, `--extra-rootfs DIR`, `--host-json JSON` (what the host offers, in `host.json`), `-v`.", B, WP,
+   "webos-phoenix/tools/serve-rootfs.py:10-11,1227-1239",
    ["python3 tools/serve-rootfs.py", "python3 tools/serve-rootfs.py --port 8765 --host 127.0.0.1 --terminal"])
 it("Platform mock", "Then set Settings > Developer Mode > Platform Servers to `http://127.0.0.1:8099/api/v1/servers.json`.", B, WP, "webos-phoenix/docs/PLATFORM-CLIENT.md:346 · tools/platform-mock/server.cjs:22-23",
    ["node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/servers.json"])
 it("The assistant's models", "`./phoenix` fetches these itself.", B, WP, "webos-phoenix/phoenix:614,624,637,645 · tools/get-whisper-model.py:33-34",
    [("python3 tools/get-whisper-model.py", "--model base.en or tiny.en"), "python3 tools/get-wakeword.py", "python3 tools/get-kitten.py", "python3 tools/get-base-model.py"])
+it("Search your phone's model, for its test", "EmbeddingGemma 2 and, on Linux x86-64, llama.cpp's own build of `llama-server`, into `build/index`, where `tools/test-index-sim.cjs` finds them. The simulator downloads the model itself when Search your phone is turned on.", B, WP,
+   "webos-phoenix/tools/get-index-model.py:16 · tools/test-index-sim.cjs:21-22",
+   ["python3 tools/get-index-model.py"])
 it("Evaluate the assistant", "`laya-server.py` needs `pip install laya`.", B, WP, "webos-phoenix/docs/AI-AND-MCP.md:953-961 · tools/laya-server.py:9-10",
    ["llama-server -m build/models/qwen3-0.6b-q8_0.gguf --port 8091 --jinja -c 4096 -np 1 -fa on -b 512",
     "node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1", "tools/laya-server.py --port 8093"])

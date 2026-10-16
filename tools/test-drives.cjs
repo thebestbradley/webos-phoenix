@@ -89,7 +89,21 @@ async function main() {
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
     const packDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-drives-pack-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The device as this test has it, served by serve-rootfs itself: the host
+    // runs the Marketplace's catalog (host.json), the catalog the device ships
+    // with ("phoenix") is this one (servers.json's feeds; the built-in Phoenix
+    // catalog's address comes from there, not from sources.json:
+    // docs/PLATFORM-CLIENT.md). Not answered by a Playwright route: a browser
+    // that intercepts requests deadlocks a page making a synchronous request
+    // (the packages service reads servers.json with PalmSystem.getResource)
+    // while it is navigated away from, and the next page never loads.
+    const device = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-device-"));
+    const serversJson = JSON.parse(fs.readFileSync(path.join(REPO, "services/account/etc/palm/phoenix/servers.json"), "utf8"));
+    serversJson.feeds = catalog.url + "/";
+    fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     "--extra-rootfs", device, "--host-json", JSON.stringify({ marketplaceCatalog: true }), "--no-tcp"], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -103,14 +117,6 @@ async function main() {
 
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
-        // The catalog the device ships with ("phoenix") is this one, its key the device's.
-        await context.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
-        await context.route("**/etc/palm/marketplace/sources.json", async (r) => {
-            const res = await r.fetch();
-            const json = await res.json();
-            json.sources.find((x) => x.id === "phoenix").url = catalog.catalogUrl;
-            await r.fulfill({ response: res, body: JSON.stringify(json) });
-        });
         const errors = [], host = [];
         const watch = (p) => {
             p.on("pageerror", (e) => errors.push(p.url().replace(/\?.*$/, "").replace(/^.*\/applications\//, "") + ": " + e.message));
@@ -184,8 +190,27 @@ async function main() {
             const w = await until(() => accounts.frames().find((f) => /org\.webosphoenix\.drives\/accounts\/wizard\.html/.test(f.url())), 15000);
             if (!w) throw new Error("no sign-in page for " + templateId);
             await w.waitForSelector(".drives-wizard", { timeout: 10000 }).catch(async (e) => { await shot(accounts, "wizard-failed"); console.log("errors: " + JSON.stringify(errors)); throw e; });
-            await accounts.waitForTimeout(800);
+            // The page as the provider has it: the drives' service answered providerInfo (DrivesWizard.gotInfo).
+            await w.waitForFunction(() => !!(window.enyo && enyo.$.drivesWizard && enyo.$.drivesWizard.info), null, { timeout: 10000 });
             return w;
+        };
+        // Sign In ends the form, inside Enyo 1.0's scroller, below the fold on
+        // a phone. Playwright's scroll into view moves the DOM, which
+        // BasicScroller undoes at its next scroll event (scrollHandler, enyo-1.0
+        // BasicScroller.js:158-164), so on a loaded runner the tap lands on the
+        // field the scroller puts back there. Scroll to the end as the page
+        // itself does (scrollToBottom) and tap once the button is what is under
+        // the finger, as tools/test-sftp.cjs does.
+        const tapSignIn = async (w) => {
+            const reachable = await until(() => w.evaluate(() => {
+                const d = enyo.$.drivesWizard, n = d && d.$.signInButton.hasNode();
+                if (!n) return false;
+                d.$.scroller.scrollToBottom();
+                const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !!hit && n.contains(hit);
+            }), 15000, 200);
+            if (!reachable) throw new Error("Sign In stays out of reach");
+            await w.getByText("Sign In", { exact: true }).click();
         };
         let w = await wizardOf("com.webosphoenix.drive.box");
         await w.waitForSelector(".drives-unavailable", { state: "visible", timeout: 5000 }).catch(() => {});
@@ -199,7 +224,7 @@ async function main() {
         await w.locator("input").first().press("Tab");
         await shot(accounts, "5-nextcloud-sign-in");
         host.length = 0;
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w);
         const opened = await until(() => host.find((m) => JSON.stringify(m.payload || {}).indexOf("/login/v2/flow/") >= 0), 10000);
         check(!!opened, "Sign In opens the server's own login page in the browser");
         await accounts.waitForTimeout(300);
@@ -217,7 +242,7 @@ async function main() {
               "the Nextcloud account exists, with Files (DOCUMENTS)");
 
         w = await wizardOf("com.webosphoenix.drive.dropbox");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w);
         const sheet = await until(() => accounts.frames().find((f) => /org\.webosphoenix\.sharesheet\/index\.html/.test(f.url())), 15000);
         const providerPage = await until(() => accounts.frames().find((f) => f.url().indexOf(fake.origin + "/oauth/dropbox/authorize") === 0), 15000);
         check(!!sheet && !!providerPage, "Dropbox: its own sign-in page in the system's sign-in sheet");
@@ -258,7 +283,9 @@ async function main() {
         await shot(files, "11-files-photos");
         await files.click("[data-testid='file-lake.png']");
         await files.waitForSelector(".fm-viewer-image", { timeout: 15000 });
-        await files.waitForTimeout(500);
+        // The picture decoded (its bytes came through the cache), not a moment later.
+        await files.waitForFunction(() => { const i = document.querySelector(".fm-viewer-image"); return !!i && i.complete && i.naturalWidth > 0; },
+                                    null, { timeout: 15000 }).catch(() => {});
         const shown = await files.evaluate(() => { const i = document.querySelector(".fm-viewer-image"); return i && i.naturalWidth; });
         check(shown === 64, "a picture of the drive opens (downloaded through the device's cache): " + shown + " px");
         await shot(files, "12-files-picture");
@@ -399,6 +426,7 @@ async function main() {
         rootfs.kill();
         await Promise.all([catalog.stop(), fake.stop()]);
         fs.rmSync(installedDir, { recursive: true, force: true });
+        fs.rmSync(device, { recursive: true, force: true });
         fs.rmSync(packDir, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed` : `\nAll checks passed. Screenshots in ${outDir}`);

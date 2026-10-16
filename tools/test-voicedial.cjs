@@ -24,6 +24,7 @@
 "use strict";
 const { spawn, execSync } = require("child_process");
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 
 // A response read to its end: one left unread, its socket closed under it,
@@ -55,6 +56,13 @@ function check(cond, what) {
     if (!cond) failures++;
 }
 
+function freePort() {
+    return new Promise((resolve) => {
+        const s = net.createServer();
+        s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => resolve(p)); });
+    });
+}
+
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
@@ -71,9 +79,19 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    // The shell: one has a microphone ({"dictation": true} in host.json); a
+    // browser without the shell has none (the second server's host.json).
+    // Served by serve-rootfs, not answered by a Playwright route: a browser
+    // that intercepts requests deadlocks a page making a synchronous request
+    // (PalmSystem.getResource) while it is navigated away from, and the next
+    // page never loads (seen at the second open, with the CPU throttled).
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port),
+                                     "--host-json", JSON.stringify({ dictation: true }), "--no-tcp"], { stdio: "ignore" });
+    const port2 = await freePort();
+    const noShell = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port2), "--no-tcp"], { stdio: "ignore" });
     try {
         await waitForServer(`http://127.0.0.1:${port}/apps.json`, 10000);
+        await waitForServer(`http://127.0.0.1:${port2}/apps.json`, 10000);
         const browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
         const page = await context.newPage();
@@ -90,10 +108,6 @@ async function main() {
             }
         });
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png") });
-        // The shell: one has a microphone ({"dictation": true} in host.json).
-        let shellHasMic = true;
-        await context.route("**/usr/share/phoenix/host.json", (route) =>
-            route.fulfill({ contentType: "application/json", body: JSON.stringify(shellHasMic ? { dictation: true } : {}) }));
         const dictationOps = () => host.filter((m) => m.type === "dictation").map((m) => m.payload);
         const waitOp = async (op, n) => {
             const until = Date.now() + 5000;
@@ -103,6 +117,14 @@ async function main() {
                 await page.waitForTimeout(50);
             }
             throw new Error(`no dictation ${op} #${n}`);
+        };
+        // The first host message pred matches, once the page has posted it (up to 5 s).
+        const hostSays = async (pred) => {
+            for (const end = Date.now() + 5000; ;) {
+                const m = host.find(pred);
+                if (m || Date.now() > end) return m || null;
+                await page.waitForTimeout(50);
+            }
         };
         const say = (ev) => page.evaluate((e) => window.__phoenixRuntime.dictationEvent(e), ev);
         const hear = async (text) => {
@@ -116,9 +138,9 @@ async function main() {
             b.onservicecallback = (j) => res(JSON.parse(j));
             b.call(u, JSON.stringify(p || {}));
         }), [uri, params]);
-        const open = async () => {
+        const open = async (url) => {
             host.length = 0;
-            await page.goto(APP);
+            await page.goto(url || APP);
             await page.waitForSelector("[data-testid='voicedial']");
         };
 
@@ -153,8 +175,7 @@ async function main() {
         await shot("voicedial-confirm");
         await say({ state: "done", text: "Yes." });
         await page.waitForFunction(() => document.querySelector("[data-testid='voicedial']")?.getAttribute("data-stage") === "calling");
-        await page.waitForTimeout(200);
-        const toPhone = host.find((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone");
+        const toPhone = await hostSays((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone");
         check(!!toPhone && toPhone.payload.params.number === "(408) 555-0142" && toPhone.payload.params.dial === true,
             "\"Yes\": Phone is asked to call her ({number, dial: true})");
         await shot("voicedial-calling");
@@ -213,8 +234,7 @@ async function main() {
         await page.click("[data-testid='call']");
         await page.waitForFunction(() => document.querySelector("[data-testid='voicedial']")?.getAttribute("data-stage") === "calling");
         check(true, "a choice, then Call (the button)");
-        await page.waitForTimeout(200);
-        check(host.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone" && m.payload.params.number === "(212) 555-0164"),
+        check(!!(await hostSays((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.phone" && m.payload.params.number === "(212) 555-0164")),
             "calls Lena");
 
         // ---- No one by that name; nothing heard; the microphone button --------------------------------------------
@@ -240,18 +260,17 @@ async function main() {
         check((await stage()) === "listening", "and the microphone listens again");
 
         // ---- Without a shell's microphone ----------------------------------------------------------------------
-        shellHasMic = false;
-        await open();
+        await open(`http://127.0.0.1:${port2}/usr/palm/applications/org.webosphoenix.voicedial/index.html`);
         await page.waitForSelector("[data-testid='error']");
         check(/microphone/.test(await page.textContent("[data-testid='error']")) && !dictationOps().some((p) => p.op === "start"),
             "in a browser without the shell: \"" + (await page.textContent("[data-testid='error']")) + "\"");
         await shot("voicedial-unavailable");
-        shellHasMic = true;
 
         // ---- The original ids ------------------------------------------------------------------------------------
         host.length = 0;
         await luna("palm://com.palm.pmvoicecommand/startVoiceCommand", { source: "appicon" });
         await luna("palm://com.palm.applicationManager/launch", { id: "com.palm.sysapp.voicedial" });
+        await hostSays(() => host.filter((m) => m.type === "launch").length >= 2);
         const launches = host.filter((m) => m.type === "launch").map((m) => m.payload.id);
         check(launches.length === 2 && launches.every((id) => id === "org.webosphoenix.voicedial"),
             "com.palm.pmvoicecommand/startVoiceCommand and com.palm.sysapp.voicedial open Voice Dial");
@@ -260,6 +279,7 @@ async function main() {
         await browser.close();
     } finally {
         server.kill();
+        noShell.kill();
     }
     console.log(`\n${failures ? failures + " check(s) failed" : "All checks passed"}. Screenshots in ${outDir}`);
     process.exit(failures ? 1 : 0);

@@ -60,6 +60,15 @@ function check(cond, what) {
     if (!cond) failures++;
 }
 
+// fn's first truthy value, asked every 50 ms for up to ms; null if none.
+async function until(fn, ms) {
+    for (const end = Date.now() + ms; ;) {
+        const v = await fn();
+        if (v || Date.now() > end) return v || null;
+        await new Promise((r) => setTimeout(r, 50));
+    }
+}
+
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
@@ -139,10 +148,10 @@ async function main() {
             first, { timeout: 7000 });
         const second = await page.getAttribute("[data-testid='exhibition-slide']", "data-path");
         check(second !== first, "photos: the next picture after five seconds");
-        // Halfway through the cross-fade both show.
-        await page.waitForTimeout(400);
-        const fading = await page.evaluate(() => [...document.querySelectorAll(".ex-slide")]
-            .map((e) => parseFloat(getComputedStyle(e).opacity)).filter((o) => o > 0.05 && o < 0.95).length);
+        // During the cross-fade (1 s, photos.css .ex-slide) a picture is half shown.
+        const fading = await page.waitForFunction(() => [...document.querySelectorAll(".ex-slide")]
+            .map((e) => parseFloat(getComputedStyle(e).opacity)).filter((o) => o > 0.05 && o < 0.95).length, null, { timeout: 3000 })
+            .then((h) => h.jsonValue(), () => 0);
         check(fading >= 1, "photos: the pictures cross-fade");
         // Another exhibition in front: it stops.
         await page.evaluate(() => window.dispatchEvent(new CustomEvent("phoenixcardactivation", { detail: { active: false } })));
@@ -185,8 +194,7 @@ async function main() {
         await shot("agenda");
         host.length = 0;
         await page.click("[data-testid='agenda-event']");
-        await page.waitForTimeout(200);
-        const launch = lastHost("launch");
+        const launch = await until(() => lastHost("launch"), 5000);
         check(launch && launch.payload.id === "com.palm.app.calendar" && launch.payload.params && /\S/.test(launch.payload.params.showEventDetail || ""),
               "agenda: a tap opens the event in Calendar " + JSON.stringify(launch && launch.payload.params));
 
@@ -197,14 +205,12 @@ async function main() {
         host.length = 0;
         await page.click("[data-testid='exhibition-check-org.webosphoenix.agenda']");
         await page.waitForFunction(() => document.querySelector("[data-testid='exhibition-check-org.webosphoenix.agenda']").classList.contains("checked"));
-        let st = lastHost("systemStatus");
-        check(st && JSON.stringify(st.payload.exhibitionApps) === JSON.stringify(["org.webosphoenix.photos", "org.webosphoenix.agenda"]),
-            "settings: the Agenda goes on, after Photos");
+        const ordered = (order) => () => { const m = lastHost("systemStatus"); return m && JSON.stringify(m.payload.exhibitionApps) === JSON.stringify(order) ? m : null; };
+        let st = await until(ordered(["org.webosphoenix.photos", "org.webosphoenix.agenda"]), 5000);
+        check(!!st, "settings: the Agenda goes on, after Photos");
         await page.click("[data-testid='exhibition-up-org.webosphoenix.agenda']");
-        await page.waitForTimeout(200);
-        st = lastHost("systemStatus");
-        check(st && JSON.stringify(st.payload.exhibitionApps) === JSON.stringify(["org.webosphoenix.agenda", "org.webosphoenix.photos"]),
-            "settings: and first");
+        st = await until(ordered(["org.webosphoenix.agenda", "org.webosphoenix.photos"]), 5000);
+        check(!!st, "settings: and first");
         const after = await luna("luna://com.palm.applicationManager/listDockModeLaunchPoints", {});
         check((after.launchPoints || []).filter((p) => p.enabled).length === 2, "settings: the list says so");
         await shot("settings-exhibition-agenda");

@@ -116,12 +116,18 @@ async function main() {
         }), [uri, params]);
         const db = (p, kind) => p.evaluate((k) => Object.keys(localStorage).filter((x) => x.startsWith("phoenix:db8:com.palm.db/obj/"))
             .map((x) => JSON.parse(localStorage.getItem(x))).filter((o) => !o._del && o._kind === k), kind);
+        // A sync through the activity manager, as Accounts' "Sync now" starts
+        // it: once the activity has fired (getDetails: running; its callback,
+        // the service's sync, takes the account's sync lock as it is called),
+        // the lock clear again.
         const syncNow = async (p, accountId) => {
             await luna(p, "palm://com.palm.activitymanager/create", { start: true, replace: true, activity: {
                 name: "Sync now", type: { userInitiated: true, foreground: true },
                 callback: { method: "palm://" + SERVICE + "/sync", params: { accountId } } } });
-            await p.waitForTimeout(300);
-            await until(() => p.evaluate((a) => !JSON.parse(localStorage.getItem("phoenix:connector:syncLock:org.webosphoenix.service.fediverse:" + a) || "0"), accountId), 30000);
+            const fired = await until(async () => ((await luna(p, "palm://com.palm.activitymanager/getDetails", { activityName: "Sync now" })).activity || {}).state === "running", 10000);
+            if (!fired) throw new Error("Sync now did not fire");
+            const done = await until(() => p.evaluate((a) => !JSON.parse(localStorage.getItem("phoenix:connector:syncLock:org.webosphoenix.service.fediverse:" + a) || "0"), accountId), 30000);
+            if (!done) throw new Error("the sync did not finish");
         };
 
         await page.goto(appUrl("org.webosphoenix.marketplace"));
@@ -150,13 +156,11 @@ async function main() {
         await shot(page, "2-connection-page");
         host.length = 0;
         await page.click("[data-testid=sign-up]");
-        await page.waitForTimeout(300);
-        check(host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://joinmastodon.org/servers") >= 0),
+        check(!!(await until(() => host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://joinmastodon.org/servers") >= 0), 5000)),
               "Sign up opens joinmastodon.org's list of servers in the browser");
         host.length = 0;
         await page.click("[data-testid=set-up]");
-        await page.waitForTimeout(300);
-        const setUp = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.accounts");
+        const setUp = await until(() => host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.accounts"), 5000);
         check(!!setUp && setUp.payload.params.templateId === TEMPLATE, "Set up opens Accounts at the Fediverse template");
 
         // Not signed in: the share sheet has no Fediverse entry (a connector's
@@ -171,12 +175,24 @@ async function main() {
         const wizard = await until(() => accounts.frames().find((f) => /org\.webosphoenix\.fediverse\/accounts\/wizard\.html/.test(f.url())), 15000);
         if (!check(!!wizard, "Accounts opens the Fediverse sign-in page")) throw new Error("no sign-in page");
         await wizard.waitForSelector("input", { timeout: 10000 });
-        await accounts.waitForTimeout(800);
         check(/Don't have an account\? Sign up/.test(await wizard.locator(".accounts-signup").textContent().catch(() => "")),
               "the sign-in page offers \"Don't have an account? Sign up\" under the handle");
         await wizard.locator("input").first().fill("@phoenix@" + mastodon.domain);
         await wizard.locator("input").first().press("Tab");
         await shot(accounts, "3-sign-in");
+        // Sign In ends the form, inside Enyo 1.0's scroller. Playwright's
+        // scroll into view moves the DOM, which BasicScroller undoes at its next
+        // scroll event (scrollHandler, enyo-1.0 BasicScroller.js:158-164), so on
+        // a loaded runner the tap could land on what the scroller puts back
+        // there. Scroll to the end as the page itself does (scrollToBottom) and
+        // tap once the button is what is under the finger, as tools/test-sftp.cjs does.
+        check(!!(await until(() => wizard.evaluate(() => {
+            const c = enyo.$.fediverseWizard_signInButton, n = c && c.hasNode();
+            if (!n) return false;
+            for (let s = c.parent; s; s = s.parent) if (typeof s.scrollToBottom === "function") { s.scrollToBottom(); break; }
+            const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !!hit && n.contains(hit);
+        }), 15000)), "Sign In is in reach");
         await wizard.getByText("Sign In", { exact: true }).click();
         // The sheet over the Accounts card, the server's page in its web view.
         const sheet = await until(() => accounts.frames().find((f) => /org\.webosphoenix\.sharesheet\/index\.html/.test(f.url())), 15000);
@@ -225,11 +241,13 @@ async function main() {
               "her avatar is kept as a file of the device, where Contacts finds a photo (" + (person && person.photos.listPhotoPath) + ")");
         const contactsPage = await context.newPage();
         await contactsPage.goto(appUrl("com.palm.app.contacts"));
-        await contactsPage.waitForTimeout(4000);
-        await contactsPage.locator("input").first().fill("Sofia");
-        await contactsPage.waitForTimeout(1500);
-        await contactsPage.getByText("Sofia Lindqvist").first().click().catch(() => {});
-        await contactsPage.waitForTimeout(2500);
+        // Its list drawn, then searched for her; her card once it shows her link.
+        await contactsPage.getByText("Add Contact").first().waitFor({ timeout: 20000 });
+        await contactsPage.fill("#contactsApp_splitPane_contacts_searchField_input", "Sofia");
+        await contactsPage.getByText("Sofia Lindqvist").first().click({ timeout: 15000 }).catch(() => {});
+        await contactsPage.waitForFunction(() => /fedi\.example\/@sofia/.test(document.body.innerText) && /Flashed Phoenix/.test(document.body.innerText)
+            && [...document.querySelectorAll("img, [style]")].some((e) => /blob:|data:image/.test(e.src || e.getAttribute("style") || "")),
+                                           null, { timeout: 15000 }).catch(() => {});
         const card = await contactsPage.evaluate(() => document.body.innerText);
         const avatar = await contactsPage.evaluate(() => [...document.querySelectorAll("img, [style]")].some((e) => /blob:|data:image/.test(e.src || e.getAttribute("style") || "")));
         check(avatar, "her card shows the avatar");
@@ -246,7 +264,12 @@ async function main() {
         const thread = await until(async () => (await db(page, "com.palm.chatthread:1")).find((t) => t.replyService === "type_fediverse"), 10000);
         check(!!thread && thread.replyAddress === "sofia@fedi.example" && thread.unreadCount === 1, "the direct mention is a Messaging conversation, unread");
         const notes = host.filter((m) => m.type === "notification");
-        check(notes.some((m) => m.payload.appId === "org.webosphoenix.messaging" && /Sofia Lindqvist: Did the Pre 3 boot/.test(m.payload.title)),
+        // The sender is the notification's title, the message its body (the
+        // kit's ctx.notify as OSE's createToast {title, message}; the banner
+        // reads "title: message"), stacked per conversation.
+        check(notes.some((m) => m.payload.appId === "org.webosphoenix.messaging" && m.payload.title === "Sofia Lindqvist"
+                                && /^Did the Pre 3 boot/.test(m.payload.body) && !!thread && m.payload.params.threadId === thread._id
+                                && m.payload.group === thread._id),
               "with a notification that opens it");
         check(notes.some((m) => m.payload.appId === "org.webosphoenix.fediverse" && /Juniper Bloom mentioned you/.test(m.payload.title)),
               "the public mention is a notification");
@@ -267,8 +290,9 @@ async function main() {
         // ---- 5. Share a link from the browser ------------------------------------------------------------------
         const browserPage = await context.newPage();
         await browserPage.goto(appUrl("com.palm.app.browser"));
-        await browserPage.waitForFunction(() => !!window.__phoenixRuntime);
-        await browserPage.waitForTimeout(2000);
+        // The browser drawn: it tells the shell its stage is ready (PalmSystem.stageReady).
+        check(!!(await until(() => host.some((m) => m.type === "stageReady" && m.payload.appId === "com.palm.app.browser"), 15000)),
+              "the browser is up (its stage ready)");
         host.length = 0;
         const shared = browserPage.evaluate(() => __phoenixRuntime.share({ title: "webOS Phoenix", url: "https://example.org/phoenix" }));
         const shareSheet = await until(() => browserPage.frames().find((f) => /org\.webosphoenix\.sharesheet\/index\.html/.test(f.url())), 10000);
@@ -320,7 +344,6 @@ async function main() {
         await page.evaluate(() => { localStorage.setItem("phoenix:devMode", "true"); });
         const ok = await install(true);
         check(ok.statusValue === 30, "and installs in Developer Mode (" + (ok.details && ok.details.reason || "") + ")");
-        await page.waitForTimeout(300);
         await page.reload();
         await page.waitForFunction(() => !!window.__phoenixRuntime);
         // Its service runs here: a feed (the account's public posts, as

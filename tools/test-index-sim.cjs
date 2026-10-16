@@ -18,13 +18,16 @@
 // DevTools protocol (QTWEBENGINE_REMOTE_DEBUGGING), the screen captured
 // from the X display, as tools/test-signin-card-sim.cjs does.
 //
-//   xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-index-sim.cjs --model FILE.gguf
-//       [--llama-server PATH] [--tablet] [--sim build/phoenix-sim] [--out DIR]
+//   python3 tools/get-index-model.py
+//   xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-index-sim.cjs [--model FILE.gguf]
+//       [--llama-server PATH] [--phone] [--sim build/phoenix-sim] [--out DIR]
 //
 // --model: EmbeddingGemma 2's GGUF (lib/model.js TEXT: embeddinggemma-2-Q8_0.gguf,
 // 310 MB), linked into the simulator's models folder (no download);
+// tools/get-index-model.py's in build/index by default.
 // --llama-server: a llama-server that knows the model (llama.cpp b11451
-// or newer; ./phoenix builds b11552).
+// or newer; ./phoenix builds b11552): get-index-model.py's
+// (build/index/llama.cpp) when it is there, else the one on the PATH.
 
 "use strict";
 const { spawn, execFileSync } = require("child_process");
@@ -40,8 +43,9 @@ const form = tablet ? "tablet" : "phone";
 const SIM = path.resolve(opt("--sim", path.join(REPO, "build", "phoenix-sim")));
 const outDir = path.resolve(opt("--out", path.join(REPO, "build", "index-sim-tests")));
 const QML_DIR = opt("--qml-dir", path.join(REPO, "shell", "qml"));
-const MODEL = opt("--model", "");
-const LLAMA = opt("--llama-server", "");
+const INDEX_DIR = path.join(REPO, "build", "index");
+const MODEL = opt("--model", path.join(INDEX_DIR, "embeddinggemma-2-Q8_0.gguf"));
+const LLAMA = opt("--llama-server", fs.existsSync(path.join(INDEX_DIR, "llama.cpp", "llama-server")) ? path.join(INDEX_DIR, "llama.cpp", "llama-server") : "");
 const DEBUG_PORT = 9300 + Math.floor(Math.random() * 500);
 const INDEX = "luna://org.webosphoenix.service.index/";
 
@@ -107,7 +111,7 @@ function screenshot(name) {
 async function main() {
     if (!fs.existsSync(SIM)) { console.error(SIM + " is missing: build phoenix-sim first"); process.exit(2); }
     if (!process.env.DISPLAY) { console.error("No display: run under xvfb-run"); process.exit(2); }
-    if (!MODEL || !fs.existsSync(MODEL)) { console.error("--model: EmbeddingGemma 2's GGUF is needed"); process.exit(2); }
+    if (!MODEL || !fs.existsSync(MODEL)) { console.error(MODEL + " is missing: EmbeddingGemma 2's GGUF is needed (python3 tools/get-index-model.py, or --model)"); process.exit(2); }
     fs.mkdirSync(outDir, { recursive: true });
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-index-sim-"));
     const models = path.join(home, ".local/share/webos-phoenix/phoenix-sim/models/index");
@@ -120,7 +124,6 @@ async function main() {
         stdio: ["ignore", "pipe", "pipe"]
     });
     simPid = sim.pid;
-    const started = Date.now();
     let simLog = "";
     sim.stdout.on("data", (d) => { simLog += d; });
     sim.stderr.on("data", (d) => { simLog += d; });
@@ -128,7 +131,10 @@ async function main() {
     try {
         let settings = await pageMatching(/org\.webosphoenix\.settings/, 90000);
         if (!check(!!settings, form + ": phoenix-sim runs, Settings' page is up")) throw new Error("no Settings page");
-        await sleep(Math.max(1000, 10000 - (Date.now() - started)));
+        // The system UI up and listening for its events, as tools/test-activities-sim.cjs waits for it.
+        const sys = await pageMatching(/com\.palm\.systemui\/index\.html/, 30000);
+        if (!check(!!sys && !!(await until(() => sys.evaluate("Date.now() - JSON.parse(localStorage.getItem('phoenix:systemui:listening') || '0') < 30000"), 30000)),
+                   form + ": the system UI is up")) throw new Error("no system UI");
 
         // 1. Turned on from Settings; the simulator's data indexed with the real model.
         const t0 = Date.now();
@@ -169,7 +175,8 @@ async function main() {
         await luna(settings, "luna://com.palm.applicationManager/launch", { id: "org.webosphoenix.assistant", params: {} });
         const assistant = await pageMatching(/org\.webosphoenix\.assistant/, 30000);
         if (!check(!!assistant, form + ": the Assistant app opens")) throw new Error("no Assistant");
-        await sleep(3000);
+        // Its page ready for a request: its field there and enabled.
+        await until(() => assistant.evaluate("!!document.querySelector('[data-testid=as-input]') && !document.querySelector('[data-testid=as-input]').disabled"), 30000);
         const ask = (text) => luna(assistant, "luna://org.webosphoenix.assistant/ask", { text: text, newThread: true });
         let r = await ask("where's that note about the internet password");
         let last = r && r.messages && r.messages[r.messages.length - 1];
@@ -178,20 +185,23 @@ async function main() {
         // The conversation on screen ({threadId}: App.tsx's launch params).
         const show = (m) => m && luna(assistant, "luna://com.palm.applicationManager/launch", { id: "org.webosphoenix.assistant", params: { threadId: m.threadId } });
         await show(last);
-        await sleep(2500);
+        await until(() => assistant.evaluate("/Wi-Fi at the cabin/.test(document.body.innerText)"), 15000);
         console.log("     " + screenshot("index-assistant-memo-" + form + ".png"));
         r = await ask("find the email about the server downtime");
         last = r && r.messages && r.messages[r.messages.length - 1];
         check(last && /Scheduled maintenance/.test(last.text), form + ": the Assistant finds the email by meaning (" + (last && last.text) + ")");
         await show(last);
-        await sleep(2500);
+        await until(() => assistant.evaluate("/Scheduled maintenance/.test(document.body.innerText)"), 15000);
         console.log("     " + screenshot("index-assistant-email-" + form + ".png"));
 
         // 5. Just Type (com.palm.launcher): "From your phone" under the exact
         // matches, for words no item has ("how do I get online at the lake
         // house": the Wi-Fi memo), typed on the card view.
+        // Typed once the Assistant's card has left the front (the shell says
+        // so: phoenixcardactivation), the card view's keys going to Just Type.
+        await assistant.evaluate("window.__cardActive = null; addEventListener('phoenixcardactivation', (e) => { window.__cardActive = e.detail.active; }), true");
         execFileSync("xdotool", ["key", "--window", windowId(), "super+Home"]);
-        await sleep(1500);
+        check(!!(await until(() => assistant.evaluate("window.__cardActive === false"), 15000)), form + ": the card view (the Assistant's card no longer in front)");
         execFileSync("xdotool", ["type", "--window", windowId(), "--delay", "120", "how do I get online at the lake house"]);
         const jt = await pageMatching(/com\.palm\.launcher/, 15000);
         const group = jt ? await until(() => jt.evaluate("(function () { var c = enyo.$.justTypeApp_justType_mainView_phoenixPhoneSearch;"
