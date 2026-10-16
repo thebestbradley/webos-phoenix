@@ -87,6 +87,8 @@ export function useFormFactor(): FormFactor {
     const [card, setCard] = useState(cardFormFactor);
     useEffect(() => {
         const on = () => setCard(cardFormFactor());
+        // Read again now: a resize between the first render and this listener would be missed.
+        on();
         window.addEventListener("resize", on);
         return () => window.removeEventListener("resize", on);
     }, []);
