@@ -3560,3 +3560,18 @@ add to the runtime and the original apps:
   delete button.
 
 Tests: `apps/shared/luna/src/tweaks.test.ts`, `tools/test-community.cjs`.
+
+
+## Browser standards acceptance — 16 October 2026
+
+The native simulator uses Qt WebEngine 6.11.2: Chromium 140.0.7339.225 with security patches identified as 151.0.7922.71 on this Mac. The existing compatibility policy advertises Chrome 155 and an Android phone/tablet identity. These are distinct from the actual engine capabilities. Preferences → Websites → Use Engine Identity now restores the engine's own platform/version and client hints and removes Phoenix's navigator-platform override. Turning it off restores the previous compatibility policy. Reload open sites after switching. `PHOENIX_BROWSER_IDENTITY=engine` forces that mode for an isolated diagnostic process; no global network or browser setting is changed.
+
+On the same connection, the compatibility identity received AllTrails' verification challenge; the actual engine identity displayed its normal homepage. This is an observed compatibility result, not proof of a stable provider exemption. Claude still displayed Cloudflare verification with both identities. Its verification page had previously been hidden by Web's generic error screen: WebAppWindow now preserves HTTP response documents for 4xx/5xx status responses, while certificate, DNS and connection failures retain their error handling. BrowserLoad.js/QML tests cover that separation; a real Qt HTTP 403 fixture confirms the engine retains the provider document.
+
+Web 2.1.0 adds Phoenix account management (Settings' account panel), native Passwords site lookup, extension management, and the engine-identity preference. Passwords 1.1.0 accepts an HTTPS origin for a host search after unlock. The browser gets no vault records. Automatic filling, passkey use and browser data synchronization remain separate unfinished work.
+
+The simulator's extension manager accepts trusted unpacked Manifest V3 folders. It displays manifest access, installs disabled, asks before enabling, and can disable/remove. It operates only on the normal browser profile. The first-party Web app is the only accepted host caller; private and apps/vault profiles remain separate. Qt WebEngine 6.10+ with extension support is required; older engines report unavailable. Chrome Web Store integration, all Chrome extension APIs and the device WAM implementation are not claimed. [Qt's extension manager contract](https://doc.qt.io/qt-6.10/qwebengineextensionmanager.html) describes the underlying API.
+
+Local capability discovery recognizes secure contexts, service workers, WebAuthn, MSE, EME, H.264, AAC, VP9, Widevine and Clear Key on the tested Mac. Widevine requests for temporary H.264 and VP9 sessions were accepted; no media license or protected playback test was performed. Qt can discover a CDM in an existing Chrome installation; no proprietary module or certificate was copied into Phoenix. This is not device-image or streaming-service certification. See APP-GAPS.md for the company integration gates.
+
+Validation: native simulator and simbrowser-test built in both repositories; three substantive native tests cover identity restoration, HTTP response visibility and extension install/remove/profile isolation, plus QML HTTP/certificate-policy tests. The default-apps browser/passwords suite passed 95 tests with both app typechecks and builds. Public feed verification passed 26 checks after the signed-manifest exporter repair.

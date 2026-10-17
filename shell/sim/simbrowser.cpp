@@ -6,6 +6,7 @@
 #include <QNetworkProxy>
 #include <QQuickWebEngineProfile>
 #include <QTimer>
+#include <QRegularExpression>
 #include <QWebEngineClientHints>
 #include <QWebEngineCookieStore>
 #include <QWebEngineUrlRequestInfo>
@@ -13,6 +14,21 @@
 #include <QtWebEngineCore/qtwebenginecoreversion.h>
 
 #include "rootfs.h"
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFile>
+#include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QListWidget>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QVBoxLayout>
+#if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0) && QT_CONFIG(webengine_extensions)
+#include <QWebEngineExtensionManager>
+#include <QWebEngineExtensionInfo>
+#endif
 
 namespace {
 
@@ -131,6 +147,16 @@ void SimBrowser::setUserAgent(const QString &mode)
     emit userAgentChanged();
 }
 
+void SimBrowser::setIdentity(const QString &mode)
+{
+    const QString identity = mode == QLatin1String("engine") ? mode : QStringLiteral("compatibility");
+    if (identity == m_identity)
+        return;
+    m_identity = identity;
+    refreshUserAgents();
+    emit identityChanged();
+}
+
 void SimBrowser::setPhone(bool phone)
 {
     if (phone == m_phone)
@@ -163,6 +189,26 @@ UserAgent::FormFactor SimBrowser::formFactor(bool browser) const
 
 void SimBrowser::applyUserAgent(QQuickWebEngineProfile *p, UserAgent::FormFactor form)
 {
+    if (!m_nativeAgents.contains(p)) {
+        m_nativeAgents.insert(p, p->httpUserAgent());
+        connect(p, &QObject::destroyed, this, [this, p]() {
+            m_nativeAgents.remove(p);
+            m_platformScripts.remove(p);
+        });
+    }
+    if (m_identity == QLatin1String("engine") || qgetenv("PHOENIX_BROWSER_IDENTITY") == "engine") {
+        QString identity = m_nativeAgents.value(p);
+        identity.remove(QRegularExpression(QStringLiteral(" QtWebEngine/[^ ]+")));
+        p->setHttpUserAgent(identity);
+        p->clientHints()->resetAll();
+        if (m_platformScripts.contains(p)) {
+            QObject *scripts = p->property("userScripts").value<QObject *>();
+            if (scripts)
+                QMetaObject::invokeMethod(scripts, "remove", Q_ARG(QWebEngineScript, m_platformScripts.value(p)));
+            m_platformScripts.remove(p);
+        }
+        return;
+    }
     // Pages already open read the new one at once (navigator.userAgent,
     // navigator.userAgentData) and send it from then on; nothing reloads
     // (tools/test-useragent-sim.cjs, the adaptive switch). Their
@@ -214,8 +260,6 @@ void SimBrowser::applyUserAgent(QQuickWebEngineProfile *p, UserAgent::FormFactor
     if (old != m_platformScripts.constEnd())
         QMetaObject::invokeMethod(scripts, "remove", Q_ARG(QWebEngineScript, *old));
     QMetaObject::invokeMethod(scripts, "insert", Q_ARG(QWebEngineScript, script));
-    if (!m_platformScripts.contains(p))
-        connect(p, &QObject::destroyed, this, [this, p]() { m_platformScripts.remove(p); });
     m_platformScripts.insert(p, script);
 }
 
@@ -266,4 +310,114 @@ void SimBrowser::clearCookies()
 void SimBrowser::clearCache()
 {
     m_profile->clearHttpCache();
+}
+
+
+void SimBrowser::showExtensions()
+{
+#if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0) && QT_CONFIG(webengine_extensions)
+    if (m_extensionsDialog) {
+        m_extensionsDialog->show();
+        m_extensionsDialog->raise();
+        return;
+    }
+    auto *manager = m_profile->extensionManager();
+    auto *dialog = new QDialog;
+    m_extensionsDialog = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(this, &QObject::destroyed, dialog, &QWidget::close);
+    dialog->setWindowTitle(tr("Browser extensions"));
+    dialog->resize(600, 440);
+    auto *layout = new QVBoxLayout(dialog);
+    auto *notice = new QLabel(tr("Install unpacked Manifest V3 extensions from a folder you trust. Extensions apply only to normal browser pages, never private cards or the Passwords vault. Installed extensions start disabled after restart."));
+    notice->setWordWrap(true);
+    layout->addWidget(notice);
+    auto *list = new QListWidget;
+    layout->addWidget(list);
+    auto *status = new QLabel;
+    status->setTextFormat(Qt::PlainText);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+    const auto refresh = [manager, list]() {
+        list->clear();
+        for (const auto &extension : manager->extensions()) {
+            if (!extension.isInstalled())
+                continue;
+            auto *item = new QListWidgetItem(extension.name() + (extension.isEnabled() ? QObject::tr(" — enabled") : QObject::tr(" — disabled")), list);
+            item->setData(Qt::UserRole, extension.id());
+        }
+    };
+    auto *buttons = new QDialogButtonBox;
+    auto *install = buttons->addButton(tr("Install from folder…"), QDialogButtonBox::ActionRole);
+    auto *toggle = buttons->addButton(tr("Enable / disable"), QDialogButtonBox::ActionRole);
+    auto *remove = buttons->addButton(tr("Remove"), QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Close);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
+    connect(install, &QPushButton::clicked, dialog, [dialog, manager, status]() {
+        const QString folder = QFileDialog::getExistingDirectory(dialog, QObject::tr("Choose extension folder"));
+        if (folder.isEmpty())
+            return;
+        QFile manifest(folder + QStringLiteral("/manifest.json"));
+        if (!manifest.open(QIODevice::ReadOnly) || manifest.size() > 131072) {
+            status->setText(QObject::tr("The folder must contain a manifest.json smaller than 128 KiB."));
+            return;
+        }
+        const QJsonObject metadata = QJsonDocument::fromJson(manifest.readAll()).object();
+        if (metadata.value(QStringLiteral("manifest_version")).toInt() != 3) {
+            status->setText(QObject::tr("Only Manifest V3 extensions are supported."));
+            return;
+        }
+        QJsonObject access;
+        for (const auto &key : {QStringLiteral("permissions"), QStringLiteral("host_permissions"), QStringLiteral("optional_permissions"), QStringLiteral("optional_host_permissions"), QStringLiteral("content_scripts")})
+            access.insert(key, metadata.value(key));
+        QMessageBox review(QMessageBox::Question, QObject::tr("Review extension access"),
+            QObject::tr("Install %1?\n\nRequested access:\n%2\n\nIt will stay disabled until you enable it.")
+                .arg(metadata.value(QStringLiteral("name")).toString(), QString::fromUtf8(QJsonDocument(access).toJson(QJsonDocument::Indented))),
+            QMessageBox::Yes | QMessageBox::Cancel, dialog);
+        review.setTextFormat(Qt::PlainText);
+        review.setDefaultButton(QMessageBox::Cancel);
+        if (review.exec() == QMessageBox::Yes)
+            manager->installExtension(folder);
+    });
+    connect(toggle, &QPushButton::clicked, dialog, [dialog, manager, list, refresh]() {
+        if (!list->currentItem())
+            return;
+        for (const auto &extension : manager->extensions()) {
+            if (!extension.isInstalled() || extension.id() != list->currentItem()->data(Qt::UserRole).toString())
+                continue;
+            if (!extension.isEnabled()) {
+                QMessageBox review(QMessageBox::Warning, QObject::tr("Enable extension"),
+                    QObject::tr("Allow this extension to run on browser pages with the access declared by its manifest? It may read or change website data.\n\n%1").arg(extension.name()),
+                    QMessageBox::Yes | QMessageBox::Cancel, dialog);
+                review.setTextFormat(Qt::PlainText);
+                review.setDefaultButton(QMessageBox::Cancel);
+                if (review.exec() != QMessageBox::Yes)
+                    return;
+            }
+            manager->setExtensionEnabled(extension, !extension.isEnabled());
+            refresh();
+            return;
+        }
+    });
+    connect(remove, &QPushButton::clicked, dialog, [manager, list]() {
+        if (!list->currentItem())
+            return;
+        for (const auto &extension : manager->extensions()) {
+            if (extension.isInstalled() && extension.id() == list->currentItem()->data(Qt::UserRole).toString()) {
+                manager->uninstallExtension(extension);
+                return;
+            }
+        }
+    });
+    connect(manager, &QWebEngineExtensionManager::installFinished, dialog, [status, refresh](const QWebEngineExtensionInfo &extension) {
+        status->setText(extension.error().isEmpty() ? QObject::tr("Installed, disabled. Review access before enabling.") : extension.error());
+        refresh();
+    });
+    connect(manager, &QWebEngineExtensionManager::uninstallFinished, dialog, [refresh](const QWebEngineExtensionInfo &) { refresh(); });
+    refresh();
+    dialog->show();
+#else
+    QMessageBox::information(nullptr, tr("Browser extensions"), tr("This engine does not expose extension support. Qt WebEngine 6.10 or later with extensions enabled is required."));
+#endif
 }

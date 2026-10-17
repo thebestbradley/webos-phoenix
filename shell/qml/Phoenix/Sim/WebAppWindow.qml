@@ -15,6 +15,7 @@ import Phoenix.Shell
 import Phoenix.Native
 import "Links.js" as Links
 import "PageBridge.js" as PageBridge
+import "BrowserLoad.js" as BrowserLoad
 
 Item {
     id: win
@@ -597,7 +598,12 @@ Item {
                     win._webViewEvent(viewId, "documentLoadFinished", []);
                     break;
                 case WebEngineView.LoadFailedStatus:
-                    win._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
+                    if (BrowserLoad.hasHttpDocument(info, WebEngineLoadingInfo.HttpStatusCodeDomain)) {
+                        report();
+                        win._webViewEvent(viewId, "documentLoadFinished", []);
+                    } else {
+                        win._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
+                    }
                     win._webViewEvent(viewId, "loadStopped", []);
                     break;
                 default:

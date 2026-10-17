@@ -18,6 +18,8 @@
 //   - contentBlocker   requests a page makes to the hosts on the block list
 //                      (runtime/content-blocker/hosts.txt) fail; the page
 //                      itself (the address typed) always loads
+//   - identity         "engine" restores the native platform, version and hints;
+//                      "compatibility" retains the existing device policy
 //   - userAgent        "mobile" (the device's, the default) or "desktop"
 //                      (the browser's Desktop Site)
 //   - the user agent and client hints of every profile, the apps' too
@@ -45,6 +47,7 @@
 #include <QWebEngineScript>
 class QWebEngineUrlRequestInterceptor;
 class Rootfs;
+class QWidget;
 class PictureMaker;
 
 class SimBrowser : public QObject
@@ -52,6 +55,7 @@ class SimBrowser : public QObject
     Q_OBJECT
     Q_PROPERTY(QObject *profile READ profileObject CONSTANT)
     Q_PROPERTY(bool contentBlocker READ contentBlocker WRITE setContentBlocker NOTIFY contentBlockerChanged)
+    Q_PROPERTY(QString identity READ identity WRITE setIdentity NOTIFY identityChanged)
     Q_PROPERTY(QString userAgent READ userAgent WRITE setUserAgent NOTIFY userAgentChanged)
     Q_PROPERTY(int blockedCount READ blockedCount NOTIFY blockedCountChanged)
     Q_PROPERTY(int blockListSize READ blockListSize CONSTANT)
@@ -76,6 +80,8 @@ public:
     bool phone() const { return m_phone; }
     void setPhone(bool phone);
     void setContentBlocker(bool on);
+    QString identity() const { return m_identity; }
+    void setIdentity(const QString &mode);
     QString userAgent() const { return m_uaMode; }
     void setUserAgent(const QString &mode);
     int blockedCount() const { return m_blocked; }
@@ -94,6 +100,7 @@ public:
     // (com.palm.browserServer clearCookies / clearCache).
     Q_INVOKABLE void clearCookies();
     Q_INVOKABLE void clearCache();
+    Q_INVOKABLE void showExtensions();
 
     // For the interceptor: should this request fail?
     bool shouldBlock(const QString &host, const QString &firstPartyHost, bool mainFrame);
@@ -102,6 +109,7 @@ public:
 signals:
     void contentBlockerChanged();
     void userAgentChanged();
+    void identityChanged();
     void phoneChanged();
     void blockedCountChanged();
 
@@ -119,7 +127,10 @@ private:
     QPointer<QQuickWebEngineProfile> m_apps;
     // Each profile's navigator.platform script, replaced at each change.
     QHash<QObject *, QWebEngineScript> m_platformScripts;
+    QHash<QObject *, QString> m_nativeAgents;
+    QString m_identity = QStringLiteral("compatibility");
     int m_privateViews = 0;
+    QPointer<QWidget> m_extensionsDialog;
     QWebEngineUrlRequestInterceptor *m_interceptor = nullptr;
     ContentFilter m_filter;
     bool m_blocking = false;

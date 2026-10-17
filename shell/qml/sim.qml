@@ -718,6 +718,7 @@ Item {
         if (!hasSimBrowser)
             return;
         simBrowser.contentBlocker = !!status.browser.contentBlocker;
+        simBrowser.identity = status.browser.identity === "engine" ? "engine" : "compatibility";
         simBrowser.userAgent = status.browser.userAgent === "desktop" ? "desktop" : "mobile";
     }
     Connections {
