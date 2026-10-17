@@ -5,8 +5,6 @@
 #include <QApplication>
 #include <QDialog>
 #include <QDir>
-#include <QDirIterator>
-#include <QScopeGuard>
 #include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -23,6 +21,8 @@
 #include <QWebEngineExtensionManager>
 #include <QWebEngineExtensionInfo>
 #endif
+
+static QStringList fixtureDirectories;
 
 class BrowserTest : public QObject
 {
@@ -75,15 +75,9 @@ private slots:
 #if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0) && QT_CONFIG(webengine_extensions)
         QTemporaryDir data;
         QVERIFY(data.isValid());
-        // Qt protects installed extension directories; clean only this test's fixture tree.
-        const auto writable = qScopeGuard([&data]() {
-            QDirIterator dirs(data.path(), QDir::AllEntries | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-            while (dirs.hasNext()) {
-                dirs.next();
-                if (!dirs.fileInfo().isSymLink())
-                    QFile::setPermissions(dirs.filePath(), dirs.fileInfo().permissions() | QFileDevice::WriteOwner);
-            }
-        });
+        // Profile preferences finish writing when the engine shuts down.
+        data.setAutoRemove(false);
+        fixtureDirectories.append(data.path());
         Rootfs root(QStringLiteral(PHOENIX_REPO_DIR));
         SimBrowser browser(&root, nullptr, false);
         browser.profile()->setPersistentStoragePath(data.path() + QStringLiteral("/browser"));
@@ -136,8 +130,14 @@ int main(int argc, char **argv)
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     RootfsSchemeHandler::registerScheme();
     QtWebEngineQuick::initialize();
-    QApplication app(argc, argv);
-    BrowserTest test;
-    return QTest::qExec(&test, argc, argv);
+    int result;
+    {
+        QApplication app(argc, argv);
+        BrowserTest test;
+        result = QTest::qExec(&test, argc, argv);
+    }
+    for (const QString &path : fixtureDirectories)
+        QDir(path).removeRecursively();
+    return result;
 }
 #include "simbrowser_test.moc"

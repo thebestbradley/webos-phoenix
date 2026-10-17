@@ -582,7 +582,9 @@ int main(int argc, char *argv[])
             { QStringLiteral("name"), QStringLiteral("Chromium") },
             { QStringLiteral("version"), chromium },
             { QStringLiteral("securityPatches"), patches },
-            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) } });
+            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) },
+            { QStringLiteral("extensions"), simBrowser->extensionsSupported() },
+            { QStringLiteral("engineIdentity"), true } });
         webEngine = true;
         webApps = rootfs.apps();
     }

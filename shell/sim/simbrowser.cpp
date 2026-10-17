@@ -313,6 +313,15 @@ void SimBrowser::clearCache()
 }
 
 
+bool SimBrowser::extensionsSupported() const
+{
+#if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0) && QT_CONFIG(webengine_extensions)
+    return true;
+#else
+    return false;
+#endif
+}
+
 void SimBrowser::showExtensions()
 {
 #if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0) && QT_CONFIG(webengine_extensions)

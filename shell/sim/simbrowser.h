@@ -101,6 +101,7 @@ public:
     Q_INVOKABLE void clearCookies();
     Q_INVOKABLE void clearCache();
     Q_INVOKABLE void showExtensions();
+    Q_INVOKABLE bool extensionsSupported() const;
 
     // For the interceptor: should this request fail?
     bool shouldBlock(const QString &host, const QString &firstPartyHost, bool mainFrame);

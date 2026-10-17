@@ -3111,6 +3111,12 @@
     // Clear Cache, isis-browser Browser.js): phoenix-sim clears the page
     // views' profile (simBrowser). The iframe engine has none of its own.
     register(["com.palm.browserServer"], {
+        "/getCapabilities": function (p, reply) {
+            var h = {};
+            try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}"); } catch (e) {}
+            var native = global.location.protocol === "phoenix:", engine = h.webEngine || {};
+            reply(ok({ extensions: native && engine.extensions === true, engineIdentity: native && engine.engineIdentity === true }));
+        },
         "/openExtensions": function (p, reply) {
             if (PalmSystem.appIdentifier !== "com.palm.app.browser") return reply(fail(-1, "Only Web can manage browser extensions"));
             if (global.location.protocol !== "phoenix:") return reply(fail(-1, "Extension management requires the native simulator"));
