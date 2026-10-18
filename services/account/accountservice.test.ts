@@ -88,6 +88,279 @@ function deferred() {
     return { promise, resolve };
 }
 
+describe("sign-in lifecycle", () => {
+    it("an old session ending does not cancel a newer authorization awaiting approval", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            if (String(req.body).includes("grant_type=refresh_token")) {
+                entered.resolve(); await release.promise;
+                return { status: 400, body: JSON.stringify({ error: "invalid_grant" }) };
+            }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const old = svc.devices({}, "org.webosphoenix.settings");
+        await entered.promise;
+        const next = await svc.signIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        expect(await old).toMatchObject({ errorCode: "SIGNED_OUT" });
+        expect(await svc.getStatus({})).toMatchObject({ state: "signingIn", signIn: { userCode: next.signIn.userCode }, error: null });
+        mock.approve(next.signIn.userCode);
+        await until(async () => (await svc.getStatus({})).state === "signedIn");
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedIn", error: null });
+        expect(mock.state.refresh.has(keystore["account:tokens"].refreshToken)).toBe(true);
+    });
+
+    it("cancel before approval preserves an existing signed-in account", async () => {
+        const svc = service();
+        await signedIn(svc);
+        const token = { ...keystore["account:tokens"] };
+        const profile = { ...state.account };
+        await svc.signIn({}, "org.webosphoenix.settings");
+        expect(await svc.cancelSignIn({}, "org.webosphoenix.settings")).toMatchObject({ state: "signedIn", account: profile });
+        expect(keystore["account:tokens"]).toEqual(token);
+    });
+
+    it("a failed initial key-store write revokes the newly issued grant", async () => {
+        let runPoll!: () => Promise<void>, issuedRefresh: string | undefined;
+        const svc = service({
+            timers: { set: (fn: () => Promise<void>) => { runPoll = fn; return 1; }, clear: () => {} },
+            keystore: {
+                get: async (id: string) => keystore[id],
+                put: async (_id: string, value: Any) => { issuedRefresh = value.refreshToken; throw new Error("Key store unavailable"); },
+                del: async (id: string) => { delete keystore[id]; },
+            },
+        });
+        const st = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(st.signIn.userCode);
+        await runPoll();
+        // The local failure is visible before asynchronous revocation finishes.
+        await until(async () => !mock.state.refresh.has(issuedRefresh));
+        expect(issuedRefresh).toEqual(expect.any(String));
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", error: { errorText: "Key store unavailable" } });
+    });
+
+    it("an incomplete browser authorization reply never creates a credential record", async () => {
+        const svc = service({ luna: { call: async () => ({ returnValue: true }) } });
+        expect(await svc.signIn({ method: "browser" }, "org.webosphoenix.settings")).toMatchObject({ errorCode: "BAD_SERVER" });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", signIn: null });
+    });
+
+    it("revokes a device grant approved while its response was being canceled", async () => {
+        const entered = deferred(), release = deferred();
+        let runPoll!: () => Promise<void>, issuedRefresh: string | undefined;
+        const svc = service({
+            timers: { set: (fn: () => Promise<void>) => { runPoll = fn; return 1; }, clear: () => {} },
+            request: async (req: Any) => {
+                const response = await device.request(req);
+                if (String(req.body).includes("device_code") && req.url.endsWith("oauth/token") && response.status === 200) {
+                    issuedRefresh = JSON.parse(response.body).refresh_token;
+                    entered.resolve(); await release.promise;
+                }
+                return response;
+            },
+        });
+        const st = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(st.signIn.userCode);
+        const finishing = runPoll();
+        await entered.promise;
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        await finishing;
+        expect(issuedRefresh).toEqual(expect.any(String));
+        expect(mock.state.refresh.has(issuedRefresh)).toBe(false);
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", error: null });
+    });
+
+    it("cancel orders a started initial token write before deletion and revocation", async () => {
+        const entered = deferred(), release = deferred();
+        let runPoll!: () => Promise<void>, issuedRefresh: string | undefined;
+        const svc = service({
+            timers: { set: (fn: () => Promise<void>) => { runPoll = fn; return 1; }, clear: () => {} },
+            keystore: {
+                get: async (id: string) => keystore[id],
+                put: async (id: string, value: Any) => {
+                    if (id === "account:tokens") {
+                        issuedRefresh = value.refreshToken;
+                        entered.resolve(); await release.promise;
+                    }
+                    keystore[id] = value;
+                },
+                del: async (id: string) => { delete keystore[id]; },
+            },
+        });
+        const st = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(st.signIn.userCode);
+        const finishing = runPoll();
+        await entered.promise;
+        const canceled = svc.cancelSignIn({}, "org.webosphoenix.settings");
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", signIn: null });
+        release.resolve();
+        await canceled;
+        await finishing;
+        expect(issuedRefresh).toEqual(expect.any(String));
+        expect(mock.state.refresh.has(issuedRefresh)).toBe(false);
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", error: null });
+    });
+
+    it("cancel during entitlement verification cannot restore signed-in state or cached claims", async () => {
+        const entered = deferred(), release = deferred();
+        let runPoll!: () => Promise<void>;
+        const devicesBefore = [...mock.state.devices.keys()];
+        const svc = service({
+            timers: { set: (fn: () => Promise<void>) => { runPoll = fn; return 1; }, clear: () => {} },
+            crypto: {
+                sha256: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha256").update(b).digest()),
+                sha512: async (b: Uint8Array) => { entered.resolve(); await release.promise; return new Uint8Array(crypto.createHash("sha512").update(b).digest()); },
+                randomBytes: (n: number) => new Uint8Array(crypto.randomBytes(n)),
+                deviceKey: async () => crypto.randomBytes(32).toString("base64"),
+            },
+        });
+        const st = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(st.signIn.userCode);
+        const finishing = runPoll();
+        await entered.promise;
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        await finishing;
+        expect(state.entitlements).toBeNull();
+        expect([...mock.state.devices.keys()]).toEqual(devicesBefore);
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", error: null });
+    });
+
+    it.each([["cancel", "profile"], ["cancel", "registration"], ["reset", "profile"], ["reset", "registration"]])(
+        "%s during %s leaves no active grant or registered device", async (action, stage) => {
+        const entered = deferred(), release = deferred();
+        let runPoll!: () => Promise<void>;
+        let issuedRefresh: string | undefined;
+        const devicesBefore = [...mock.state.devices.keys()];
+        const svc = service({
+            timers: { set: (fn: () => Promise<void>) => { runPoll = fn; return 1; }, clear: () => {} },
+            request: async (req: Any) => {
+                const response = await device.request(req);
+                if (String(req.body).includes("grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:device_code")) && response.status === 200)
+                    issuedRefresh = JSON.parse(response.body).refresh_token;
+                if ((stage === "profile" && req.url.endsWith("v1/me")) ||
+                    (stage === "registration" && req.method === "POST" && req.url.endsWith("v1/devices"))) {
+                    entered.resolve(); await release.promise;
+                }
+                return response;
+            },
+        });
+        const st = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(st.signIn.userCode);
+        const finishing = runPoll();
+        await entered.promise;
+        if (action === "reset") {
+            devMode = true;
+            expect(await svc.setServers({ servers: null }, "org.webosphoenix.settings")).toMatchObject({ returnValue: true });
+        } else expect(await svc.cancelSignIn({}, "org.webosphoenix.settings")).toMatchObject({ state: "signedOut" });
+        release.resolve();
+        await finishing;
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(issuedRefresh).toEqual(expect.any(String));
+        expect(mock.state.refresh.has(issuedRefresh)).toBe(false);
+        expect([...mock.state.devices.keys()]).toEqual(devicesBefore);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", account: null, error: null });
+    });
+
+    it("sign-out rejects a new sign-in and server switch until disconnect finishes", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            if (req.method === "DELETE") { entered.resolve(); await release.promise; }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        const signOut = svc.signOut({}, "org.webosphoenix.settings");
+        await entered.promise;
+        expect(await svc.signIn({}, "org.webosphoenix.settings")).toMatchObject({ errorCode: "BUSY" });
+        devMode = true;
+        expect(await svc.setServers({ servers: null }, "org.webosphoenix.settings")).toMatchObject({ errorCode: "BUSY" });
+        release.resolve();
+        expect(await signOut).toMatchObject({ state: "signedOut" });
+        expect(await svc.signIn({}, "org.webosphoenix.settings")).toMatchObject({ state: "signingIn" });
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+    });
+
+    it("reserves an attempt before discovery so a second sign-in is busy", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            if (req.url.endsWith("openid-configuration")) { entered.resolve(); await release.promise; }
+            return device.request(req);
+        } });
+        const first = svc.signIn({}, "org.webosphoenix.settings");
+        await entered.promise;
+        const second = svc.signIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        expect(await second).toMatchObject({ errorCode: "BUSY" });
+        expect(await first).toMatchObject({ state: "signingIn" });
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+    });
+
+    it("cancel prevents a late device-code response from reopening sign-in", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            const result = await device.request(req);
+            if (req.url.endsWith("oauth/device/code")) { entered.resolve(); await release.promise; }
+            return result;
+        } });
+        const signIn = svc.signIn({}, "org.webosphoenix.settings");
+        await entered.promise;
+        expect(await svc.cancelSignIn({}, "org.webosphoenix.settings")).toMatchObject({ state: "signedOut" });
+        release.resolve();
+        expect(await signIn).toMatchObject({ errorCode: "CANCELED" });
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", signIn: null });
+    });
+
+    it.each([true, false])("a late browser result cannot replace a newer device-code attempt (success: %s)", async (success) => {
+        const entered = deferred(), release = deferred();
+        const forgotten: string[] = [];
+        const svc = service({ luna: { call: async (uri: string, params: Any) => {
+            if (uri.endsWith("/authorize")) {
+                entered.resolve(); await release.promise;
+                return success ? { returnValue: true, keyId: "late-browser-key" } : { returnValue: false, errorCode: "ACCESS_DENIED" };
+            }
+            if (uri.endsWith("/forget")) forgotten.push(params.keyId);
+            return { returnValue: true };
+        } } });
+        const browser = svc.signIn({ method: "browser" }, "org.webosphoenix.settings");
+        await entered.promise;
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+        const next = await svc.signIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        expect(await browser).toMatchObject({ errorCode: "CANCELED" });
+        expect(await svc.getStatus({})).toMatchObject({ state: "signingIn", signIn: { userCode: next.signIn.userCode }, error: null });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(forgotten).toEqual(success ? ["late-browser-key"] : []);
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+    });
+
+    it("sign-out stops device-code polling before approval arrives", async () => {
+        const svc = service();
+        const signingIn = await svc.signIn({}, "org.webosphoenix.settings");
+        expect(await svc.signOut({}, "org.webosphoenix.settings")).toMatchObject({ state: "signedOut", signIn: null });
+        mock.approve(signingIn.signIn.userCode);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut" });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+    });
+
+    it("a server reset cancels an outstanding device-code attempt", async () => {
+        const svc = service();
+        await svc.signIn({}, "org.webosphoenix.settings");
+        devMode = true;
+        expect(await svc.setServers({ servers: null }, "org.webosphoenix.settings")).toMatchObject({ returnValue: true });
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", signIn: null });
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+    });
+});
+
 describe("refresh continuity", () => {
     it("asks the browser OAuth service to refresh after an API denial", async () => {
         keystore["account:tokens"] = { via: "browser", keyId: "browser-account" };

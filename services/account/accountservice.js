@@ -140,6 +140,7 @@ function createAccountService(deps) {
     var sessionGeneration = 0;
     var tokenWrites = Promise.resolve();
     var refreshing = null;
+    var signingOut = null;
 
     function currentSession(generation) {
         if (generation !== sessionGeneration) throw err("SIGNED_OUT", "The account session changed");
@@ -286,7 +287,7 @@ function createAccountService(deps) {
         if (generation !== undefined) currentSession(generation);
         var clearing = clearLocal(), invalidated = sessionGeneration;
         return clearing.then(function () {
-            if (sessionGeneration === invalidated) {
+            if (sessionGeneration === invalidated && !pending) {
                 lastError = { errorCode: "SIGNED_OUT", errorText: text };
                 changed();
             }
@@ -294,7 +295,11 @@ function createAccountService(deps) {
         });
     }
     function clearLocal() {
+        var previous = sessionGeneration;
         var generation = ++sessionGeneration;
+        // An old session ending does not cancel a new authorization which
+        // has not committed credentials. Explicit cancel/reset detaches it.
+        if (pending && !pending.committed && pending.generation === previous) pending.generation = generation;
         return tokenMutation(function () {
             return Promise.all([deps.keystore.del(TOKENS), deps.keystore.del(BACKUP)]);
         }).then(function () {
@@ -325,9 +330,13 @@ function createAccountService(deps) {
                     if (body !== undefined) headers["Content-Type"] = "application/json";
                     if (opts && opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
                     var req = { method: method, url: url, headers: headers, body: body === undefined ? undefined : JSON.stringify(body) };
-                    return opts && opts.bytes && deps.requestBytes
+                    var response = opts && opts.bytes && deps.requestBytes
                         ? Promise.resolve(deps.requestBytes(req)).then(null, function (e) { throw err("CONNECTION_FAILED", "Cannot reach the " + ACCOUNT_NAME + " server (" + e.message + ")"); })
                         : http(req);
+                    return response.then(function (res) {
+                        return opts && opts.inspectResponse
+                            ? Promise.resolve(opts.inspectResponse(res, req)).then(function () { return res; }) : res;
+                    });
                 });
             };
             return once(false).then(function (res) {
@@ -350,33 +359,103 @@ function createAccountService(deps) {
 
     // ---- Sign in --------------------------------------------------------------------------
 
-    function signIn(p) {
-        var method = p.method === "browser" ? "browser" : "code";
-        if (pending) return Promise.reject(err("BUSY", "A sign-in is in progress"));
-        return setUp().then(function (r) {
-            return discovery(r).then(function (d) {
-                lastError = null;
-                return method === "code" ? deviceCode(r, d) : browser(r, d);
-            });
+    function currentAttempt(mine) {
+        if (pending !== mine || mine.generation !== sessionGeneration) throw err("CANCELED", "The sign-in was canceled");
+    }
+    function detachAttempt() {
+        var mine = pending;
+        if (mine && mine.timer) timers.clear(mine.timer);
+        pending = null;
+        return mine;
+    }
+    function revokeAttemptTokens(t, connection) {
+        if (!t) return Promise.resolve();
+        var result;
+        if (t.via === "browser") result = deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: t.keyId });
+        else if (t.refreshToken && connection && connection.revocationEndpoint) {
+            result = http({ method: "POST", url: connection.revocationEndpoint,
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: form({ token: t.refreshToken, token_type_hint: "refresh_token", client_id: connection.clientId }) });
+        } else return Promise.resolve();
+        return Promise.resolve(result).then(function () {}, function () { log("canceled sign-in token cleanup could not finish"); });
+    }
+    function cleanupRegistration(mine) {
+        var reg = mine.registration;
+        if (!reg || reg.cleaning) return Promise.resolve();
+        reg.cleaning = true;
+        return http({ method: "DELETE", url: reg.url + "/" + encodeURIComponent(reg.id),
+            headers: { Authorization: reg.authorization, Accept: "application/json" } })
+            .then(function () {}, function () { log("canceled sign-in registration cleanup could not finish"); });
+    }
+    function clearAttempt(mine) {
+        if (!mine || !mine.committed || mine.generation !== sessionGeneration) return Promise.resolve();
+        var kept = tokenMutation(function () { return deps.keystore.get(TOKENS); });
+        var clear = clearLocal();
+        mine.cleanup = kept.then(function (t) {
+            var registered = mine.registrationPending || Promise.resolve();
+            return registered.then(function () {}, function () {}).then(function () {
+                return cleanupRegistration(mine);
+            }).then(function () { return revokeAttemptTokens(t || mine.issuedTokens, mine.connection); });
+        }).then(function () {}, function () { log("canceled sign-in cleanup could not finish"); });
+        // Local cancellation is immediate; an outstanding registration reply
+        // is cleaned at its original origin before its old tokens are revoked.
+        return clear;
+    }
+    function failAttempt(mine, error) {
+        if (pending !== mine) return mine.cleanup || Promise.resolve();
+        detachAttempt();
+        var clear = clearAttempt(mine);
+        var generation = sessionGeneration;
+        return clear.then(function () {
+            if (generation !== sessionGeneration || pending) return;
+            lastError = { errorCode: error.code || "UNKNOWN_ERROR", errorText: error.message };
+            return changed();
         });
     }
+    function cancelAttempt() {
+        var mine = detachAttempt();
+        return clearAttempt(mine).then(changed);
+    }
+    function signIn(p) {
+        var method = p.method === "browser" ? "browser" : "code";
+        if (pending || signingOut) return Promise.reject(err("BUSY", "An account transition is in progress"));
+        var mine = { method: method, generation: sessionGeneration, committed: false, timer: null };
+        pending = mine;
+        return setUp().then(function (r) {
+            currentAttempt(mine);
+            return discovery(r).then(function (d) {
+                currentAttempt(mine);
+                mine.connection = { clientId: r.account.clientId, revocationEndpoint: d.revocation_endpoint || null };
+                lastError = null;
+                return method === "code" ? deviceCode(r, d, mine) : browser(r, d, mine);
+            });
+        }).then(null, function (e) {
+            return failAttempt(mine, e).then(function () { throw e; });
+        });
+    }
+    function commitAttempt(mine) {
+        currentAttempt(mine);
+        mine.generation = ++sessionGeneration;
+        mine.committed = true;
+    }
 
-    function deviceCode(r, d) {
+    function deviceCode(r, d, mine) {
         var endpoint = d.device_authorization_endpoint;
         if (typeof endpoint !== "string") throw err("BAD_SERVER", "The account server does not offer sign-in with a code");
         return http({ method: "POST", url: endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
                       body: form({ client_id: r.account.clientId, scope: r.account.scope }) }).then(function (res) {
+            currentAttempt(mine);
             if (res.status !== 200) throw platform.http.apiError(res, "The account server");
             var b = json(res);
             if (!b || typeof b.device_code !== "string" || typeof b.user_code !== "string" || typeof b.verification_uri !== "string")
                 throw err("BAD_SERVER", "The account server's device code reply is incomplete");
-            pending = {
+            Object.assign(mine, {
                 method: "code", deviceCode: b.device_code, userCode: b.user_code, verificationUri: b.verification_uri,
                 verificationUriComplete: b.verification_uri_complete || null,
                 expiresAt: new Date(now().getTime() + (b.expires_in || 600) * 1000).toISOString(),
                 // RFC 8628 3.2: 5 seconds when the server says nothing.
                 interval: Math.max(0, typeof b.interval === "number" ? b.interval : 5), tokenEndpoint: d.token_endpoint, timer: null
-            };
+            });
             poll(r);
             return changed();
         });
@@ -388,12 +467,20 @@ function createAccountService(deps) {
         mine.timer = timers.set(function () {
             if (pending !== mine) return;
             if (Date.parse(mine.expiresAt) <= now().getTime()) return failSignIn("EXPIRED", "The code expired; sign in again");
-            http({ method: "POST", url: mine.tokenEndpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+            return http({ method: "POST", url: mine.tokenEndpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
                    body: form({ grant_type: DEVICE_GRANT, device_code: mine.deviceCode, client_id: r.account.clientId }) }).then(function (res) {
-                if (pending !== mine) return null;
                 var b = null;
                 try { b = JSON.parse(res.body); } catch (e) { b = null; }
-                if (res.status === 200) return keep(b, "code").then(function () { return finishSignIn(); });
+                if (pending !== mine) return res.status === 200 && b && typeof b.refresh_token === "string"
+                    ? revokeAttemptTokens({ refreshToken: b.refresh_token }, mine.connection) : null;
+                if (res.status === 200) {
+                    mine.issuedTokens = b && typeof b.refresh_token === "string" ? { refreshToken: b.refresh_token } : null;
+                    commitAttempt(mine);
+                    return keep(b, "code", mine.generation).then(function () {
+                        currentAttempt(mine);
+                        return finishSignIn(mine);
+                    });
+                }
                 var code = b && b.error;
                 if (code === "authorization_pending") return poll(r);
                 if (code === "slow_down") { mine.interval += 5; return poll(r); }   // RFC 8628 3.5
@@ -405,49 +492,64 @@ function createAccountService(deps) {
                 // Offline for a moment: keep asking until the code expires.
                 log("poll: " + e.message);
                 if (pending === mine) { mine.interval = Math.min(60, mine.interval + 5); poll(r); }
-            });
+            }).then(null, function (e) { return failAttempt(mine, e); });
         }, mine.interval * 1000);
     }
 
     function failSignIn(code, text) {
-        if (pending && pending.timer) timers.clear(pending.timer);
-        pending = null;
-        lastError = { errorCode: code, errorText: text };
-        return changed();
+        return pending ? failAttempt(pending, err(code, text)) : Promise.resolve();
     }
 
-    function browser(r, d) {
+    function browser(r, d, mine) {
         if (typeof d.authorization_endpoint !== "string") throw err("BAD_SERVER", "The account server does not offer browser sign-in");
-        pending = { method: "browser" };
         changed();
         return deps.luna.call("luna://org.webosphoenix.service.oauth/authorize", {
             authorizationEndpoint: d.authorization_endpoint, tokenEndpoint: d.token_endpoint, clientId: r.account.clientId,
             scope: r.account.scope, revocationEndpoint: d.revocation_endpoint || undefined
         }).then(function (res) {
+            if (pending !== mine || mine.generation !== sessionGeneration) {
+                var forget = res && res.returnValue && res.keyId
+                    ? deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: res.keyId }).then(null, function () {})
+                    : Promise.resolve();
+                return forget.then(function () { throw err("CANCELED", "The sign-in was canceled"); });
+            }
             if (!res || !res.returnValue) {
-                pending = null;
                 var code = res && res.errorCode === "CANCELED" ? "CANCELED" : res && res.errorCode === "ACCESS_DENIED" ? "ACCESS_DENIED"
                     : (res && res.errorCode) || "UNKNOWN_ERROR";
-                lastError = { errorCode: code, errorText: (res && res.errorText) || "The sign-in did not finish" };
-                changed();
-                throw err(code, lastError.errorText);
+                throw err(code, (res && res.errorText) || "The sign-in did not finish");
             }
-            return storeTokens({ via: "browser", keyId: res.keyId, scope: res.scope || "" }).then(finishSignIn);
+            if (typeof res.keyId !== "string" || !res.keyId) throw err("BAD_SERVER", "The browser sign-in returned no key");
+            mine.issuedTokens = { via: "browser", keyId: res.keyId };
+            commitAttempt(mine);
+            return storeTokens({ via: "browser", keyId: res.keyId, scope: res.scope || "" }, mine.generation).then(function () {
+                currentAttempt(mine);
+                return finishSignIn(mine);
+            });
         });
     }
 
     // Signed in: this device registered, the account and its entitlements read.
-    function finishSignIn() {
-        if (pending && pending.timer) timers.clear(pending.timer);
+    function finishSignIn(mine) {
+        currentAttempt(mine);
+        if (mine.timer) timers.clear(mine.timer);
         return Promise.all([apiJson("GET", "v1/me"), Promise.resolve(deps.device()), Promise.resolve(deps.crypto.deviceKey())]).then(function (got) {
+            currentAttempt(mine);
             var me = got[0], dev = got[1] || {};
             var s = load();
             var reg = s.deviceId && s.accountId === me.id
                 ? Promise.resolve({ id: s.deviceId })
                 : apiJson("POST", "v1/devices", { publicKey: got[2], name: dev.name || "Phoenix device", model: dev.model || "",
                                                    compatible: dev.compatible || "", osVersion: dev.osVersion || "", build: dev.build || 0 },
-                          { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)) });
+                          { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)), inspectResponse: function (res, req) {
+                              if (res.status < 200 || res.status >= 300) return;
+                              var device = json(res);
+                              if (!device || typeof device.id !== "string" || !device.id) return;
+                              mine.registration = { id: device.id, url: req.url, authorization: req.headers.Authorization };
+                              if (pending !== mine || mine.generation !== sessionGeneration) return cleanupRegistration(mine);
+                          } });
+            mine.registrationPending = reg;
             return reg.then(function (d) {
+                currentAttempt(mine);
                 var s2 = load();
                 s2.account = profile(me);
                 s2.accountId = me.id;
@@ -456,6 +558,7 @@ function createAccountService(deps) {
                 return readEntitlements().then(null, function (e) { log("entitlements: " + e.message); });
             }).then(function () {
                 // Signed in once all of it is there.
+                currentAttempt(mine);
                 var s3 = load();
                 s3.signedIn = true;
                 save(s3);
@@ -463,15 +566,12 @@ function createAccountService(deps) {
                 lastError = null;
             });
         }).then(function () {
+            if (mine.generation !== sessionGeneration || pending) return changed();
             deps.luna.call("luna://com.webos.notification/createToast", {
                 message: "Signed in to your " + ACCOUNT_NAME + " as " + ((load().account || {}).email || ""),
                 onclick: { appId: "org.webosphoenix.settings", params: { page: "account" } }
             }).then(null, function () {});
             return changed();
-        }, function (e) {
-            pending = null;
-            lastError = { errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
-            return clearLocal().then(changed).then(function () { throw e; });
         });
     }
     function profile(me) {
@@ -480,7 +580,13 @@ function createAccountService(deps) {
     }
 
     function signOut() {
-        return status().then(function (st) {
+        if (signingOut) return signingOut;
+        var abandoned = detachAttempt();
+        var settle = refreshing ? refreshing.promise.then(function () {}, function () {}) : tokenWrites;
+        var work = settle.then(function () {
+            return abandoned && abandoned.registrationPending
+                ? abandoned.registrationPending.then(function () {}, function () {}) : null;
+        }).then(status).then(function (st) {
             if (st.state === "notSetUp") throw err("NOT_SET_UP", "No " + ACCOUNT_NAME + " server is set up on this device");
             var s = load();
             var steps = s.deviceId
@@ -490,13 +596,17 @@ function createAccountService(deps) {
                 if (!t) return null;
                 if (t.via === "browser") return deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: t.keyId }).then(null, function () {});
                 // RFC 7009: the refresh token, so the pair is gone on the server.
-                return setUp().then(discovery).then(function (d) {
-                    if (!d.revocation_endpoint || !t.refreshToken) return null;
-                    return http({ method: "POST", url: d.revocation_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                                  body: form({ token: t.refreshToken, token_type_hint: "refresh_token", client_id: sv.account.clientId }) });
+                return setUp().then(function (r) {
+                    return discovery(r).then(function (d) {
+                        if (!d.revocation_endpoint || !t.refreshToken) return null;
+                        return http({ method: "POST", url: d.revocation_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                                      body: form({ token: t.refreshToken, token_type_hint: "refresh_token", client_id: r.account.clientId }) });
+                    });
                 }).then(null, function (e) { log("revoke: " + e.message); });
             }).then(clearLocal).then(function () { lastError = null; return changed(); });
         });
+        signingOut = work.then(function (result) { signingOut = null; return result; }, function (e) { signingOut = null; throw e; });
+        return signingOut;
     }
 
     // ---- Entitlements ----------------------------------------------------------------------
@@ -522,13 +632,16 @@ function createAccountService(deps) {
         });
     }
     function readEntitlements() {
+        var generation = sessionGeneration;
         return setUp().then(function (r) {
+            currentSession(generation);
             return Promise.all([api("GET", "v1/me/entitlements", undefined, { bytes: true }), entitlementsKey(r)]).then(function (got) {
                 var res = got[0];
                 var bytes = res.bytes || platform.b64.utf8(res.body || "");
                 var sig = platform.http.header(res, "X-Phoenix-Signature");
                 if (!sig || !got[1]) throw err("BAD_SIGNATURE", "The entitlements are not signed");
                 return platform.signed.verifyDetached(bytes, sig, got[1], deps.crypto.sha512).then(function (ok) {
+                    currentSession(generation);
                     if (!ok) throw err("BAD_SIGNATURE", "The entitlements' signature does not match the server's key");
                     var doc;
                     try { doc = JSON.parse(platform.b64.fromUtf8(bytes)); } catch (e) { throw err("BAD_SERVER", "The entitlements are not JSON"); }
@@ -678,9 +791,12 @@ function createAccountService(deps) {
         }).then(function (o) {
             if (o === undefined) throw err("BAD_PARAMS", "servers: the override, or null; or url: a servers.json address");
             if (o !== null) platform.servers.checkOverride(o);
+            if (signingOut) throw err("BUSY", "Sign-out is in progress");
+            var abandoned = detachAttempt();
+            var clear = abandoned && abandoned.committed && abandoned.generation === sessionGeneration ? clearAttempt(abandoned) : clearLocal();
             deps.override.write(o);
             // Another server: this device's sign-in belongs to the old one.
-            return clearLocal().then(function () {
+            return clear.then(function () {
                 var s = load();
                 s.discovery = null;
                 save(s);
@@ -705,11 +821,7 @@ function createAccountService(deps) {
         setServers: guard("setServers", setServers),
         getStatus: guard("getStatus", status),
         signIn: guard("signIn", signIn),
-        cancelSignIn: guard("cancelSignIn", function () {
-            if (pending && pending.timer) timers.clear(pending.timer);
-            pending = null;
-            return changed();
-        }),
+        cancelSignIn: guard("cancelSignIn", cancelAttempt),
         signOut: guard("signOut", signOut),
         refresh: guard("refresh", function () {
             return apiJson("GET", "v1/me").then(function (me) {
