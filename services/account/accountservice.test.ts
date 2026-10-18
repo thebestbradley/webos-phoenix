@@ -89,6 +89,25 @@ function deferred() {
 }
 
 describe("refresh continuity", () => {
+    it("asks the browser OAuth service to refresh after an API denial", async () => {
+        keystore["account:tokens"] = { via: "browser", keyId: "browser-account" };
+        state = { signedIn: true };
+        const requests: Any[] = [];
+        const svc = service({
+            luna: { call: async (uri: string, params: Any) => {
+                expect(uri).toBe("luna://org.webosphoenix.service.oauth/token");
+                requests.push(params);
+                return { returnValue: true, accessToken: params.refresh ? "new-access" : "old-access" };
+            } },
+            request: async (req: Any) => req.headers.Authorization === "Bearer new-access"
+                ? { status: 200, body: JSON.stringify({ items: [] }) }
+                : { status: 401, body: JSON.stringify({ error: "invalid_token" }) },
+        });
+        expect(await svc.devices({}, "org.webosphoenix.settings")).toMatchObject({ returnValue: true, items: [] });
+        expect(requests).toEqual([{ keyId: "browser-account" }, { keyId: "browser-account", refresh: true }]);
+        expect(keystore["account:tokens"]).toEqual({ via: "browser", keyId: "browser-account" });
+    });
+
     it("a late 401 reuses the replacement token instead of rotating it again", async () => {
         const entered = deferred(), release = deferred();
         let holdDevices = true, rotations = 0;

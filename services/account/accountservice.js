@@ -245,7 +245,9 @@ function createAccountService(deps) {
             currentSession(generation);
             if (!t) throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
             if (t.via === "browser") {
-                return deps.luna.call("luna://org.webosphoenix.service.oauth/token", { keyId: t.keyId }).then(function (r) {
+                var options = { keyId: t.keyId };
+                if (force) options.refresh = true;
+                return deps.luna.call("luna://org.webosphoenix.service.oauth/token", options).then(function (r) {
                     if (!r || !r.returnValue) throw err(r && r.errorCode === "NOT_FOUND" ? "SIGNED_OUT" : "UNAUTHORIZED",
                                                         (r && r.errorText) || "The sign-in has ended");
                     return r.accessToken;

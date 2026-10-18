@@ -111,6 +111,41 @@ function createOAuthService(env) {
     var now = env.now || function () { return Date.now(); };
     var mayActFor = env.mayActFor || function (caller, owner) { return caller === owner; };
 
+    var keyOperations = Object.create(null);
+    var storeWrites = Promise.resolve();
+    var generation = 0;
+    var wiping = null;
+
+    function erased() { return Object.assign(new Error("The key store was erased"), { errorCode: "NOT_FOUND" }); }
+    function current(expected) { if (expected !== generation) throw erased(); }
+    function ready() {
+        if (wiping) throw Object.assign(new Error("The key store is being erased"), { errorCode: "BUSY" });
+    }
+    // Order asynchronous storage mutations as well as network operations.
+    // Wipe advances the generation before queuing its deletion, so an old
+    // authorization/refresh reply cannot recreate a key afterwards.
+    function storeMutation(task, expected) {
+        var result = storeWrites.then(function () {
+            current(expected);
+            return Promise.resolve(task()).then(function (value) { current(expected); return value; });
+        });
+        storeWrites = result.then(function () {}, function () {});
+        return result;
+    }
+    function keyState(key) {
+        return keyOperations[key] || (keyOperations[key] = { tail: Promise.resolve(), count: 0, token: null, forgetting: null });
+    }
+    function ordered(key, slot, task) {
+        slot.count++;
+        var result = slot.tail.then(task);
+        slot.tail = result.then(function () {}, function () {});
+        function finish() {
+            slot.count--;
+            if (!slot.count && keyOperations[key] === slot) delete keyOperations[key];
+        }
+        return result.then(function (value) { finish(); return value; }, function (e) { finish(); throw e; });
+    }
+
     function ownerOf(p, caller) {
         var owner = p.owner || caller;
         if (!owner) throw Object.assign(new Error("Who is asking is not known"), { errorCode: "PERMISSION_DENIED" });
@@ -173,13 +208,19 @@ function createOAuthService(env) {
             return wrap(Promise.resolve().then(function () {
                 if (!env.mayWipe || !env.mayWipe(caller)) throw Object.assign(new Error("Only the system erases the key store"), { errorCode: "PERMISSION_DENIED" });
                 if (!env.keystore.wipe) throw Object.assign(new Error("This key store cannot be wiped"), { errorCode: "UNSUPPORTED" });
+                if (wiping) return wiping;
+                generation++;
                 log("wiping the key store");
-                return Promise.resolve(env.keystore.wipe()).then(function () { return ok(); });
+                var result = storeMutation(function () { return env.keystore.wipe(); }, generation);
+                wiping = result.then(function () { wiping = null; return ok(); }, function (e) { wiping = null; throw e; });
+                return wiping;
             }));
         },
 
         authorize: function (p, caller) {
             return wrap(Promise.resolve().then(function () {
+                ready();
+                var expected = generation;
                 var owner = ownerOf(p, caller);
                 ["authorizationEndpoint", "tokenEndpoint", "clientId"].forEach(function (k) {
                     if (!/^https?:\/\//.test(String(p[k] || "")) && k !== "clientId") throw Object.assign(new Error(k + " must be an http(s) address"), { errorCode: "BAD_PARAMS" });
@@ -215,7 +256,7 @@ function createOAuthService(env) {
                     var keyId = b64url(env.crypto.randomBytes(18));
                     var rec = keep({ owner: owner, tokenEndpoint: p.tokenEndpoint, revocationEndpoint: p.revocationEndpoint || "",
                                      clientId: p.clientId, clientSecret: p.clientSecret || "", created: now() }, body);
-                    return Promise.resolve(env.keystore.put("key:" + keyId, rec)).then(function () {
+                    return storeMutation(function () { return env.keystore.put("key:" + keyId, rec); }, expected).then(function () {
                         return ok({ keyId: keyId, scope: rec.scope, tokenType: rec.tokenType });
                     });
                 });
@@ -223,47 +264,78 @@ function createOAuthService(env) {
         },
 
         token: function (p, caller) {
-            return wrap(owned(p, caller).then(function (rec) {
-                var fresh = !rec.expiresAt || rec.expiresAt - 60000 > now();
-                if (!rec.refreshToken || (fresh && p.refresh !== true))
-                    return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
-                return postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
-                                                      client_id: rec.clientId, client_secret: rec.clientSecret }).then(function (body) {
-                    keep(rec, body);
-                    return Promise.resolve(env.keystore.put("key:" + p.keyId, rec)).then(function () {
-                        return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
+            var expected = generation;
+            // Check ownership before sharing a result; another caller must
+            // never join the owner's in-flight refresh or disconnect.
+            return wrap(owned(p, caller).then(function (initial) {
+                ready(); current(expected);
+                var slot = keyState(p.keyId);
+                if (slot.forgetting) throw Object.assign(new Error("This key is being disconnected"), { errorCode: "NOT_FOUND" });
+                if (slot.token && (p.refresh !== true || slot.refresh)) return slot.token;
+                slot.refresh = !!initial.refreshToken && (p.refresh === true ||
+                    (initial.expiresAt && initial.expiresAt - 60000 <= now()));
+                slot.token = ordered(p.keyId, slot, function () {
+                    current(expected);
+                    return owned(p, caller).then(function (rec) {
+                        current(expected);
+                        var fresh = !rec.expiresAt || rec.expiresAt - 60000 > now();
+                        function reply() { return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt }); }
+                        if (!rec.refreshToken || (fresh && p.refresh !== true)) return reply();
+                        return postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
+                                                              client_id: rec.clientId, client_secret: rec.clientSecret }).then(function (body) {
+                            current(expected);
+                            keep(rec, body);
+                            return storeMutation(function () { return env.keystore.put("key:" + p.keyId, rec); }, expected).then(reply);
+                        });
                     });
                 });
+                return slot.token;
             }));
         },
 
         forget: function (p, caller) {
-            return wrap(owned(p, caller).then(function (rec) {
-                // RFC 7009 2.1: the refresh token too, which a provider may
-                // otherwise keep valid (revoking it revokes its access tokens
-                // at most providers; the access token is revoked as well).
-                function revokeOne(token, hint) {
-                    return Promise.resolve(env.request({ method: "POST", url: rec.revocationEndpoint,
-                                                         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                                                         body: form({ token: token, token_type_hint: hint, client_id: rec.clientId, client_secret: rec.clientSecret }) }))
-                        .catch(function (e) { log("token not revoked: " + e.message); });
-                }
-                var revoke = !rec.revocationEndpoint ? Promise.resolve()
-                    : (rec.refreshToken ? revokeOne(rec.refreshToken, "refresh_token") : Promise.resolve()).then(function () {
-                        return revokeOne(rec.accessToken, "access_token");
+            var expected = generation;
+            return wrap(owned(p, caller).then(function () {
+                ready(); current(expected);
+                var slot = keyState(p.keyId);
+                if (slot.forgetting) return slot.forgetting;
+                slot.forgetting = ordered(p.keyId, slot, function () {
+                    current(expected);
+                    // A rotation may have committed while disconnect waited.
+                    return owned(p, caller).then(function (rec) {
+                        current(expected);
+                        function revokeOne(token, hint) {
+                            return Promise.resolve(env.request({ method: "POST", url: rec.revocationEndpoint,
+                                                                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                                                                 body: form({ token: token, token_type_hint: hint, client_id: rec.clientId, client_secret: rec.clientSecret }) }))
+                                .catch(function (e) { log("token not revoked: " + e.message); });
+                        }
+                        var revoke = !rec.revocationEndpoint ? Promise.resolve()
+                            : (rec.refreshToken ? revokeOne(rec.refreshToken, "refresh_token") : Promise.resolve()).then(function () {
+                                return revokeOne(rec.accessToken, "access_token");
+                            });
+                        return revoke.then(function () {
+                            return storeMutation(function () { return env.keystore.del("key:" + p.keyId); }, expected);
+                        }).then(function () { return ok(); });
                     });
-                return revoke.then(function () { return env.keystore.del("key:" + p.keyId); }).then(function () { return ok(); });
+                });
+                return slot.forgetting;
             }));
         },
 
         client: function (p, caller) {
             return wrap(Promise.resolve().then(function () {
                 if (!p.name) throw Object.assign(new Error("name is required"), { errorCode: "BAD_PARAMS" });
+                ready();
+                var expected = generation;
                 var owner = ownerOf(p, caller);
                 var id = "client:" + owner + ":" + p.name;
-                if (p.value === null) return Promise.resolve(env.keystore.del(id)).then(function () { return ok(); });
-                if (p.value !== undefined) return Promise.resolve(env.keystore.put(id, p.value)).then(function () { return ok(); });
-                return Promise.resolve(env.keystore.get(id)).then(function (v) { return ok({ value: v === undefined ? null : v }); });
+                if (p.value === null) return storeMutation(function () { return env.keystore.del(id); }, expected).then(function () { return ok(); });
+                if (p.value !== undefined) return storeMutation(function () { return env.keystore.put(id, p.value); }, expected).then(function () { return ok(); });
+                return storeWrites.then(function () { current(expected); return env.keystore.get(id); }).then(function (v) {
+                    current(expected);
+                    return ok({ value: v === undefined ? null : v });
+                });
             }));
         }
     };
