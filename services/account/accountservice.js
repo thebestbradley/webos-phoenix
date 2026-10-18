@@ -137,6 +137,30 @@ function createAccountService(deps) {
     var pending = null;       // the sign-in being made: {method, deviceCode, interval, timer, ...}
     var lastError = null;
     var sv = null;            // servers.json, resolved
+    var sessionGeneration = 0;
+    var tokenWrites = Promise.resolve();
+    var refreshing = null;
+
+    function currentSession(generation) {
+        if (generation !== sessionGeneration) throw err("SIGNED_OUT", "The account session changed");
+    }
+    // Key-store writes may be asynchronous. A clear or a newer sign-in must
+    // run after an already-started write, and stale refreshes may not commit.
+    function tokenMutation(task) {
+        var result = tokenWrites.then(task);
+        tokenWrites = result.then(function () {}, function () {});
+        return result;
+    }
+    function storeTokens(value, generation) {
+        if (generation === undefined) generation = ++sessionGeneration;
+        return tokenMutation(function () {
+            currentSession(generation);
+            return Promise.resolve(deps.keystore.put(TOKENS, value)).then(function () {
+                currentSession(generation);
+                return value;
+            });
+        });
+    }
 
     function servers() {
         return Promise.resolve(deps.servers()).then(function (r) { sv = r; return r; });
@@ -203,20 +227,22 @@ function createAccountService(deps) {
         });
     }
 
-    function tokens() { return Promise.resolve(deps.keystore.get(TOKENS)).then(function (t) { return t || null; }); }
+    function tokens() { return tokenWrites.then(function () { return deps.keystore.get(TOKENS); }).then(function (t) { return t || null; }); }
 
-    function keep(body, via) {
+    function keep(body, via, generation) {
         if (!body || typeof body.access_token !== "string") throw err("BAD_SERVER", "The account server sent no access token");
         var t = { via: via || "code", accessToken: body.access_token, refreshToken: body.refresh_token || null,
                   tokenType: body.token_type || "Bearer", scope: body.scope || "",
                   expiresAt: body.expires_in ? now().getTime() + body.expires_in * 1000 : null };
-        return Promise.resolve(deps.keystore.put(TOKENS, t)).then(function () { return t; });
+        return storeTokens(t, generation);
     }
 
     // An access token for the API: refreshed when it is about to expire
     // (refresh tokens rotate on use, PLATFORM.md 5).
-    function accessToken(force) {
+    function accessToken(force, rejectedToken) {
+        var generation = sessionGeneration;
         return tokens().then(function (t) {
+            currentSession(generation);
             if (!t) throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
             if (t.via === "browser") {
                 return deps.luna.call("luna://org.webosphoenix.service.oauth/token", { keyId: t.keyId }).then(function (r) {
@@ -225,33 +251,52 @@ function createAccountService(deps) {
                     return r.accessToken;
                 });
             }
-            if (!force && (!t.expiresAt || t.expiresAt - 60000 > now().getTime())) return t.accessToken;
+            if ((!force || (rejectedToken && rejectedToken !== t.accessToken)) &&
+                (!t.expiresAt || t.expiresAt - 60000 > now().getTime())) return t.accessToken;
             if (!t.refreshToken) throw err("SIGNED_OUT", "The sign-in has ended; sign in again");
-            return setUp().then(discovery).then(function (d) {
-                return http({ method: "POST", url: d.token_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-                              body: form({ grant_type: "refresh_token", refresh_token: t.refreshToken, client_id: sv.account.clientId }) });
+            if (refreshing && refreshing.generation === generation && refreshing.token === t.refreshToken) return refreshing.promise;
+            var flight = { generation: generation, token: t.refreshToken, promise: null };
+            refreshing = flight;
+            flight.promise = setUp().then(function (r) {
+                return discovery(r).then(function (d) {
+                    currentSession(generation);
+                    return http({ method: "POST", url: d.token_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+                              body: form({ grant_type: "refresh_token", refresh_token: t.refreshToken, client_id: r.account.clientId }) });
+                });
             }).then(function (res) {
+                currentSession(generation);
                 if (res.status === 400 || res.status === 401) {
                     var b = null;
                     try { b = JSON.parse(res.body); } catch (e) { b = null; }
-                    if (b && (b.error === "invalid_grant" || b.error === "invalid_token")) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again");
+                    if (b && (b.error === "invalid_grant" || b.error === "invalid_token")) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again", generation);
                 }
                 if (res.status !== 200) throw platform.http.apiError(res, "The account server");
-                return keep(json(res), "code").then(function (t2) { return t2.accessToken; });
+                return keep(json(res), "code", generation).then(function (t2) { return t2.accessToken; });
             });
+            function finish() { if (refreshing === flight) refreshing = null; }
+            flight.promise = flight.promise.then(function (token) { finish(); return token; }, function (e) { finish(); throw e; });
+            return flight.promise;
         });
     }
     // The server no longer takes this device's tokens (signed out on the
     // web, the device removed): forget them here too.
-    function endSession(text) {
-        return clearLocal().then(function () {
-            lastError = { errorCode: "SIGNED_OUT", errorText: text };
-            changed();
+    function endSession(text, generation) {
+        if (generation !== undefined) currentSession(generation);
+        var clearing = clearLocal(), invalidated = sessionGeneration;
+        return clearing.then(function () {
+            if (sessionGeneration === invalidated) {
+                lastError = { errorCode: "SIGNED_OUT", errorText: text };
+                changed();
+            }
             throw err("SIGNED_OUT", text);
         });
     }
     function clearLocal() {
-        return Promise.all([deps.keystore.del(TOKENS), deps.keystore.del(BACKUP)]).then(function () {
+        var generation = ++sessionGeneration;
+        return tokenMutation(function () {
+            return Promise.all([deps.keystore.del(TOKENS), deps.keystore.del(BACKUP)]);
+        }).then(function () {
+            if (generation !== sessionGeneration) return;
             var s = load();
             s.signedIn = false;
             s.account = null;
@@ -267,8 +312,13 @@ function createAccountService(deps) {
     function api(method, path, body, opts) {
         return setUp().then(function (r) {
             var url = r.api + path.replace(/^\//, "");
+            var generation = sessionGeneration;
+            var rejectedToken;
             var once = function (force) {
-                return accessToken(force).then(function (tok) {
+                currentSession(generation);
+                return accessToken(force, rejectedToken).then(function (tok) {
+                    currentSession(generation);
+                    rejectedToken = tok;
                     var headers = { Authorization: "Bearer " + tok, Accept: "application/json" };
                     if (body !== undefined) headers["Content-Type"] = "application/json";
                     if (opts && opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
@@ -279,9 +329,11 @@ function createAccountService(deps) {
                 });
             };
             return once(false).then(function (res) {
+                currentSession(generation);
                 return res.status === 401 ? once(true) : res;
             }).then(function (res) {
-                if (res.status === 401) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again");
+                currentSession(generation);
+                if (res.status === 401) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again", generation);
                 if (res.status < 200 || res.status >= 300) {
                     if (res.bytes && res.body === undefined) res.body = platform.b64.fromUtf8(res.bytes);
                     throw platform.http.apiError(res, "The " + ACCOUNT_NAME + " server", now().getTime());
@@ -378,7 +430,7 @@ function createAccountService(deps) {
                 changed();
                 throw err(code, lastError.errorText);
             }
-            return Promise.resolve(deps.keystore.put(TOKENS, { via: "browser", keyId: res.keyId, scope: res.scope || "" })).then(finishSignIn);
+            return storeTokens({ via: "browser", keyId: res.keyId, scope: res.scope || "" }).then(finishSignIn);
         });
     }
 

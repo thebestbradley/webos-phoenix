@@ -82,6 +82,205 @@ async function signedIn(svc: Any) {
     return svc.getStatus({});
 }
 
+function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((done) => { resolve = done; });
+    return { promise, resolve };
+}
+
+describe("refresh continuity", () => {
+    it("a late 401 reuses the replacement token instead of rotating it again", async () => {
+        const entered = deferred(), release = deferred();
+        let holdDevices = true, rotations = 0;
+        const svc = service({ request: async (req: Any) => {
+            if (String(req.body).includes("grant_type=refresh_token")) rotations++;
+            if (holdDevices && req.url.endsWith("v1/me/devices")) {
+                holdDevices = false;
+                entered.resolve();
+                await release.promise;
+                return { status: 401, body: JSON.stringify({ error: "invalid_token" }) };
+            }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        const read = svc.devices({}, "org.webosphoenix.settings");
+        await entered.promise;
+        clock += 2 * 3600 * 1000;
+        expect(await svc.backupSummary({}, "org.webosphoenix.settings")).toMatchObject({ returnValue: true });
+        expect(rotations).toBe(1);
+        release.resolve();
+        expect(await read).toMatchObject({ returnValue: true });
+        expect(rotations).toBe(1);
+    });
+
+    it("a late API denial cannot sign out a newer session", async () => {
+        const entered = deferred(), release = deferred();
+        let holdDevices = true;
+        const svc = service({ request: async (req: Any) => {
+            if (holdDevices && req.url.endsWith("v1/me/devices")) {
+                holdDevices = false;
+                entered.resolve();
+                await release.promise;
+                return { status: 401, body: JSON.stringify({ error: "invalid_token" }) };
+            }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        const read = svc.devices({}, "org.webosphoenix.settings");
+        await entered.promise;
+        await signedIn(svc);
+        const replacement = { ...keystore["account:tokens"] };
+        release.resolve();
+        expect(await read).toMatchObject({ errorCode: "SIGNED_OUT" });
+        expect(keystore["account:tokens"]).toEqual(replacement);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedIn", error: null });
+    });
+
+    it("releases a failed shared refresh so a later request can retry", async () => {
+        const entered = deferred(), release = deferred();
+        let rotations = 0;
+        const svc = service({ request: async (req: Any) => {
+            if (String(req.body).includes("grant_type=refresh_token") && ++rotations === 1) {
+                entered.resolve();
+                await release.promise;
+                throw new Error("offline before sending");
+            }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const reads = Promise.all([svc.devices({}, "org.webosphoenix.settings"), svc.backupSummary({}, "org.webosphoenix.settings")]);
+        await entered.promise;
+        release.resolve();
+        for (const result of await reads) expect(result).toMatchObject({ errorCode: "CONNECTION_FAILED" });
+        expect(rotations).toBe(1);
+        expect(await svc.devices({}, "org.webosphoenix.settings")).toMatchObject({ returnValue: true });
+        expect(rotations).toBe(2);
+    });
+
+    it("orders a delayed key-store write before clearing the session", async () => {
+        const entered = deferred(), release = deferred();
+        let holdWrite = false;
+        const overrideWritten = deferred();
+        const svc = service({
+            override: { read: () => override, write: (value: Any) => { override = value; overrideWritten.resolve(); } },
+            keystore: {
+            get: async (id: string) => keystore[id],
+            put: async (id: string, value: Any) => {
+                if (holdWrite && id === "account:tokens") {
+                    entered.resolve();
+                    await release.promise;
+                }
+                keystore[id] = value;
+            },
+            del: async (id: string) => { delete keystore[id]; },
+        } });
+        await signedIn(svc);
+        holdWrite = true;
+        clock += 2 * 3600 * 1000;
+        const read = svc.refresh({});
+        await entered.promise;
+        devMode = true;
+        const cleared = svc.setServers({ servers: null }, "org.webosphoenix.settings");
+        await overrideWritten.promise;
+        release.resolve();
+        await cleared;
+        await read;
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut" });
+    });
+
+    it("sign-out removes a pair rotated by another in-flight request", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            const response = await device.request(req);
+            if (String(req.body).includes("grant_type=refresh_token")) {
+                entered.resolve();
+                await release.promise;
+            }
+            return response;
+        } });
+        const st = await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const read = svc.devices({}, "org.webosphoenix.settings");
+        await entered.promise;
+        const signedOut = svc.signOut({}, "org.webosphoenix.settings");
+        release.resolve();
+        await read;
+        expect(await signedOut).toMatchObject({ state: "signedOut" });
+        expect(mock.state.devices.has(st.device.id)).toBe(false);
+        expect(keystore["account:tokens"]).toBeUndefined();
+    });
+
+    it("shares one rotation across simultaneous expired-token requests", async () => {
+        const entered = deferred(), release = deferred();
+        let rotations = 0;
+        const svc = service({ request: async (req: Any) => {
+            const response = await device.request(req);
+            if (String(req.body).includes("grant_type=refresh_token")) {
+                rotations++;
+                entered.resolve();
+                await release.promise;
+            }
+            return response;
+        } });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const reads = Promise.all([svc.devices({}, "org.webosphoenix.settings"), svc.backupSummary({}, "org.webosphoenix.settings")]);
+        await entered.promise;
+        release.resolve();
+        for (const result of await reads) expect(result.returnValue).toBe(true);
+        expect(rotations).toBe(1);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedIn" });
+        expect(mock.state.refresh.has(keystore["account:tokens"].refreshToken)).toBe(true);
+    });
+
+    it("does not restore tokens after the server configuration clears the session", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            const response = await device.request(req);
+            if (String(req.body).includes("grant_type=refresh_token")) {
+                entered.resolve();
+                await release.promise;
+            }
+            return response;
+        } });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const read = svc.refresh({});
+        await entered.promise;
+        devMode = true;
+        expect(await svc.setServers({ servers: null }, "org.webosphoenix.settings")).toMatchObject({ returnValue: true });
+        release.resolve();
+        expect(await read).toMatchObject({ errorCode: "SIGNED_OUT" });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut", account: null });
+    });
+
+    it.each([200, 400])("an old refresh reply (%s) cannot overwrite or clear a newer sign-in", async (responseStatus) => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ request: async (req: Any) => {
+            const response = await device.request(req);
+            if (String(req.body).includes("grant_type=refresh_token")) {
+                entered.resolve();
+                await release.promise;
+                return responseStatus === 400 ? { status: 400, body: JSON.stringify({ error: "invalid_grant" }) } : response;
+            }
+            return response;
+        } });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;
+        const read = svc.devices({}, "org.webosphoenix.settings");
+        await entered.promise;
+        await signedIn(svc);
+        const replacement = { ...keystore["account:tokens"] };
+        release.resolve();
+        expect(await read).toMatchObject({ errorCode: "SIGNED_OUT" });
+        expect(keystore["account:tokens"]).toEqual(replacement);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedIn", error: null });
+    });
+});
+
 describe("not set up", () => {
     it("without an account server everything says NOT_SET_UP, and nothing is asked of the network", async () => {
         image = JSON.stringify({ format: 1, feeds: "http://127.0.0.1:1/", api: null });
