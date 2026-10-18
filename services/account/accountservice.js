@@ -537,15 +537,19 @@ function createAccountService(deps) {
             currentAttempt(mine);
             var me = got[0], dev = got[1] || {};
             var s = load();
-            var reg = s.deviceId && s.accountId === me.id
-                ? Promise.resolve({ id: s.deviceId })
-                : apiJson("POST", "v1/devices", { publicKey: got[2], name: dev.name || "Phoenix device", model: dev.model || "",
+            var previousDevice = s.accountId === me.id ? s.deviceId : null;
+            // Every new grant needs its own server-side device association,
+            // even when registration reuses this device's persistent key.
+            var reg = apiJson("POST", "v1/devices", { publicKey: got[2], name: dev.name || "Phoenix device", model: dev.model || "",
                                                    compatible: dev.compatible || "", osVersion: dev.osVersion || "", build: dev.build || 0 },
                           { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)), inspectResponse: function (res, req) {
                               if (res.status < 200 || res.status >= 300) return;
                               var device = json(res);
                               if (!device || typeof device.id !== "string" || !device.id) return;
-                              mine.registration = { id: device.id, url: req.url, authorization: req.headers.Authorization };
+                              // Cancel may revoke this grant, but must not delete
+                              // a previously linked device and its other sessions.
+                              if (device.id !== previousDevice)
+                                  mine.registration = { id: device.id, url: req.url, authorization: req.headers.Authorization };
                               if (pending !== mine || mine.generation !== sessionGeneration) return cleanupRegistration(mine);
                           } });
             mine.registrationPending = reg;
@@ -677,7 +681,7 @@ function createAccountService(deps) {
         function linked(deviceId) {
             currentSession(generation);
             var s = load();
-            if (signingOut || !s.signedIn || !s.deviceId || (deviceId && s.deviceId !== deviceId))
+            if (signingOut || (pending && pending.committed) || !s.signedIn || !s.deviceId || (deviceId && s.deviceId !== deviceId))
                 throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
             return s.deviceId;
         }

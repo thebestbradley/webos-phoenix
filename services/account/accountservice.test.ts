@@ -29,6 +29,7 @@ let calls: { uri: string; params: Any }[];
 let image: Any;
 let clock: number;
 let offline: boolean;
+let devicePublicKey: string;
 
 function service(extra: Any = {}) {
     return account.createAccountService(Object.assign({
@@ -47,7 +48,7 @@ function service(extra: Any = {}) {
             sha256: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha256").update(b).digest()),
             sha512: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest()),
             randomBytes: (n: number) => new Uint8Array(crypto.randomBytes(n)),
-            deviceKey: async () => crypto.randomBytes(32).toString("base64"),
+            deviceKey: async () => devicePublicKey,
         },
         device: async () => ({ name: "Test TouchPad", model: "test", compatible: "phoenix-test", osVersion: "1.0.0", build: 100 }),
         // Polls at once: the mock's interval is 0.
@@ -70,6 +71,7 @@ beforeEach(() => {
     calls = [];
     clock = Date.now();
     offline = false;
+    devicePublicKey = crypto.randomBytes(32).toString("base64");
     image = JSON.stringify(mock.servers("root"));
 });
 
@@ -653,6 +655,62 @@ describe("entitlements", () => {
 });
 
 describe("cloud services", () => {
+    it("does not expose the old backup password while a replacement sign-in is committing", async () => {
+        const entered = deferred(), release = deferred();
+        let holdProfile = false;
+        const svc = service({ request: async (req: Any) => {
+            if (holdProfile && req.url.endsWith("v1/me")) { entered.resolve(); await release.promise; }
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        await svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        holdProfile = true;
+        const attempt = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(attempt.signIn.userCode);
+        await entered.promise;
+        const result = await svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        release.resolve();
+        await until(async () => (await svc.getStatus({})).state === "signedIn");
+        expect(result).toMatchObject({ returnValue: false, errorCode: "SIGNED_OUT" });
+    });
+
+    it("links a replacement grant to the existing device when the same account signs in again", async () => {
+        const svc = service();
+        const first = await signedIn(svc);
+        const token = keystore["account:tokens"].accessToken;
+        const next = await signedIn(svc);
+        expect(keystore["account:tokens"].accessToken).not.toBe(token);
+        expect(next.device.id).toBe(first.device.id);
+        expect(mock.state.tokens.get(keystore["account:tokens"].accessToken).device).toBe(next.device.id);
+        const list = await svc.devices({}, "org.webosphoenix.settings");
+        expect(list.items).toContainEqual(expect.objectContaining({ id: next.device.id, current: true }));
+    });
+
+    it("canceling a replacement registration preserves the previously linked device and grant", async () => {
+        const entered = deferred(), release = deferred();
+        let holdRegistration = false;
+        const svc = service({ request: async (req: Any) => {
+            const response = await device.request(req);
+            if (holdRegistration && req.method === "POST" && req.url.endsWith("v1/devices")) {
+                entered.resolve(); await release.promise;
+            }
+            return response;
+        } });
+        const first = await signedIn(svc);
+        const oldRefresh = keystore["account:tokens"].refreshToken;
+        holdRegistration = true;
+        const attempt = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(attempt.signIn.userCode);
+        await entered.promise;
+        const replacementRefresh = keystore["account:tokens"].refreshToken;
+        await svc.cancelSignIn({}, "org.webosphoenix.settings");
+        release.resolve();
+        await until(async () => !mock.state.refresh.has(replacementRefresh));
+        expect(mock.state.devices.has(first.device.id)).toBe(true);
+        expect(mock.state.refresh.has(oldRefresh)).toBe(true);
+        expect(await svc.getStatus({})).toMatchObject({ state: "signedOut" });
+    });
+
     it("does not reuse backup credentials after another device sign-in", async () => {
         const svc = service();
         await signedIn(svc);
