@@ -653,6 +653,83 @@ describe("entitlements", () => {
 });
 
 describe("cloud services", () => {
+    it("does not reuse backup credentials after another device sign-in", async () => {
+        const svc = service();
+        await signedIn(svc);
+        const first = await svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        mock.state.users.u_backup_other = { ...mock.state.users.u_test, id: "u_backup_other", email: "other@example.org" };
+        const attempt = await svc.signIn({}, "org.webosphoenix.settings");
+        mock.approve(attempt.signIn.userCode, "u_backup_other");
+        await until(async () => (await svc.getStatus({})).state === "signedIn");
+        const next = await svc.getStatus({});
+        const second = await svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        expect(second).toMatchObject({ returnValue: true, username: next.device.id });
+        expect(second.username).not.toBe(first.username);
+    });
+
+    it("shares concurrent backup credential requests within one device session", async () => {
+        let requests = 0;
+        const svc = service({ request: async (req: Any) => {
+            if (req.url.endsWith("v1/backup/credentials")) requests++;
+            return device.request(req);
+        } });
+        await signedIn(svc);
+        const results = await Promise.all(Array.from({ length: 5 }, () => svc.backupCredentials({}, "org.webosphoenix.service.backup")));
+        expect(results.every((result) => result.returnValue)).toBe(true);
+        expect(new Set(results.map((result) => result.password)).size).toBe(1);
+        expect(requests).toBe(1);
+    });
+
+    it("clears a backup write that was already started when the platform is reset", async () => {
+        const entered = deferred(), release = deferred();
+        const svc = service({ keystore: {
+            get: async (id: string) => keystore[id],
+            put: async (id: string, value: Any) => {
+                if (id === "account:backup") { entered.resolve(); await release.promise; }
+                keystore[id] = value;
+            },
+            del: async (id: string) => { delete keystore[id]; },
+        } });
+        await signedIn(svc);
+        const pendingBackup = svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        await entered.promise;
+        devMode = true;
+        const reset = svc.setServers({ servers: mock.servers("root") }, "org.webosphoenix.settings");
+        await until(async () => calls.some((call) => call.uri.endsWith("/getDevMode")));
+        release.resolve();
+        await reset;
+        expect(await pendingBackup).toMatchObject({ returnValue: false, errorCode: "SIGNED_OUT" });
+        expect(keystore["account:backup"]).toBeUndefined();
+    });
+
+    it("does not return a delayed cached backup password after sign-out", async () => {
+        const entered = deferred(), release = deferred();
+        let delay = false;
+        const svc = service({ keystore: {
+            get: async (id: string) => {
+                const value = keystore[id];
+                if (id === "account:backup" && delay) { entered.resolve(); await release.promise; }
+                return value;
+            },
+            put: async (id: string, value: Any) => { keystore[id] = value; },
+            del: async (id: string) => { delete keystore[id]; },
+        } });
+        await signedIn(svc);
+        await svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        delay = true;
+        const pendingBackup = svc.backupCredentials({}, "org.webosphoenix.service.backup");
+        await entered.promise;
+        await svc.signOut({}, "org.webosphoenix.settings");
+        release.resolve();
+        expect(await pendingBackup).toMatchObject({ returnValue: false, errorCode: "SIGNED_OUT" });
+    });
+
+    it("refuses a leftover cached password without a linked session", async () => {
+        const svc = service();
+        keystore["account:backup"] = { url: mock.api + "dav/backups/old/", username: "old", password: "old-secret" };
+        expect(await svc.backupCredentials({}, "org.webosphoenix.service.backup")).toMatchObject({ errorCode: "SIGNED_OUT" });
+    });
+
     it("backup credentials (for the backup service only), the summary, push channels, the token relay, the assistant", async () => {
         const svc = service();
         const st = await signedIn(svc);

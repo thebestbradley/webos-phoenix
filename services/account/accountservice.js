@@ -141,6 +141,7 @@ function createAccountService(deps) {
     var tokenWrites = Promise.resolve();
     var refreshing = null;
     var signingOut = null;
+    var backupFlight = null;
 
     function currentSession(generation) {
         if (generation !== sessionGeneration) throw err("SIGNED_OUT", "The account session changed");
@@ -672,18 +673,51 @@ function createAccountService(deps) {
     // ---- Cloud services ------------------------------------------------------------------
 
     function backupCredentials() {
+        var generation = sessionGeneration;
+        function linked(deviceId) {
+            currentSession(generation);
+            var s = load();
+            if (signingOut || !s.signedIn || !s.deviceId || (deviceId && s.deviceId !== deviceId))
+                throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
+            return s.deviceId;
+        }
         return setUp().then(function (r) {
+            linked();
             if (!r.backup) throw err("NOT_SET_UP", "Phoenix Cloud backup is not set up on this device");
-            return Promise.resolve(deps.keystore.get(BACKUP)).then(function (kept) {
-                if (kept && kept.url && kept.password) return kept;
-                return apiJson("POST", "v1/backup/credentials", {}, { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)) }).then(function (c) {
-                    if (!c || typeof c.url !== "string" || typeof c.username !== "string" || typeof c.password !== "string")
-                        throw err("BAD_SERVER", "The backup credentials are incomplete");
-                    var rec = { url: c.url, username: c.username, password: c.password };
-                    return Promise.resolve(deps.keystore.put(BACKUP, rec)).then(function () { return rec; });
+            return tokens().then(function (t) {
+                var deviceId = linked();
+                if (!t) throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
+                if (backupFlight && backupFlight.generation === generation && backupFlight.deviceId === deviceId && backupFlight.api === r.api)
+                    return backupFlight.promise;
+                var flight = { generation: generation, deviceId: deviceId, api: r.api, promise: null };
+                backupFlight = flight;
+                flight.promise = Promise.resolve(deps.keystore.get(BACKUP)).then(function (kept) {
+                    linked(deviceId);
+                    // Older unbound cache records are replaced once. Never hand
+                    // one account's device password to a later signed-in session.
+                    if (kept && kept.deviceId === deviceId && kept.api === r.api && kept.url && kept.username && kept.password) return kept;
+                    return apiJson("POST", "v1/backup/credentials", {}, { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)) }).then(function (c) {
+                        linked(deviceId);
+                        if (!c || typeof c.url !== "string" || !c.url || typeof c.username !== "string" || !c.username || typeof c.password !== "string" || !c.password)
+                            throw err("BAD_SERVER", "The backup credentials are incomplete");
+                        var rec = { url: c.url, username: c.username, password: c.password, deviceId: deviceId, api: r.api };
+                        return tokenMutation(function () {
+                            linked(deviceId);
+                            return Promise.resolve(deps.keystore.put(BACKUP, rec)).then(function () {
+                                linked(deviceId);
+                                return rec;
+                            });
+                        });
+                    });
+                }).then(function (c) {
+                    linked(deviceId);
+                    return { returnValue: true, url: c.url, username: c.username, password: c.password };
                 });
+                function finish() { if (backupFlight === flight) backupFlight = null; }
+                flight.promise = flight.promise.then(function (c) { finish(); return c; }, function (e) { finish(); throw e; });
+                return flight.promise;
             });
-        }).then(function (c) { return { returnValue: true, url: c.url, username: c.username, password: c.password }; });
+        }).then(function (c) { linked(); return c; });
     }
 
     function pushEndpoint(p) {
