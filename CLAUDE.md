@@ -133,8 +133,11 @@ owner's Mac (under `/Users/`).
   (Phoenix-Web-Services `docs/DEPLOY.md`, `docs/RUNBOOK.md`), deploys,
   database, logs, preview access, image builds (UTM) and local hardware.
   Touch only Phoenix on that server, never ResortTribe or shared services.
-- **Talking.** Find the other with `ListAgents`, message it with
-  `SendMessage`. Ask for what only the other can do; report back what ran,
+- **Talking.** The cloud session cannot message the local one, so they share
+  a message board: `.agent-board/BOARD.md` on Phoenix-Web-Services' `agent-board`
+  branch (`/board` in that repository; its hourly check is off until the owner
+  runs `/board on`). The local session messages the cloud one ("WebOS mobile
+  UI recreation") with `SendMessage`. Ask for what only the other can do; report back what ran,
   its result and what failed. Read-only and routine requests (status,
   logs, checks, deploying a merged and tested release) need no owner
   approval; changes to accounts, permissions or server configuration,
