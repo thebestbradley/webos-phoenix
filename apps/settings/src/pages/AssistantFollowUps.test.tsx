@@ -36,6 +36,15 @@ beforeAll(async () => {
     await call("luna://com.palm.db/put", { objects: [{ _kind: "com.palm.calendar:1", syncSource: "Local", name: "Phoenix", accountId: "" }] });
 }, 30000);
 
+// "the 26th": a day this many days from now. Fixed days of the month ("the
+// 24th at 9am") read as today, or a time already gone, on some days of the
+// month, and a meeting there is past before the follow-up is answered.
+function dayAhead(days: number): string {
+    const d = new Date(Date.now() + days * 86400000).getDate();
+    const suffix = d % 10 === 1 && d !== 11 ? "st" : d % 10 === 2 && d !== 12 ? "nd" : d % 10 === 3 && d !== 13 ? "rd" : "th";
+    return `the ${d}${suffix}`;
+}
+
 function Page() {
     const s = useLuna<AssistantSettings>((cb, err) => assistant.watchSettings(cb, err), []).value;
     return s ? <FollowUpQuestions settings={s} set={(c) => void assistant.setSettings(c)} off={!s.enabled} /> : null;
@@ -90,14 +99,14 @@ describe("Settings > Assistant: Follow-up questions", () => {
         render(<Page />);
         await waitFor(() => expect(screen.getByTestId("as-topic-location")).toBeTruthy());
         expect(checked("as-topic-location")).toBe(true);
-        for (const day of ["21st", "22nd", "23rd"]) {
-            const r = await asSystem(() => assistant.ask(`add a meeting on the ${day} at 9am`, { newThread: true }));
+        for (const days of [2, 3, 4]) {
+            const r = await asSystem(() => assistant.ask(`add a meeting on ${dayAhead(days)} at 9am`, { newThread: true }));
             const q = r.messages[r.messages.length - 1];
             expect(q.followUp?.kind).toBe("location");
             await asSystem(() => assistant.choose(q.threadId, q.id, "fu:skip"));
         }
         // It asks before it stops.
-        const r = await asSystem(() => assistant.ask("add a meeting on the 24th at 9am", { newThread: true }));
+        const r = await asSystem(() => assistant.ask(`add a meeting on ${dayAhead(5)} at 9am`, { newThread: true }));
         const doubt = r.messages[r.messages.length - 1];
         expect(doubt.followUp?.kind).toBe("doubt");
         await asSystem(() => assistant.choose(doubt.threadId, doubt.id, doubt.choices!.find((c) => c.label === "Stop asking")!.id));
