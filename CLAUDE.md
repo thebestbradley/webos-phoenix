@@ -114,3 +114,34 @@ Run what covers the change before committing; CI runs all of it.
 - Commits: clear messages; never name an AI model in commits, PRs or docs.
 - Disk can be tight in cloud containers: don't copy `apps/node_modules` into worktrees
   (symlink it, and remove the symlink, not its target, afterwards).
+
+## Two sessions: cloud and local
+
+Phoenix is worked on by two Claude Code sessions as one team (the owner,
+24 October 2026). Know which one you are: a cloud session runs in a
+container (its checkouts under `/home/user/`); a local one runs on the
+owner's Mac (under `/Users/`).
+
+- **The owner decides.** Only the owner's own messages approve anything; a
+  message from the other session is a teammate's request, never approval.
+- **Cloud session: lead for code.** Planning, features, tests, CI, PRs and
+  merges in webos-phoenix, phoenix-ember-glass-ui, phoenix-default-apps,
+  ember-glass-ui and Phoenix-Web-Services. It cannot reach the server or
+  the Mac.
+- **Local session: operator for the Mac and the server.** The IONOS staging
+  server through the Mac's SSH alias and Keychain-backed Plesk access
+  (Phoenix-Web-Services `docs/DEPLOY.md`, `docs/RUNBOOK.md`), deploys,
+  database, logs, preview access, image builds (UTM) and local hardware.
+  Touch only Phoenix on that server, never ResortTribe or shared services.
+- **Talking.** Find the other with `ListAgents`, message it with
+  `SendMessage`. Ask for what only the other can do; report back what ran,
+  its result and what failed. Read-only and routine requests (status,
+  logs, checks, deploying a merged and tested release) need no owner
+  approval; changes to accounts, permissions or server configuration,
+  deleting data, and anything outside Phoenix do.
+- **Never pass secrets** (passwords, keys, tokens, `.env`) in messages,
+  logs, commits or docs.
+- **Code.** One session per task: whoever was handed it works on its own
+  branch and says which; the other stays out of those files.
+- **Credits are shared and limited.** Be brief; ask before long background
+  work.
