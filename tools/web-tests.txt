@@ -30,6 +30,8 @@
 2 node tools/test-appmanager.cjs
 6 node tools/test-updates.cjs --out app-tests/updates-phone
 6 node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
+4 node tools/test-notices.cjs --out app-tests/notices-phone
+4 node tools/test-notices.cjs --tablet --out app-tests/notices-tablet
 21 node tools/test-platform-client.cjs --ui --out app-tests/platform-client-phone
 21 node tools/test-platform-client.cjs --ui --tablet --out app-tests/platform-client-tablet
 25 node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone

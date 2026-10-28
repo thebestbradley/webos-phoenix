@@ -12,6 +12,9 @@
         "com.palm.update/setPreferences",
         "com.palm.update/scheduled",
         "com.palm.update/charging",
-        "com.palm.update/getReleaseNotes"
+        "com.palm.update/getReleaseNotes",
+        "com.palm.update/checkNotices",
+        "com.palm.update/getNotices",
+        "com.palm.update/dismissNotice"
     ]
 }

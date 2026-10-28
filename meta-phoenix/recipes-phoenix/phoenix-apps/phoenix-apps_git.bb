@@ -76,6 +76,11 @@ PHOENIX_UPDATES_KEY ?= ""
 PHOENIX_UPDATES_ROOT_KEY ?= ""
 PHOENIX_DRIVERS_KEY ?= ""
 PHOENIX_API_KEY ?= ""
+# The system notices feed's key(s), comma-separated (docs/NOTICES.md):
+# without one, devices never read the feed. PHOENIX_SITE_URL: the project's
+# website, which a notice may also link to (besides the feeds and API hosts).
+PHOENIX_NOTICES_KEY ?= ""
+PHOENIX_SITE_URL ?= ""
 
 do_install() {
     ${PYTHON} ${S}/tools/install-rootfs.py ${D}
@@ -87,7 +92,8 @@ do_install() {
         --channel "${PHOENIX_UPDATE_CHANNEL}" --channels "${PHOENIX_UPDATE_CHANNELS}" \
         --catalog-key "${PHOENIX_CATALOG_KEY}" --catalog-root "${PHOENIX_CATALOG_ROOT_KEY}" \
         --updates-key "${PHOENIX_UPDATES_KEY}" --updates-root "${PHOENIX_UPDATES_ROOT_KEY}" \
-        --drivers-key "${PHOENIX_DRIVERS_KEY}" --account-key "${PHOENIX_API_KEY}"
+        --drivers-key "${PHOENIX_DRIVERS_KEY}" --account-key "${PHOENIX_API_KEY}" \
+        --notices-key "${PHOENIX_NOTICES_KEY}" --site "${PHOENIX_SITE_URL}"
     # OSE's audiod plays raw PCM only (no MP3, no WAV header): every system
     # sound, ringtone and app sound gets "<file>.pcm", 16-bit 44.1 kHz
     # stereo, which the shell plays (tools/sounds-to-pcm.py,

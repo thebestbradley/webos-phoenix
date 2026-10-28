@@ -538,7 +538,7 @@ Turns the device a second after start-up:
 
 ### Open a scene
 
-`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat` `airpods` `airpodsbattery` `airpodsmenu` `airpodssettings` `trackeralert`.
+`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat` `airpods` `airpodsbattery` `airpodsmenu` `airpodssettings` `trackeralert` `notice` `noticealert`.
 
 Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:523-541,1345-1348,2124-2173`
 
@@ -1390,6 +1390,12 @@ Camera, Photos, Music:
 
 ```sh
 NODE_PATH="$(npm root -g)" node tools/test-media.cjs
+```
+
+System notices: the sample feed, shown once, Phoenix announcements, popup alerts:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-notices.cjs
 ```
 
 Notification stacks:

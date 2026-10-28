@@ -181,6 +181,9 @@ export interface SystemPreferences {
     showAlertsWhenLocked?: boolean;
     /** Phoenix: the lock screen shows who sent what (off: "New Message"). */
     lockScreenPreviews?: boolean;
+    /** Phoenix: the project's system notices (docs/NOTICES.md) are shown;
+     *  off, only critical ones (com.palm.update notices.js). On unless false. */
+    phoenixAnnouncements?: boolean;
     /** Phoenix: a notification's sound again every `minutes` until it is seen; apps set false are left out. */
     notificationRepeat?: { enabled?: boolean; minutes?: number; apps?: Record<string, boolean> };
     /** Phoenix: seconds until the screen turns off. */

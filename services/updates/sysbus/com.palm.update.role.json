@@ -7,7 +7,8 @@
         {
             "service": "com.palm.update",
             "outbound": ["com.palm.activitymanager", "com.palm.connectionmanager", "com.palm.power", "com.webos.notification",
-                         "org.webosphoenix.ongoing", "com.webos.service.devmode"]
+                         "org.webosphoenix.ongoing", "com.webos.service.devmode", "com.webos.service.systemservice",
+                         "com.webos.applicationManager"]
         }
     ]
 }

@@ -47,6 +47,7 @@ the platform reads its addresses and trust anchors from it, through
   "catalog":     {"url": "catalog/v1/", "key": null, "root": "<base64 Ed25519>"},
   "updates":     {"url": "updates/", "channel": "stable", "channels": ["stable", "beta", "dev"], "key": null, "root": "<...>"},
   "revocations": {"url": "revocations/v1/revoked.json"},
+  "notices":     {"url": "notices/v1/notices.json", "keys": ["<base64 Ed25519>"], "site": "https://<domain>/"},
   "drivers":     {"url": "drivers/v1/", "key": "<pinned>", "reportUrl": "drivers/v1/report"},
   "account":     {"issuer": "https://api.<domain>", "clientId": "phoenix-device", "scope": "...", "key": "<entitlements key>"},
   "push":        {"server": "https://push.<domain>/"},
@@ -55,8 +56,11 @@ the platform reads its addresses and trust anchors from it, through
 }
 ```
 
-Relative `url`s are below `feeds` (catalog, updates, revocations, drivers)
-or `api` (the rest). `api: null` (or no `account.issuer`) means no account,
+Relative `url`s are below `feeds` (catalog, updates, revocations, notices,
+drivers) or `api` (the rest). The notices feed is read only with a key in
+`notices.keys` (never unsigned, never trusted on first use); a notice's
+link may point only at the `feeds`, `api` or `notices.site` origins, over
+https ([NOTICES.md](NOTICES.md)). `api: null` (or no `account.issuer`) means no account,
 cloud backup, push relay or assistant service: each says "not set up". A
 feed with neither `key` nor `root` pinned is a development feed: the
 catalog's key is then checked by the user (fingerprint), an update feed is
@@ -65,8 +69,8 @@ except for `127.0.0.1`/`localhost` and in Developer Mode's override.
 
 | Where | servers.json | Who writes it |
 | --- | --- | --- |
-| A device image | `/etc/palm/phoenix/servers.json` | `meta-phoenix` `phoenix-apps_git.bb` runs `tools/servers-json.py` with `PHOENIX_FEEDS_URL`, `PHOENIX_API_URL`, `PHOENIX_ACCOUNT_ISSUER`, `PHOENIX_PUSH_URL`, `PHOENIX_PROBE_URL`, `PHOENIX_UPDATE_CHANNEL(S)`, `PHOENIX_CATALOG_KEY`/`_ROOT_KEY`, `PHOENIX_UPDATES_KEY`/`_ROOT_KEY`, `PHOENIX_DRIVERS_KEY`, `PHOENIX_API_KEY`. The production hosts are named once, as the recipe's defaults (Q1). The script refuses plain HTTP and malformed keys; `--check FILE` reads one as a device does |
-| The simulator, `tools/install-rootfs.py` without the recipe | `services/account/etc/palm/phoenix/servers.json` (rootfs.json mounts it at `/etc/palm/phoenix/`) | This repository: this computer's servers (`server/marketplace` on 127.0.0.1:8088 for the catalog and the update feed, the sample driver catalog), no account server |
+| A device image | `/etc/palm/phoenix/servers.json` | `meta-phoenix` `phoenix-apps_git.bb` runs `tools/servers-json.py` with `PHOENIX_FEEDS_URL`, `PHOENIX_API_URL`, `PHOENIX_ACCOUNT_ISSUER`, `PHOENIX_PUSH_URL`, `PHOENIX_PROBE_URL`, `PHOENIX_UPDATE_CHANNEL(S)`, `PHOENIX_CATALOG_KEY`/`_ROOT_KEY`, `PHOENIX_UPDATES_KEY`/`_ROOT_KEY`, `PHOENIX_DRIVERS_KEY`, `PHOENIX_API_KEY`, `PHOENIX_NOTICES_KEY` (comma-separated), `PHOENIX_SITE_URL`. The production hosts are named once, as the recipe's defaults (Q1). The script refuses plain HTTP and malformed keys; `--check FILE` reads one as a device does |
+| The simulator, `tools/install-rootfs.py` without the recipe | `services/account/etc/palm/phoenix/servers.json` (rootfs.json mounts it at `/etc/palm/phoenix/`) | This repository: this computer's servers (`server/marketplace` on 127.0.0.1:8088 for the catalog and the update feed, the sample driver catalog, the sample notices feed `server/notices/sample` with its sample key), no account server |
 | Developer Mode (testing a staging server) | `/var/lib/phoenix/servers.override.json` on a device, the store key `platform:servers` in the simulator | Settings > Developer Mode > Platform Servers ("Use the servers at" a platform's own `<api>/v1/servers.json`, "Use the Device's Own Servers"), i.e. `org.webosphoenix.service.account/setServers`. Laid over the image's file section by section, only while Developer Mode is on; changing it signs the account out |
 
 The older per-service files keep only what is not the platform's:
@@ -112,6 +116,7 @@ servers.json's `feeds` (F) or `api` (A).
 | 26 | Token relay | A `v1/oauth-broker/<provider>/authorize`, `/redeem`, `/refresh` | `brokerTokens` | bearer for redeem/refresh | PKCE: the verifier never leaves the device until redeem | nothing kept by the broker | `BAD_VERIFIER`, 404 | `tokenRelay` (Q49) |
 | 27 | Assistant proxy | A `v1/assistant/chat/completions`, `models` | OpenAI Chat Completions | bearer (`assistant`) | — | — | 429 `QUOTA` | `apps/assistant` provider type `phoenix`, `assistantProvider` |
 | 28 | Connectivity probe | `connectivity.probe` | 204 | none | — | — | — | configured, not yet read by the network stack (see [Still to do](#still-to-do)) |
+| 29 | System notices | F `notices/v1/notices.json` + `.sig` | `noticesFeed` ([NOTICES.md](NOTICES.md)) | none | Detached signature by a key in `notices.keys` (never unsigned); `format` 1; `expires` future; `sequence` not lower; 64 KB, 20 notices; each notice checked on its own (severity, plain text, window, audience), actions only from the allowlist | Last feed, last sequence, seen and dismissed ids kept in com.palm.update's state; each notice shown once | `NOT_SET_UP`, `UNTRUSTED`, `BAD_SIGNATURE`, `EXPIRED`, `ROLLBACK`, `BAD_FEED`, `CONNECTION_FAILED`; 404 = none published yet; daily activity `org.webosphoenix.notices.check`, once after start, and with Settings > Updates' check | `@phoenix/platform` `notices.js`; `services/updates/notices.js` |
 
 ## Signatures and keys
 

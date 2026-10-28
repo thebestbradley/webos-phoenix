@@ -68,6 +68,7 @@ DockModeAnalogClock 1.0 DockModeAnalogClock.qml
 DockModeDigitalClock 1.0 DockModeDigitalClock.qml
 MessageDialog 1.0 MessageDialog.qml
 MsmEntryFailedAlert 1.0 MsmEntryFailedAlert.qml
+ServiceAlert 1.0 ServiceAlert.qml
 BootAnimation 1.0 BootAnimation.qml
 BootStory 1.0 BootStory.qml
 BootFlame 1.0 BootFlame.qml

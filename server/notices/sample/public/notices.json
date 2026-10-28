@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "sequence": 1,
+  "generated": "2026-10-28T12:00:00Z",
+  "expires": "2099-01-01T00:00:00Z",
+  "notices": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "severity": "info",
+      "title": "Phoenix 1.0.3 is ready",
+      "body": "Fixes Wi-Fi reconnects and the Email sync delay. Tap to see what's new.",
+      "starts": "2026-10-01T00:00:00Z",
+      "ends": "2099-01-01T00:00:00Z",
+      "action": {
+        "kind": "update"
+      },
+      "dismissible": true
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "severity": "important",
+      "title": "Sync is down; we're on it",
+      "body": "Contacts and calendars may not sync for a few hours. Nothing on your device is lost.",
+      "starts": "2026-10-01T00:00:00Z",
+      "ends": "2099-01-01T00:00:00Z",
+      "dismissible": true
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "severity": "info",
+      "title": "Public beta survey",
+      "body": "Tell us how the beta is going: five questions, two minutes.",
+      "starts": "2026-10-01T00:00:00Z",
+      "ends": "2099-01-01T00:00:00Z",
+      "audience": {
+        "channels": [
+          "beta"
+        ]
+      },
+      "action": {
+        "kind": "app",
+        "appId": "org.webosphoenix.marketplace",
+        "params": {}
+      },
+      "dismissible": true
+    }
+  ]
+}

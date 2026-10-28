@@ -104,6 +104,9 @@
 //                            downloads over Wi-Fi when autoDownload is on
 //   charging {$activity}     the charger is connected (an activity with
 //                            requirements {charging: true}, after InstallLater)
+//   checkNotices, getNotices, dismissNotice: the system notices feed
+//                            (notices.js; docs/NOTICES.md), checked daily, once
+//                            after the service starts and with every check {}
 //
 // Errors (status.error.errorCode, or a failed reply): NOT_SET_UP (no update
 // feed in servers.json), CONNECTION_FAILED, BAD_FEED, BAD_SIGNATURE,
@@ -118,10 +121,12 @@
 "use strict";
 
 var platform = require("@phoenix/platform");
+var noticesLib = require("./notices");
 
 var SERVICE = "com.palm.update";
 var METHODS = ["GetStatus", "InstallLater", "InstallNow", "AlertDisplayed",
-               "getStatus", "check", "download", "cancel", "installNow", "setPreferences", "scheduled", "charging", "getReleaseNotes"];
+               "getStatus", "check", "download", "cancel", "installNow", "setPreferences", "scheduled", "charging", "getReleaseNotes",
+               "checkNotices", "getNotices", "dismissNotice"];
 var CHECK_ACTIVITY = "com.palm.update.check";
 var CHARGE_ACTIVITY = "com.palm.update.install";
 var CHANNELS = platform.servers.CHANNELS;   // stable, beta, dev (Q56)
@@ -239,6 +244,9 @@ function parseRelease(r) {
 //   releaseNotes() (optional) -> the running system's release notes, as
 //       release-notes.json has them ({format, versions}), or null
 //   now(), log(msg) (optional)
+//   noticesAtBoot (optional): false leaves out the notices check after the
+//       service starts (the simulator: its sample notices would be in every
+//       fresh run's screenshots; --scene notice and the Updates pane show them)
 function createUpdatesService(deps) {
     var log = deps.log || function () {};
     var now = deps.now || function () { return new Date(); };
@@ -266,6 +274,17 @@ function createUpdatesService(deps) {
         return s;
     }
     function save(s) { deps.state.save(s); }
+    // The system notices (notices.js): this device's channel, compatible
+    // and build are their audience.
+    var notices = noticesLib.createNotices({
+        service: SERVICE, servers: deps.servers, getBytes: function (url) { return getBytes(url); }, luna: deps.luna,
+        crypto: deps.crypto, state: deps.state, now: now, log: log,
+        device: function () {
+            return Promise.all([deps.rauc.status(), config()]).then(function (r) {
+                return { channel: load().channel, compatible: r[0].compatible, build: r[0].booted.build };
+            });
+        }
+    });
     function rolloutId(s) {
         if (!s.rolloutId) {
             s.rolloutId = platform.rollout.newId(deps.crypto.randomBytes);
@@ -385,7 +404,9 @@ function createUpdatesService(deps) {
             if (note) return deps.luna.call("luna://com.webos.notification/createToast", {
                 message: note, onclick: { appId: "com.palm.app.updates", params: {} }
             }).then(null, function () {});
-        }).then(null, function (e) { log("startup: " + e.message); });
+        }).then(null, function (e) { log("startup: " + e.message); }).then(function () {
+            if (deps.noticesAtBoot !== false) notices.atBoot();
+        });
         return started;
     }
 
@@ -663,6 +684,7 @@ function createUpdatesService(deps) {
     }
 
     function ensureSchedule() {
+        notices.ensureSchedule();
         return deps.luna.call("luna://com.palm.activitymanager/create", {
             start: true, replace: true,
             activity: { name: CHECK_ACTIVITY, description: "System update check", type: { background: true, persist: true },
@@ -710,7 +732,12 @@ function createUpdatesService(deps) {
             watchers.push(onChange);
             return function () { watchers = watchers.filter(function (w) { return w !== onChange; }); };
         },
-        check: wrap(check),
+        // Settings > Updates' check also reads the notices feed (its result
+        // is not this reply's: a notices problem is not an update problem).
+        check: wrap(function () {
+            notices.check().then(null, function () {});
+            return check();
+        }),
         download: wrap(download),
         cancel: wrap(function () {
             if (job) job.cancel();
@@ -742,7 +769,10 @@ function createUpdatesService(deps) {
         }),
         scheduled: wrap(scheduled),
         charging: wrap(charging),
-        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; })
+        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; }),
+        checkNotices: wrap(notices.checkNotices),
+        getNotices: wrap(notices.list),
+        dismissNotice: wrap(function (p) { return notices.dismiss(p.id); })
     };
 }
 

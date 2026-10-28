@@ -11,7 +11,8 @@
 //                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty" |
-//                  "airpods" | "airpodsbattery" | "airpodsmenu" | "airpodssettings" | "trackeralert"
+//                  "airpods" | "airpodsbattery" | "airpodsmenu" | "airpodssettings" | "trackeralert" |
+//                  "notice" | "noticealert"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -1399,7 +1400,8 @@ Item {
                                    "lowbattery", "banner", "notified", "dashboard", "notifystacks", "notifystacksbar", "notifystackslocked", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "modal", "systemmenu", "empty",
-                                   "airpods", "airpodsbattery", "airpodsmenu", "airpodssettings", "trackeralert"]
+                                   "airpods", "airpodsbattery", "airpodsmenu", "airpodssettings", "trackeralert",
+                                   "notice", "noticealert"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
     // --scene modal: once Memos is maximized.
     Timer {
@@ -2096,6 +2098,11 @@ Item {
             // them; an AirTag that followed (its notification).
             sceneAirPods.step = 0;
             sceneAirPods.start();
+        } else if (scene === "notice" || scene === "noticealert") {
+            // The system notices (docs/NOTICES.md) once the system UI's page
+            // (the runtime's services) is up: sceneNotice.
+            shell.cardView.maximizeProgress = 1;
+            sceneNotice.start();
         } else if (scene === "launcher" || scene === "launcheredit") {
             shell.gestureUp();
             if (scene === "launcheredit")
@@ -2468,6 +2475,36 @@ Item {
 
     // Once luna-systemui is up and listening (its page loads after the
     // scene starts on a busy computer), as Simulate > Low Battery does.
+    // --scene notice: com.palm.update reads the sample notices feed
+    // (server/notices/sample, signed with the key only the simulator pins)
+    // and shows what is new, as its daily check does; the dashboard opens on
+    // them. --scene noticealert: a critical notice's popup alert, as the
+    // service raises it (com.webos.notification createAlert; ServiceAlert.qml).
+    Timer {
+        id: sceneNotice
+        interval: 1200
+        onTriggered: {
+            if (!windows.systemUiLoaded)
+                return restart();
+            if (root.scene === "noticealert") {
+                windows.showServiceAlert({ alertId: "scene", title: "Please update: security fix",
+                                           message: "Phoenix 1.0.4 fixes a security problem in the web browser. Update today.",
+                                           buttons: [{ label: "Open", onclick: "luna://com.webos.applicationManager/launch",
+                                                       params: { id: "org.webosphoenix.settings", params: { page: "updates" } } },
+                                                     { label: "Close" }] });
+                return;
+            }
+            windows.lunaCall("luna://com.palm.update/checkNotices", {}, function (r) {
+                if (!r || r.returnValue === false)
+                    console.warn("phoenix-sim: scene notice: " + (r ? r.errorText : "no system UI page"));
+                Qt.callLater(function () {
+                    shell.notifications.bannerActive = false;
+                    shell.notifications.dashboardOpen = true;
+                });
+            });
+        }
+    }
+
     Timer {
         id: sceneAirPods
         property int step: 0
