@@ -1958,6 +1958,10 @@
         // private notification patches): off, the lock screen hides who
         // sent what ("New Message").
         lockScreenPreviews: true,
+        // Settings > Screen & Lock > Phoenix announcements: the system
+        // notices com.palm.update shows (docs/NOTICES.md; off, only
+        // critical ones).
+        phoenixAnnouncements: true,
         // Settings > Sounds & Ringtones > Repeat alerts (Phoenix; the
         // community's Notification Repeat patches): a notification's sound
         // again every `minutes` until it is seen, for every app but those

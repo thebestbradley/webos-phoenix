@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Screen & Lock: brightness, screen timeout, rotation lock, wallpaper,
-// notifications on the lock screen, secure unlock (PIN / password).
+// notifications on the lock screen, Phoenix announcements, secure unlock
+// (PIN / password).
 // Services:
 //   com.webos.settingsservice get/setSystemSettings {category:"picture", backlight}
 //   com.webos.service.systemservice get/setPreferences
 //       screenTimeout, lockTimeout (Phoenix keys), rotationLock, wallpaper, showAlertsWhenLocked,
-//       blinkNotifications, sysUiEnableNextPrevGestures (Advanced gestures)
+//       blinkNotifications, sysUiEnableNextPrevGestures (Advanced gestures),
+//       phoenixAnnouncements (Phoenix: the system notices com.palm.update shows,
+//       docs/NOTICES.md; on unless false, and critical ones show regardless)
 //   com.palm.systemmanager getSystemStatus {gestureArea}: whether to offer them
 //   com.palm.systemmanager getDeviceLockMode / setDevicePasscode (legacy webOS;
 //       Phoenix will provide it on OSE)
@@ -46,7 +49,7 @@ const LOCK_AFTER = [
 ];
 
 const PREF_KEYS: (keyof SystemPreferences)[] = ["screenTimeout", "lockTimeout", "rotationLock", "wallpaper", "showAlertsWhenLocked", "lockScreenPreviews",
-    "blinkNotifications",
+    "blinkNotifications", "phoenixAnnouncements",
     "sysUiEnableNextPrevGestures"];
 
 export function ScreenPage() {
@@ -133,6 +136,11 @@ export function ScreenPage() {
                 <Row title="Blink notifications">
                     <ToggleButton value={prefs.blinkNotifications !== false} label="Blink notifications"
                                   onChange={(v) => setPref({ blinkNotifications: v })} />
+                </Row>
+                <Row title="Phoenix announcements" subtitle="News about your device and the service from the Phoenix project"
+                     testId="announcements">
+                    <ToggleButton value={prefs.phoenixAnnouncements !== false} label="Phoenix announcements" testId="announcements-toggle"
+                                  onChange={(v) => setPref({ phoenixAnnouncements: v })} />
                 </Row>
             </Group>
 
