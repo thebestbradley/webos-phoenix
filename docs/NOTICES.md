@@ -209,8 +209,9 @@ wake the device to check this same feed sooner.
 
 1. Can users turn off `critical` notices? Suggested: no, but each critical
    notice shows only once.
-2. Should notices also go out by email to account holders? Suggested: no.
-   Email stays for account and security mail; the newsletter covers
-   announcements.
+2. ~~Should notices also go out by email?~~ Decided (owner, 28 Oct 2026):
+   per notice. Staff can tick "Also email account holders"; it is sent once
+   when the notice goes live, to every verified account that hasn't turned
+   notice emails off (critical: every verified account). Server side.
 3. Should a public RSS/JSON copy of notices exist for the website and
    status page? Suggested: yes, the same text, unsigned, at `/status`.
