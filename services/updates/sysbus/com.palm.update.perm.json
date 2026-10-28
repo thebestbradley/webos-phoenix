@@ -1,3 +1,4 @@
 {
-    "com.palm.update": ["activity.operation", "notification.operation", "devices.power.management", "phoenix.ongoing", "systemsettings.query"]
+    "com.palm.update": ["activity.operation", "notification.operation", "devices.power.management", "phoenix.ongoing", "systemsettings.query",
+                         "notification.management", "application.launcher"]
 }
