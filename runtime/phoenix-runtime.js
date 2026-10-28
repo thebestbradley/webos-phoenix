@@ -2221,6 +2221,38 @@
             if (!p.toastId) return reply(fail(-1, "toastId is required"));
             PalmSystem.removeBannerMessage(String(p.toastId));
             reply(ok());
+        },
+        // OSE's alerts (notificationmgr createAlert.schema: {title?, message,
+        // buttons: [{label, onclick?: a luna URI, params?}] (one to three),
+        // onclose?: {uri, params}}): a popup alert in the shell, in the
+        // popup alert's place (SimWindowSource's "alert": ServiceAlert.qml);
+        // a button calls its onclick, then the alert closes. On a device the
+        // stock NotificationView shows them (PhoenixViewsRoot.qml).
+        // com.palm.update's critical notices (notices.js) use it.
+        "/createAlert": function (p, reply, ctx) {
+            if (!p.message) return reply(fail(-1, "message is required"));
+            var buttons = Array.isArray(p.buttons) ? p.buttons.slice(0, 3) : [];
+            if (!buttons.length) return reply(fail(-1, "buttons are required"));
+            var bad = buttons.filter(function (b) {
+                return !b || !b.label || (b.onclick !== undefined && !/^luna:\/\//.test(String(b.onclick)));
+            });
+            if (bad.length) return reply(fail(-1, "each button needs a label, and an onclick that is a luna:// URI"));
+            var id = "alert-" + Date.now() + "-" + Math.floor(Math.random() * 1e6);
+            host.postToHost("alert", {
+                alertId: id, appId: (ctx && ctx.caller) || PalmSystem.appIdentifier,
+                title: p.title ? String(p.title) : "", message: String(p.message),
+                buttons: buttons.map(function (b) {
+                    return { label: String(b.label), onclick: b.onclick ? String(b.onclick) : "", params: b.params && typeof b.params === "object" ? b.params : {} };
+                }),
+                onclose: p.onclose && typeof p.onclose.uri === "string" && /^luna:\/\//.test(p.onclose.uri)
+                    ? { uri: p.onclose.uri, params: p.onclose.params || {} } : null
+            });
+            reply(ok({ alertId: id }));
+        },
+        "/closeAlert": function (p, reply) {
+            if (!p.alertId) return reply(fail(-1, "alertId is required"));
+            host.postToHost("alert", { alertId: String(p.alertId), close: true });
+            reply(ok());
         }
     });
 
@@ -16629,6 +16661,25 @@
             return Array.prototype.map.call(new Uint8Array(buf), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
         }
 
+        // The sample notices feed (server/notices/sample, signed with a key
+        // only the simulator pins: servers.json "notices") is a file:// in
+        // the rootfs, read as its exact bytes; everything else the web.
+        function requestBytes(req) {
+            var m = /^file:\/\/(\/.*)$/.exec(String(req.url || ""));
+            if (!m) return proxiedRequestBytes(req);
+            return new Promise(function (resolve) {
+                var x = new global.XMLHttpRequest();
+                x.open("GET", m[1], true);
+                x.responseType = "arraybuffer";
+                x.onload = function () {
+                    var ok = (x.status === 200 || x.status === 0) && x.response && x.response.byteLength > 0;
+                    resolve({ status: ok ? 200 : 404, bytes: ok ? new Uint8Array(x.response) : new Uint8Array(0) });
+                };
+                x.onerror = function () { resolve({ status: 404, bytes: new Uint8Array(0) }); };
+                x.send();
+            });
+        }
+
         var methods = null, palmSubs = [], statusSubs = [], seq = 0;
         function service() {
             if (methods) return methods;
@@ -16656,7 +16707,12 @@
                     return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
                 },
                 luna: nodeServiceLuna(),
-                requestBytes: proxiedRequestBytes,
+                requestBytes: requestBytes,
+                // No notices check as the service starts: the sample notices
+                // would be in every fresh simulator's screenshots. The Updates
+                // pane's check, the daily activity and --scene notice
+                // (checkNotices) show them.
+                noticesAtBoot: false,
                 crypto: {
                     sha256: function (b) { return subtle.digest("SHA-256", b).then(function (h) { return new Uint8Array(h); }); },
                     sha512: function (b) { return subtle.digest("SHA-512", b).then(function (h) { return new Uint8Array(h); }); },

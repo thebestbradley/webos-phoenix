@@ -961,6 +961,13 @@ Item {
                 cb(payload.reply);
         } else if (type === "preferences") {
             preferencesReported(payload);
+        } else if (type === "alert") {
+            // A service's popup alert (the runtime's com.webos.notification
+            // createAlert / closeAlert): ServiceAlert.qml.
+            if (payload && payload.close)
+                closeAlert("service-" + String(payload.alertId || ""));
+            else
+                showServiceAlert(payload || {});
         } else if (type === "ongoing") {
             setOngoing(appId, payload || {});
         } else if (type === "reboot") {
@@ -1584,6 +1591,42 @@ Item {
             queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
         alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", key),
                       { key: key, appId: "com.palm.systemui", name: key, height: height, sound: "", soundClass: "" });
+    }
+
+    // A service's popup alert (com.webos.notification createAlert, through
+    // the runtime's "alert": {alertId, title, message, buttons: [{label,
+    // onclick, params}], onclose}), in the popup alert's place as the shell's
+    // own: a button calls its onclick on the bus (the application manager's
+    // launch, for a critical notice's "Open": services/updates/notices.js),
+    // then the alert closes and its onclose is called. 320 px wide, as the
+    // other popup alerts; its height is what its text needs.
+    Component {
+        id: serviceAlertComponent
+        ServiceAlert {}
+    }
+    function showServiceAlert(p) {
+        if (!p.alertId || !p.message || !Array.isArray(p.buttons) || p.buttons.length === 0)
+            return;
+        var key = "service-" + String(p.alertId);
+        var alert = serviceAlertComponent.createObject(source, { visible: false, width: Theme.px(320), title: String(p.title || ""),
+                                                                 message: String(p.message), buttons: p.buttons.slice(0, 3) });
+        var closed = false;
+        function finish() {
+            if (closed)
+                return;
+            closed = true;
+            if (p.onclose && p.onclose.uri)
+                lunaCall(String(p.onclose.uri), p.onclose.params || {}, function () {});
+        }
+        alert.buttonPressed.connect(function (i) {
+            var b = p.buttons[i] || {};
+            if (b.onclick)
+                lunaCall(String(b.onclick), b.params || {}, function () {});
+            source.closeAlert(key);
+            finish();
+        });
+        alert.closed.connect(finish);
+        showShellAlert(key, alert, Math.ceil(alert.implicitHeight / Theme.u));
     }
 
     // The Home button closes the front popup alert
