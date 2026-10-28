@@ -1,11 +1,14 @@
-# System notices feed (plan)
+# System notices feed
 
 Staff write a notice once on the platform site, and every Phoenix device picks
 it up on its next check and shows it as a system notification. Uses:
 "System update 1.0.3 is out", "Sync is down; we're on it", "Please update:
 security fix", "Public beta survey".
 
-This is a plan; nothing here is built yet. It reuses what the updates and
+The device side (sections 1, 2 and 4) is built in this repository, 28
+October 2026: see [Device: what is built](#device-what-is-built). The
+server side (section 3) is Phoenix-Web-Services', and the notices key is
+not made yet. It reuses what the updates and
 revocation feeds already do ([PLATFORM-CLIENT.md](PLATFORM-CLIENT.md) rows 5
 and 7): a static, signed file on the feeds host that devices poll. There's no
 push server, no device registry and no per-device tracking. Instant push
@@ -117,8 +120,8 @@ wake the device to check this same feed sooner.
 - **Showing:** each notice id is shown once, at its severity, through the
   shell's normal notification path (banner, dashboard, popup alert). Seen
   and dismissed ids are kept in the service's state.
-- **Settings:** Settings > Notifications gets "Phoenix announcements"
-  (on/off). Owner decision: can `critical` be turned off?
+- **Settings:** "Phoenix announcements" (on/off; under Screen & Lock >
+  Notifications). Owner decision: can `critical` be turned off?
 - **Simulator:** the runtime serves a fixture feed, plus a scene,
   `--scene notice`, for screenshots.
 - **Tests:**
@@ -129,6 +132,65 @@ wake the device to check this same feed sooner.
   - shown once;
   - the action allowlist (a notice can't open arbitrary apps or URLs);
   - the dismiss state survives a reboot.
+
+### Device: what is built
+
+- **Verifying:** `apps/shared/platform/src/notices.js` (`verify`,
+  `normalizeNotice`, `matches`, `active`; tests beside it). The size check
+  comes before the signature; then format 1, `sequence` (an integer, never
+  lower than one taken), `expires` (required, in the future). Then each
+  notice on its own: one that fails is left out and the others stay:
+  - `id` matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` (a UUID does);
+    duplicates after the first are left out;
+  - `severity` is `info`, `important` or `critical` (anything else: left out);
+  - `title` (required) and `body` are plain text: control characters become
+    a space, zero-width and bidirectional-override characters go, then 60
+    and 300 characters at most (cut, not refused). Never read as HTML;
+  - `starts` and `ends` are ISO 8601 times (`2026-11-02T15:00:00Z`) or
+    absent; a notice that has ended is left out, one not yet started is
+    kept and shown when its time comes;
+  - `audience`: `channels`, `compatible`, `locales` (lists of strings),
+    `minBuild`, `maxBuild` (integers). A field that is there but not
+    readable leaves the notice out: it narrows, never widens. `"de"`
+    matches every German locale, `"en-GB"` only that one;
+  - `action`, when the device does not allow it, is dropped and the notice
+    kept: `{"kind": "update"}`; `{"kind": "app", "appId", "params"?}` with
+    `appId` one of `org.webosphoenix.settings` (any pane, `{"page"}`),
+    `org.webosphoenix.marketplace` (`{"appId"}`) or `com.palm.app.browser`
+    (`{"target"}`, checked as a link), params an object of 2 KB at most;
+    `{"kind": "url", "url"}`, https only, on the origin of servers.json's
+    `feeds`, `api` or `notices.site`, no user name or password;
+  - `dismissible` defaults to true.
+- **Config:** servers.json `"notices": {"url", "keys": [...], "site"?}`
+  (`site`: the project's website, which links may also point at;
+  `tools/servers-json.py --notices-key A,B --site URL`, meta-phoenix
+  `PHOENIX_NOTICES_KEY`, `PHOENIX_SITE_URL`). Without a key the feed is
+  never read (`UNTRUSTED`). [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md) row 29.
+- **Service:** `services/updates/notices.js` in com.palm.update: methods
+  `checkNotices`, `getNotices`, `dismissNotice {id}`. Notifications go
+  through `com.webos.notification`: `createToast` with `onlyToast: false`
+  (the banner, then a row; `persistent: true` for important and critical)
+  whose tap launches the action (Settings for a notice without one), and
+  `createAlert` first for a critical notice (buttons Open and Close, or
+  OK). State (`notices` in the service's state file): the last sequence,
+  the last feed's notices, the seen and dismissed ids (200 each at most).
+- **Settings:** "Phoenix announcements" is under Screen & Lock >
+  Notifications, where Phoenix's notification settings are (there is no
+  separate Notifications page): the system preference
+  `phoenixAnnouncements`, on unless false. Off, only critical notices show
+  (question 1 below is the owner's); what was skipped while off is not
+  shown later.
+- **Simulator:** the sample feed `server/notices/sample` (its own sample
+  key, in git, which only the simulator's servers.json pins; `sign.cjs`
+  re-signs it), `--scene notice` and `--scene noticealert`; the runtime
+  shows `createAlert` as `ServiceAlert.qml`. The check at start is left
+  out there (it would be in every fresh simulator's screenshots); the
+  Updates pane's check and the scene run it. `tools/test-notices.cjs`.
+- **Not done:** a swipe on a notice's row is not reported to the service
+  (OSE's toasts say nothing when one is closed), so "dismissed" comes only
+  from `dismissNotice`, which no screen calls yet, and an important notice
+  is not shown again after a restart. The drivers feed's key hand-over is
+  not used: two keys can be pinned while the key changes.
 
 ## 5. Who does what
 

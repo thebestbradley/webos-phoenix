@@ -414,7 +414,11 @@ it only recognises webOS 3 when `PalmSystem.deviceInfo` reports
 `platformVersionMinor` as a truthy value, which the TouchPad's `0` is not; its
 calls then take the OSE route, so `webOS.notification.showToast` uses OSE's
 `com.webos.notification` `createToast`, which the runtime shows as the calling
-app's banner.
+app's banner. Its `createAlert` (a title, a message, one to three
+buttons whose `onclick` is a `luna://` call) is a popup alert in the
+simulator's shell (`ServiceAlert.qml`) and the stock NotificationView's on
+a device; com.palm.update's critical system notices use it
+([NOTICES.md](NOTICES.md)).
 
 ## Enact apps
 
