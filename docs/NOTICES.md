@@ -176,7 +176,8 @@ wake the device to check this same feed sooner.
   the last feed's notices, the seen and dismissed ids (200 each at most).
 - **Settings:** "Phoenix announcements" is under Screen & Lock >
   Notifications, where Phoenix's notification settings are (there is no
-  separate Notifications page): the system preference
+  separate Notifications page; the row reads "Announcements, News from
+  Phoenix" so it fits a phone): the system preference
   `phoenixAnnouncements`, on unless false. Off, only critical notices show
   (question 1 below is the owner's); what was skipped while off is not
   shown later.

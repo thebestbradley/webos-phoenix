@@ -137,7 +137,7 @@ export function ScreenPage() {
                     <ToggleButton value={prefs.blinkNotifications !== false} label="Blink notifications"
                                   onChange={(v) => setPref({ blinkNotifications: v })} />
                 </Row>
-                <Row title="Phoenix announcements" subtitle="News about your device and the service from the Phoenix project"
+                <Row title="Announcements" subtitle="News from Phoenix"
                      testId="announcements">
                     <ToggleButton value={prefs.phoenixAnnouncements !== false} label="Phoenix announcements" testId="announcements-toggle"
                                   onChange={(v) => setPref({ phoenixAnnouncements: v })} />
