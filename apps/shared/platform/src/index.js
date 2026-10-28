@@ -13,6 +13,7 @@ var servers = require("./servers");
 var signed = require("./signed");
 var rollout = require("./rollout");
 var revocations = require("./revocations");
+var notices = require("./notices");
 var http = require("./http");
 var b64 = require("./b64");
 var ed25519 = require("./ed25519");
@@ -59,5 +60,5 @@ function driverConfig(catalogJson, resolved) {
     return c;
 }
 
-module.exports = { load: load, driverConfig: driverConfig, servers: servers, signed: signed, rollout: rollout, revocations: revocations, http: http,
+module.exports = { load: load, driverConfig: driverConfig, servers: servers, signed: signed, rollout: rollout, revocations: revocations, notices: notices, http: http,
                    b64: b64, ed25519: ed25519 };

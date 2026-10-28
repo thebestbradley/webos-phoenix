@@ -20,6 +20,8 @@
 //    "catalog":     {"url", "key", "root"},
 //    "updates":     {"url", "channel", "channels", "key", "root"},
 //    "revocations": {"url"},
+//    "notices":     {"url", "keys": [the notices keys, base64 Ed25519],
+//                    "site"?: the project's website, which a notice may link to},
 //    "drivers":     {"url", "key", "reportUrl"},
 //    "account":     {"issuer", "clientId", "scope", "key" (the API's
 //                    Ed25519 key that signs entitlements)},
@@ -27,7 +29,7 @@
 //    "assistant":   {"url"},
 //    "connectivity": {"probe"}}
 //
-// A "url" may be relative: catalog, updates, revocations and drivers to
+// A "url" may be relative: catalog, updates, revocations, notices and drivers to
 // "feeds", the others to "api". "key" pins a feed's online Ed25519 key;
 // "root" pins the offline root key that delegates to the online one
 // (lib delegation.js); both null on a feed that has signatures means a
@@ -40,9 +42,9 @@ var b64 = require("./b64");
 
 var FORMAT = 1;
 var CHANNELS = ["stable", "beta", "dev"];
-var FEED_SECTIONS = ["catalog", "updates", "revocations", "drivers"];
+var FEED_SECTIONS = ["catalog", "updates", "revocations", "notices", "drivers"];
 var API_SECTIONS = ["account", "assistant"];
-var SECTIONS = ["catalog", "updates", "revocations", "drivers", "account", "push", "assistant", "connectivity", "backup"];
+var SECTIONS = ["catalog", "updates", "revocations", "notices", "drivers", "account", "push", "assistant", "connectivity", "backup"];
 
 function err(code, text) {
     var e = new Error(text);
@@ -84,6 +86,13 @@ function key(v) {
     var k = b64.fromBase64(v);
     return k.length === 32 ? b64.toBase64(k) : null;
 }
+// A list of keys (the notices feed's): the ones that are Ed25519 keys, at most 4.
+function keyList(v) {
+    if (!Array.isArray(v)) return [];
+    var out = [];
+    v.forEach(function (x) { var k = key(x); if (k && out.indexOf(k) < 0) out.push(k); });
+    return out.slice(0, 4);
+}
 
 // Parse the file's text; throws BAD_CONFIG.
 function parse(text) {
@@ -117,7 +126,7 @@ function resolve(image, override, devMode) {
     var feeds = base(c.feeds, insecure), api = base(c.api, insecure);
     var sec = function (name) { return isObject(c[name]) ? c[name] : {}; };
 
-    var catalog = sec("catalog"), updates = sec("updates"), revocations = sec("revocations"), drivers = sec("drivers");
+    var catalog = sec("catalog"), updates = sec("updates"), revocations = sec("revocations"), notices = sec("notices"), drivers = sec("drivers");
     var account = sec("account"), push = sec("push"), assistant = sec("assistant"), connectivity = sec("connectivity");
     var channels = Array.isArray(updates.channels) ? updates.channels.filter(function (x) { return CHANNELS.indexOf(x) >= 0; }) : CHANNELS.slice();
     if (!channels.length) channels = ["stable"];
@@ -128,7 +137,7 @@ function resolve(image, override, devMode) {
         overridden: useOverride,
         feeds: feeds,
         api: api,
-        catalog: null, updates: null, revocations: null, drivers: null,
+        catalog: null, updates: null, revocations: null, notices: null, drivers: null,
         account: null, push: null, assistant: null, connectivity: null, backup: null
     };
     var u = under(catalog.url, feeds, insecure);
@@ -138,6 +147,9 @@ function resolve(image, override, devMode) {
                            channels: channels, key: key(updates.key), root: key(updates.root) };
     u = under(revocations.url, feeds, insecure);
     if (u) out.revocations = { url: u };
+    // The notices feed (docs/NOTICES.md): read only with a key to check it.
+    u = under(notices.url, feeds, insecure);
+    if (u) out.notices = { url: u, keys: keyList(notices.keys), site: base(notices.site, false) };
     u = under(drivers.url, feeds, insecure);
     if (u) out.drivers = { url: slash(u), key: key(drivers.key), reportUrl: under(drivers.reportUrl, api, insecure) };
     u = under(account.issuer, api, insecure);
@@ -181,6 +193,8 @@ function checkOverride(o) {
         if (isObject(o[k])) Object.keys(o[k]).forEach(function (f) {
             var v = o[k][f];
             if ((f === "key" || f === "root") && v !== null && !key(v)) throw err("BAD_PARAMS", k + "." + f + ": a base64 Ed25519 public key");
+            if (f === "keys" && v !== null && (!Array.isArray(v) || keyList(v).length !== v.length))
+                throw err("BAD_PARAMS", k + "." + f + ": a list of base64 Ed25519 public keys");
         });
     });
     return o;
