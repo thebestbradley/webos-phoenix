@@ -7,8 +7,10 @@ security fix", "Public beta survey".
 
 The device side (sections 1, 2 and 4) is built in this repository, 28
 October 2026: see [Device: what is built](#device-what-is-built). The
-server side (section 3) is Phoenix-Web-Services', and the notices key is
-not made yet. It reuses what the updates and
+server side (section 3) is built in Phoenix-Web-Services on branch
+`cloud/notices-feed` (the staff page `/review/notices`, the signed
+`notices/v1/notices.json`, daily renewal), waiting for its tests and deploy;
+the production notices key is not made yet. It reuses what the updates and
 revocation feeds already do ([PLATFORM-CLIENT.md](PLATFORM-CLIENT.md) rows 5
 and 7): a static, signed file on the feeds host that devices poll. There's no
 push server, no device registry and no per-device tracking. Instant push
