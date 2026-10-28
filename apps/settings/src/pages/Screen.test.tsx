@@ -18,7 +18,7 @@ beforeAll(() => {
 });
 
 const announcements = async () =>
-    (await call<{ phoenixAnnouncements?: boolean }>("luna://com.webos.service.systemservice/getPreferences", { keys: ["phoenixAnnouncements"] }))
+    ((await call("luna://com.webos.service.systemservice/getPreferences", { keys: ["phoenixAnnouncements"] })) as { phoenixAnnouncements?: boolean })
         .phoenixAnnouncements;
 
 describe("Phoenix announcements", () => {
