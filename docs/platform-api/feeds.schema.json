@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://webosphoenix.org/platform-api/feeds.schema.json",
     "title": "The Phoenix platform's static feeds (feeds host)",
-    "description": "What a device reads from the feeds host: the catalog index, the update feed, the revocation list, the key files with their delegations. Each signed file has a detached signature beside it (<file>.sig: base64 of the Ed25519 signature of the file's exact bytes, then a newline). The device code that reads them: apps/marketplace/service/lib/catalog.js, services/updates/updatesservice.js, apps/shared/platform/src/{signed,revocations,rollout}.js. New optional fields may be added inside a version; none may be removed or changed (PLATFORM.md 5).",
+    "description": "What a device reads from the feeds host: the catalog index, the update feed, the revocation list, the notices feed, the key files with their delegations. Each signed file has a detached signature beside it (<file>.sig: base64 of the Ed25519 signature of the file's exact bytes, then a newline). The device code that reads them: apps/marketplace/service/lib/catalog.js, services/updates/updatesservice.js, apps/shared/platform/src/{signed,revocations,notices,rollout}.js. New optional fields may be added inside a version; none may be removed or changed (PLATFORM.md 5).",
     "$defs": {
         "base64Key": { "type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$", "description": "An Ed25519 public key: base64 of its 32 bytes" },
         "base64Signature": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$", "description": "An Ed25519 signature: base64 of its 64 bytes" },
@@ -144,6 +144,52 @@
                 "expires": { "$ref": "#/$defs/dateTime" },
                 "apps": { "type": "array", "items": { "$ref": "#/$defs/revocationEntry" } },
                 "keys": { "type": "array", "items": { "$ref": "#/$defs/base64Key" }, "description": "Online keys never to trust again (a leak)" }
+            }
+        },
+        "noticesFeed": {
+            "type": "object",
+            "description": "notices/v1/notices.json (docs/NOTICES.md), signed (notices.json.sig) by a notices key servers.json pins (notices.keys; its own key, not the catalog's). sequence never goes down; expires at most 7 days on (re-signed daily); 64 KB and 20 notices at most. Checked by apps/shared/platform/src/notices.js: a notice that does not pass is left out, the others stay; an action the device does not allow is left out, the notice stays.",
+            "required": ["format", "sequence", "expires", "notices"],
+            "properties": {
+                "format": { "const": 1 },
+                "sequence": { "type": "integer", "minimum": 0 },
+                "generated": { "$ref": "#/$defs/dateTime" },
+                "expires": { "$ref": "#/$defs/dateTime" },
+                "notices": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/notice" } }
+            }
+        },
+        "notice": {
+            "type": "object",
+            "required": ["id", "severity", "title"],
+            "properties": {
+                "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", "description": "A UUID: each id is shown once per device" },
+                "severity": { "enum": ["info", "important", "critical"], "description": "info: a banner, then a dashboard row; important: the row stays until dismissed; critical: a one-time popup alert, then the row" },
+                "title": { "type": "string", "maxLength": 60, "description": "Plain text (never HTML)" },
+                "body": { "type": "string", "maxLength": 300, "description": "Plain text (never HTML), no links" },
+                "starts": { "$ref": "#/$defs/dateTime" },
+                "ends": { "$ref": "#/$defs/dateTime" },
+                "audience": {
+                    "type": "object",
+                    "description": "Every field optional; empty or absent means everyone. A field the device cannot read leaves the notice out.",
+                    "properties": {
+                        "channels": { "type": "array", "items": { "enum": ["stable", "beta", "dev"] } },
+                        "compatible": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" } },
+                        "minBuild": { "type": "integer", "minimum": 0 },
+                        "maxBuild": { "type": "integer", "minimum": 0 },
+                        "locales": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})*$" }, "description": "\"de\" matches every German locale, \"en-GB\" only that one" }
+                    }
+                },
+                "action": {
+                    "oneOf": [
+                        { "type": "object", "required": ["kind"], "properties": { "kind": { "const": "update" } }, "description": "Opens Settings > Updates" },
+                        { "type": "object", "required": ["kind", "appId"], "properties": { "kind": { "const": "app" },
+                          "appId": { "enum": ["org.webosphoenix.settings", "org.webosphoenix.marketplace", "com.palm.app.browser"] },
+                          "params": { "type": "object", "description": "Launch params, at most 2 KB as JSON (Settings: {page}; the Marketplace: {appId}; the browser: {target}, checked as a url action)" } } },
+                        { "type": "object", "required": ["kind", "url"], "properties": { "kind": { "const": "url" },
+                          "url": { "type": "string", "pattern": "^https://", "maxLength": 2048, "description": "Only on the platform's own origins: servers.json feeds, api or notices.site" } } }
+                    ]
+                },
+                "dismissible": { "type": "boolean", "default": true }
             }
         }
     }

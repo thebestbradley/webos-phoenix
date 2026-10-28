@@ -119,6 +119,15 @@ with tempfile.TemporaryDirectory() as tmp:
     check(r.returncode == 0 and made.get("feeds") == "https://feeds.example.org/" and made["catalog"]["root"] == root
           and made["updates"]["channels"] == ["stable", "beta", "dev"] and made["account"]["issuer"] == "https://api.example.org",
           "servers-json.py: an image's file, roots pinned")
+    nk = [base64.b64encode(os.urandom(32)).decode() for _ in range(2)]
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://feeds.example.org",
+                        "--notices-key", ",".join(nk), "--site", "https://example.org"], capture_output=True, text=True)
+    made = json.load(open(out)) if r.returncode == 0 else {}
+    check(r.returncode == 0 and made.get("notices") == {"url": "notices/v1/notices.json", "keys": nk, "site": "https://example.org/"}
+          and "notices" in r.stdout, "servers-json.py: the notices feed, its keys pinned (docs/NOTICES.md)")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/",
+                        "--notices-key", nk[0] + ",c2hvcnQ="], capture_output=True, text=True)
+    check(r.returncode != 0 and "Ed25519" in r.stderr, "servers-json.py: a notices key that is not one refused")
     r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "http://feeds.example.org/"],
                        capture_output=True, text=True)
     check(r.returncode != 0 and "https" in r.stderr, "servers-json.py: plain HTTP refused for an image")

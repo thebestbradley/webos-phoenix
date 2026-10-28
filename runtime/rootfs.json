@@ -64,6 +64,7 @@
         "/usr/palm/services/org.webosphoenix.hardware/": "services/hardware/",
         "/etc/palm/hardware/": "services/hardware/etc/palm/hardware/",
         "/usr/share/phoenix/hardware/sample/": "server/drivers/sample/public/",
+        "/usr/share/phoenix/notices/sample/": "server/notices/sample/public/",
         "/etc/palm/marketplace/": "apps/marketplace/service/etc/palm/marketplace/",
         "/etc/phoenix/connectors/": "runtime/connector-settings/",
         "/usr/share/phoenix/demo/xmpp/": "apps/connectors/xmpp/service/",

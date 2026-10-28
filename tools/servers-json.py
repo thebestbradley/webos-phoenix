@@ -13,8 +13,10 @@ not this script's, so they are named in one place.
     tools/servers-json.py OUT --feeds URL [--api URL] [--name TEXT]
         [--channel stable|beta|dev] [--channels stable,beta,dev]
         [--catalog-key B64] [--catalog-root B64] [--updates-key B64] [--updates-root B64]
-        [--drivers-key B64] [--account-key B64] [--issuer URL] [--push URL]
+        [--drivers-key B64] [--account-key B64] [--notices-key B64[,B64]] [--site URL]
+        [--issuer URL] [--push URL]
         [--catalog-path catalog/v1/] [--updates-path updates/] [--revocations-path ...]
+        [--notices-path notices/v1/notices.json]
         [--drivers-path drivers/v1/] [--report-path drivers/v1/report]
         [--assistant-path v1/assistant/] [--probe URL]
     tools/servers-json.py --check FILE     checks a file as a device reads it
@@ -44,6 +46,11 @@ def key(v, what):
     return v
 
 
+def keys(v, what):
+    """A comma-separated list of keys (the notices feed's: two while it changes)."""
+    return [key(k.strip(), what) for k in (v or "").split(",") if k.strip()]
+
+
 def url(v, what, base=False):
     if not v:
         return None
@@ -71,6 +78,7 @@ def build(a):
         "updates": {"url": a.updates_path, "channel": a.channel, "channels": channels,
                     "key": key(a.updates_key, "--updates-key"), "root": key(a.updates_root, "--updates-root")},
         "revocations": {"url": a.revocations_path},
+        "notices": {"url": a.notices_path, "keys": keys(a.notices_key, "--notices-key"), "site": url(a.site, "--site", True)},
         "drivers": {"url": a.drivers_path, "key": key(a.drivers_key, "--drivers-key"), "reportUrl": a.report_path if api else None},
         "account": {"issuer": url(issuer, "--issuer") if issuer else None, "clientId": "phoenix-device",
                     "scope": "openid account backup push reviews assistant", "key": key(a.account_key, "--account-key")},
@@ -101,12 +109,23 @@ def check(path):
                     ok = False
                 if not ok:
                     problems.append("%s.%s is not an Ed25519 key" % (sec, f))
+    nk = (c.get("notices") or {}).get("keys") or []
+    if not isinstance(nk, list):
+        problems.append("notices.keys is not a list")
+        nk = []
+    for v in nk:
+        try:
+            ok = isinstance(v, str) and len(base64.b64decode(v)) == 32
+        except Exception:
+            ok = False
+        if not ok:
+            problems.append("notices.keys has a value that is not an Ed25519 key")
     u = c.get("updates") or {}
     if u.get("channel") and u["channel"] not in CHANNELS:
         problems.append("updates.channel %s" % u["channel"])
     for p in problems:
         print("servers.json: " + p)
-    pinned = [s for s in ("catalog", "updates") if (c.get(s) or {}).get("key") or (c.get(s) or {}).get("root")]
+    pinned = [s for s in ("catalog", "updates") if (c.get(s) or {}).get("key") or (c.get(s) or {}).get("root")] + (["notices"] if nk else [])
     print("servers.json: feeds %s, api %s; keys pinned for: %s" % (c.get("feeds"), c.get("api"), ", ".join(pinned) or "none"))
     return 1 if problems else 0
 
@@ -123,11 +142,13 @@ def main(argv=None):
     p.add_argument("--probe", default="")
     p.add_argument("--channel", default="stable")
     p.add_argument("--channels", default="")
-    for k in ("catalog-key", "catalog-root", "updates-key", "updates-root", "drivers-key", "account-key"):
+    p.add_argument("--site", default="")
+    for k in ("catalog-key", "catalog-root", "updates-key", "updates-root", "drivers-key", "account-key", "notices-key"):
         p.add_argument("--" + k, default="")
     p.add_argument("--catalog-path", default="catalog/v1/")
     p.add_argument("--updates-path", default="updates/")
     p.add_argument("--revocations-path", default="revocations/v1/revoked.json")
+    p.add_argument("--notices-path", default="notices/v1/notices.json")
     p.add_argument("--drivers-path", default="drivers/v1/")
     p.add_argument("--report-path", default="drivers/v1/report")
     p.add_argument("--assistant-path", default="v1/assistant/")
