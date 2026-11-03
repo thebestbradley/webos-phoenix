@@ -381,8 +381,9 @@ function start(opts) {
         if (p === "v1/devices" && req.method === "POST") {
             const miss = ["publicKey", "name", "compatible"].filter((k) => typeof b[k] !== "string" || !b[k]);
             if (miss.length) return error(res, 422, "Missing " + miss.join(", "), "VALIDATION", Object.fromEntries(miss.map((k) => [k, "required"])));
-            const id = "d_" + rand(6);
-            const d = { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible, osVersion: b.osVersion || "", build: b.build | 0,
+            const prior = Array.from(st.devices.values()).find((d) => d.user === auth.user && d.publicKey === b.publicKey);
+            const id = prior ? prior.id : "d_" + rand(6);
+            const d = prior || { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible, osVersion: b.osVersion || "", build: b.build | 0,
                         publicKey: b.publicKey, created: iso(now()), lastSeen: iso(now()).slice(0, 10) };
             st.devices.set(id, d);
             auth.device = id;

@@ -74,7 +74,8 @@ function makeWorld(opts: any = {}) {
     const bars: any[] = [];
     const w: any = { launches, closes, bars, now: 1_000_000, decision: "allow", auto: true, seen: [] as string[] };
     w.device = createDeviceOAuth({
-        request: synckit.createRequest({ userAgent: "test" }),
+        request: opts.request || synckit.createRequest({ userAgent: "test" }),
+        keystore: opts.keystore,
         fs, path, crypto, http, dir,
         launchCard: async (params: any) => {
             launches.push(params);
@@ -288,6 +289,176 @@ describe("the loopback listener", () => {
 });
 
 describe("tokens", () => {
+    function deferred() {
+        let resolve!: () => void;
+        const promise = new Promise<void>((done) => { resolve = done; });
+        return { promise, resolve };
+    }
+
+    function heldRefresh() {
+        const entered = deferred(), release = deferred();
+        const request = synckit.createRequest({ userAgent: "test" });
+        world = makeWorld({ request: async (req: any) => {
+            const response = await request(req);
+            if (new URLSearchParams(req.body).get("grant_type") === "refresh_token") {
+                entered.resolve();
+                await release.promise;
+            }
+            return response;
+        } });
+        return { entered, release };
+    }
+
+    it("refreshing one key does not hold up another key", async () => {
+        const entered = deferred(), release = deferred();
+        const request = synckit.createRequest({ userAgent: "test" });
+        let holdNext = true;
+        world = makeWorld({ request: async (req: any) => {
+            const response = await request(req);
+            if (holdNext && new URLSearchParams(req.body).get("grant_type") === "refresh_token") {
+                holdNext = false;
+                entered.resolve(); await release.promise;
+            }
+            return response;
+        } });
+        const first = await world.m.authorize(authorizeParams(), OWNER);
+        const second = await world.m.authorize(authorizeParams(), OWNER);
+        world.now += 3600 * 1000;
+        const refresh = world.m.token({ keyId: first.keyId }, OWNER);
+        await entered.promise;
+        try {
+            expect(await world.m.token({ keyId: second.keyId }, OWNER)).toMatchObject({ returnValue: true });
+            expect(provider.state().refreshed).toBe(2);
+        } finally { release.resolve(); }
+        expect(await refresh).toMatchObject({ returnValue: true });
+    });
+
+    it("a forced refresh is not swallowed by a simultaneous cached-token read", async () => {
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        const first = await world.m.token({ keyId: r.keyId }, OWNER);
+        const [cached, refreshed] = await Promise.all([
+            world.m.token({ keyId: r.keyId }, OWNER),
+            world.m.token({ keyId: r.keyId, refresh: true }, OWNER),
+        ]);
+        expect(cached.accessToken).toBe(first.accessToken);
+        expect(refreshed).toMatchObject({ returnValue: true });
+        expect(refreshed.accessToken).not.toBe(first.accessToken);
+        expect(provider.state().refreshed).toBe(1);
+    });
+
+    it("a failed refresh does not poison the queue for a later retry", async () => {
+        const request = synckit.createRequest({ userAgent: "test" });
+        let failNext = true;
+        world = makeWorld({ request: (req: any) => {
+            if (new URLSearchParams(req.body).get("grant_type") === "refresh_token" && failNext) {
+                failNext = false;
+                return Promise.reject(new Error("offline before send"));
+            }
+            return request(req);
+        } });
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        world.now += 3600 * 1000;
+        expect(await world.m.token({ keyId: r.keyId }, OWNER)).toMatchObject({ returnValue: false });
+        expect(await world.m.token({ keyId: r.keyId }, OWNER)).toMatchObject({ returnValue: true });
+        expect(provider.state().refreshed).toBe(1);
+    });
+
+    it("erasure waits for a started asynchronous key write and then allows new sign-in", async () => {
+        const entered = deferred(), release = deferred();
+        const store = world.device.keystore;
+        const put = store.put;
+        let holdWrite = false;
+        store.put = async (id: string, value: any) => {
+            if (holdWrite) { entered.resolve(); await release.promise; }
+            return put(id, value);
+        };
+        world = makeWorld({ keystore: store });
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        holdWrite = true;
+        world.now += 3600 * 1000;
+        const refresh = world.m.token({ keyId: r.keyId }, OWNER);
+        await entered.promise;
+        const wipe = world.m.wipe({}, "com.palm.systemmanager");
+        release.resolve();
+        await wipe;
+        await refresh;
+        expect(fs.existsSync(path.join(dir, "keys.enc"))).toBe(false);
+        expect(fs.existsSync(path.join(dir, "master.key"))).toBe(false);
+        holdWrite = false;
+        const next = await world.m.authorize(authorizeParams(), OWNER);
+        expect(next).toMatchObject({ returnValue: true });
+        expect(await world.m.token({ keyId: next.keyId }, OWNER)).toMatchObject({ returnValue: true });
+        expect(await world.m.token({ keyId: r.keyId }, OWNER)).toMatchObject({ errorCode: "NOT_FOUND" });
+    });
+
+    it("erasure invalidates an authorization response still at the provider", async () => {
+        const entered = deferred(), release = deferred();
+        const request = synckit.createRequest({ userAgent: "test" });
+        world = makeWorld({ request: async (req: any) => {
+            const response = await request(req);
+            if (new URLSearchParams(req.body).get("grant_type") === "authorization_code") {
+                entered.resolve(); await release.promise;
+            }
+            return response;
+        } });
+        const signIn = world.m.authorize(authorizeParams(), OWNER);
+        await entered.promise;
+        expect(await world.m.wipe({}, "com.palm.systemmanager")).toMatchObject({ returnValue: true });
+        release.resolve();
+        expect(await signIn).toMatchObject({ errorCode: "NOT_FOUND" });
+        expect(fs.existsSync(path.join(dir, "keys.enc"))).toBe(false);
+        expect(fs.existsSync(path.join(dir, "master.key"))).toBe(false);
+    });
+
+    it.each([false, true])("shares overlapping refreshes (forced: %s) only with the owner", async (forced) => {
+        const { entered, release } = heldRefresh();
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        if (!forced) world.now += 3600 * 1000;
+        const first = world.m.token({ keyId: r.keyId, refresh: forced }, OWNER);
+        await entered.promise;
+        const second = world.m.token({ keyId: r.keyId, refresh: forced }, OWNER);
+        expect(await world.m.token({ keyId: r.keyId }, "org.webosphoenix.someoneelse")).toMatchObject({ errorCode: "PERMISSION_DENIED" });
+        release.resolve();
+        const results = await Promise.all([first, second]);
+        expect(results[0]).toMatchObject({ returnValue: true });
+        expect(results[1]).toEqual(results[0]);
+        expect(provider.state().refreshed).toBe(1);
+        expect(provider.state().tokenRequests.filter((req: any) => req.grant_type === "refresh_token")).toHaveLength(1);
+    });
+
+    it("forget waits for rotation and revokes the replacement pair", async () => {
+        const { entered, release } = heldRefresh();
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        world.now += 3600 * 1000;
+        const refresh = world.m.token({ keyId: r.keyId }, OWNER);
+        await entered.promise;
+        const read = deferred();
+        const getKey = world.device.keystore.get;
+        world.device.keystore.get = (id: string) => { const value = getKey(id); read.resolve(); return value; };
+        const forget = world.m.forget({ keyId: r.keyId }, OWNER);
+        await read.promise;
+        release.resolve();
+        const token = await refresh;
+        expect(await forget).toMatchObject({ returnValue: true });
+        expect(provider.tokenLive(token.accessToken)).toBe(false);
+        expect(provider.state().revoked).toContain(token.accessToken);
+        expect(await world.m.token({ keyId: r.keyId }, OWNER)).toMatchObject({ errorCode: "NOT_FOUND" });
+    });
+
+    it("a refresh reply cannot recreate an erased key store", async () => {
+        const { entered, release } = heldRefresh();
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        world.now += 3600 * 1000;
+        const refresh = world.m.token({ keyId: r.keyId }, OWNER);
+        await entered.promise;
+        expect(await world.m.wipe({}, "com.palm.systemmanager")).toMatchObject({ returnValue: true });
+        release.resolve();
+        expect(await refresh).toMatchObject({ errorCode: "NOT_FOUND" });
+        expect(fs.existsSync(path.join(dir, "keys.enc"))).toBe(false);
+        expect(fs.existsSync(path.join(dir, "master.key"))).toBe(false);
+        expect(await world.m.token({ keyId: r.keyId }, OWNER)).toMatchObject({ errorCode: "NOT_FOUND" });
+    });
+
     it("refreshes an expired token with the refresh token", async () => {
         await provider.stop();
         provider = await createFakeProvider({ expiresIn: 120 }).start(0);
