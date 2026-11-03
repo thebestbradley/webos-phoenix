@@ -2044,6 +2044,7 @@
         // agent they send, "mobile" (webOS's) or "desktop".
         browserContentBlocker: false,
         browserUserAgent: "mobile",
+        browserEngineIdentity: false,
         // Settings > Wi-Fi > Proxy (Phoenix): {type: "none" | "http" |
         // "socks", host, port}, the system's proxy for every page.
         networkProxy: { type: "none", host: "", port: 0 },
@@ -2092,7 +2093,7 @@
     // The page views' settings and the system proxy, as the shell takes
     // them (hostStatus browser, proxy; phoenix-sim's simBrowser).
     function browserSettings(p) {
-        return { contentBlocker: !!p.browserContentBlocker, userAgent: p.browserUserAgent === "desktop" ? "desktop" : "mobile" };
+        return { contentBlocker: !!p.browserContentBlocker, identity: p.browserEngineIdentity ? "engine" : "compatibility", userAgent: p.browserUserAgent === "desktop" ? "desktop" : "mobile" };
     }
     function networkProxy(x) {
         x = x && typeof x === "object" ? x : {};
@@ -3110,6 +3111,17 @@
     // Clear Cache, isis-browser Browser.js): phoenix-sim clears the page
     // views' profile (simBrowser). The iframe engine has none of its own.
     register(["com.palm.browserServer"], {
+        "/getCapabilities": function (p, reply) {
+            var h = {};
+            try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}"); } catch (e) {}
+            var native = global.location.protocol === "phoenix:", engine = h.webEngine || {};
+            reply(ok({ extensions: native && engine.extensions === true, engineIdentity: native && engine.engineIdentity === true }));
+        },
+        "/openExtensions": function (p, reply) {
+            if (PalmSystem.appIdentifier !== "com.palm.app.browser") return reply(fail(-1, "Only Web can manage browser extensions"));
+            if (global.location.protocol !== "phoenix:") return reply(fail(-1, "Extension management requires the native simulator"));
+            host.postToHost("browserData", { op: "extensions" }); reply(ok());
+        },
         "/clearCookies": function (p, reply) { host.postToHost("browserData", { op: "clearCookies" }); reply(ok()); },
         "/clearCache": function (p, reply) { host.postToHost("browserData", { op: "clearCache" }); reply(ok()); },
         "*": function (p, reply) { reply(ok()); }
@@ -7488,7 +7500,7 @@
             }
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility", "hardwareKeyboard",
-                 "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
+                 "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent", "browserEngineIdentity",
                  "networkProxy", "devModeUnlocked"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if ("devModeUnlocked" in p && runtime.developerGateChanged) runtime.developerGateChanged();
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());

@@ -718,6 +718,8 @@ Item {
         if (!hasSimBrowser)
             return;
         simBrowser.contentBlocker = !!status.browser.contentBlocker;
+        if (typeof simBrowser.identity !== "undefined")
+            simBrowser.identity = status.browser.identity === "engine" ? "engine" : "compatibility";
         simBrowser.userAgent = status.browser.userAgent === "desktop" ? "desktop" : "mobile";
     }
     Connections {

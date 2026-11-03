@@ -22,6 +22,10 @@
 EXTRA_QMAKEVARS_PRE:remove = "MALIIT_DEFAULT_PLUGIN=libplugin-global.so"
 EXTRA_QMAKEVARS_PRE += "MALIIT_DEFAULT_PLUGIN=libphoenix-keyboard.so"
 
+inherit python3native
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI += "file://configure-phoenix-keyboard.py"
+
 # The first boot's settings: Phoenix's keyboard enabled (first) and active,
 # OSE's and the others enabled after it.
 do_install:append() {
@@ -29,8 +33,5 @@ do_install:append() {
     if [ -z "$script" ]; then
         bbfatal "phoenix-keyboard: maliit-server.sh is not installed where expected"
     fi
-    sed -i '/^ *echo "libplugin-global.so:, /i echo "libphoenix-keyboard.so:, \\\\" >> $MALIIT_CONF_FILE' "$script"
-    sed -i '/^ *echo "onscreen\\\\enabled= /i echo "onscreen\\\\active=libphoenix-keyboard.so:" >> $MALIIT_CONF_FILE' "$script"
-    grep -q 'libphoenix-keyboard.so:, ' "$script" || bbfatal "phoenix-keyboard: maliit-server.sh's enabled list was not changed"
-    grep -q 'active=libphoenix-keyboard.so:' "$script" || bbfatal "phoenix-keyboard: maliit-server.sh's active plugin was not set"
+    ${PYTHON} ${UNPACKDIR}/configure-phoenix-keyboard.py "$script" || bbfatal "phoenix-keyboard: cannot configure the installed keyboard seed"
 }

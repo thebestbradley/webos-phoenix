@@ -126,37 +126,23 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | Voice assistant | Phoenix | Voice Dial | P2 | Voice Dial done (apps/voicedial, com.palm.sysapp.voicedial: say a name or number, confirm by voice or tap, Phone calls), on-device speech recognition only (whisper.cpp through the keyboard's dictation); the assistant and its MCP layer are planned in [AI-AND-MCP.md](AI-AND-MCP.md) |
 | Print | **Done in the simulator** (Save as PDF; `apps/printmanager`) | Print Manager (HP printers) | P2 | Print in Web, Email and Photos, the original Enyo print dialog, the Print Manager, `com.palm.printmgr` simulated with a "Save as PDF" printer (Chromium renders the page); see [APP-RUNTIME.md](APP-RUNTIME.md#printing). Still to do on a device: real printers with CUPS and IPP Everywhere behind the same service (OSE has no print service) |
 
-## Streaming services, honestly
+## Streaming and browser approval gates
 
-- **Netflix, Disney+, Prime Video, Spotify's web player and most paid
-  video need Widevine DRM** in the browser engine. OSE's web runtime is
-  Chromium 120, built without a Widevine CDM, and Phoenix cannot legally
-  ship one: the CDM is a proprietary Google binary distributed only under
-  licence.
-- Other projects work around this by having the **user** fetch the CDM
-  themselves: Ubuntu Touch 24.04-2.0 (July 2026) includes a Widevine
-  installer that extracts it from ChromeOS images, and says plainly it is
-  not endorsed by Google ([release notes](https://ubports.com/blog/ubports-news-1/ubuntu-touch-24-04-2-0-and-24-04-1-4-release-4007)).
-  Asahi Linux's [widevine-installer](https://github.com/AsahiLinux/widevine-installer)
-  does the same for ARM64 desktops, and [Google has shipped Chrome for ARM64
-  Linux with Widevine](https://www.omgubuntu.co.uk/2026/07/chrome-arm64-linux-available) since July 2026. The CDM also has to support the
-  CDM interface of the Chromium version that loads it. A user-run installer is possible for
-  Phoenix, but it is legally grey and would need a Chromium built with
-  Widevine support enabled.
-- Even then it is **Widevine L3** (software-only). Services cap L3 on
-  Linux at low resolution (Netflix commonly at 720p), some block browsers
-  they do not recognise, and none will certify a community OS for L1
-  hardware DRM.
-- **LG's Content Store is not an option.** It is LG's store for LG webOS
-  TVs: proprietary, tied to LG's devices, accounts and signing, and its
-  apps rely on TV hardware DRM and partner agreements. webOS OSE has no
-  access to it and neither will Phoenix.
-- **What does work:** DRM-free and open services in the browser or as PWAs
-  (YouTube in the browser, Internet Archive, PeerTube, radio, podcasts,
-  Bandcamp, Jellyfin/Plex/Navidrome for your own media), and music services
-  with web players that do not require Widevine (*varies by service*).
-  Android apps through Waydroid are a possible M5 topic, but Widevine and
-  Play Integrity checks usually still block the big streaming apps there.
+Protected playback requires an engine with Encrypted Media Extensions, supported codecs, and a compatible, appropriately licensed CDM. [Qt documents Widevine integration and codec configuration](https://doc.qt.io/qt-6.10/qtwebengine-features.html#html5-drm). An HTTPS certificate secures the connection; it does not grant CDM distribution rights, hardware attestation, or a streaming provider's browser approval.
+
+On 16 October 2026 the Mac simulator accepted temporary Widevine key-system access for H.264 and VP9 and reported H.264/AAC/VP9 codec support. An existing Chrome installation contains a CDM; Phoenix did not copy or redistribute it. No protected media license, playback, subscription login, resolution tier, offline license, output-protection or device-image test was completed. The current device WAM stack and planned newer runtime need their own results; simulator acceptance cannot stand in for them.
+
+The owner authorized preparing integration materials for the existing company. Legal company name and website are pending. The [official Widevine contact route](https://www.widevine.com/contact) is the starting point for the appropriate browser/device integration and distribution agreement. The application should identify Phoenix OS and its browser, the actual engine/version/update policy, initial CPU architectures and hardware, proposed CDM delivery/update mechanism, and the person authorized to sign. Any agreement and commercial commitments require owner review/signature. No application or provider message has been sent.
+
+Before an official streaming claim:
+
+- Obtain the required CDM integration/distribution approval and document supported architectures and interface versions.
+- Test encrypted content, real license acquisition/renewal/deletion, codec profiles, persistent-license rules and output protection on the actual target image.
+- For hardware-backed robustness, establish the required hardware/TEE/secure-media path and provisioning/attestation with the hardware and DRM partners. Do not assume it is available on every Phoenix target.
+- Complete each streaming provider's compatibility/partner requirements and measure permitted resolutions with an authorized subscription.
+- Maintain engine/CDM security updates and certificate trust; do not ship another product's private keys or attestation material.
+
+LG's Content Store and its TV app agreements are separate from Phoenix OS. DRM-free web playback remains a distinct, testable path. Browser account integration uses Phoenix's account panel; [Chromium documents restrictions on Google browser sign-in and private Chrome APIs](https://www.chromium.org/developers/how-tos/api-keys/). No Google Chrome Sync or Chrome Web Store entitlement is implied by using Chromium.
 
 ## Recommended build order
 
