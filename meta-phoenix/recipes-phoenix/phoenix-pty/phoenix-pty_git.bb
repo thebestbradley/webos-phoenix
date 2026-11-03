@@ -25,11 +25,11 @@ EXTRA_OECMAKE = "-DPHOENIX_PTY_SYSTEMD_UNITDIR=${systemd_system_unitdir} -DPHOEN
 
 DEPENDS = "luna-service2 glib-2.0"
 
-# The device's user account, which every Terminal shell runs as (uid 1000,
-# home /home/user, bash). Developer Mode (sudo, SSH; phoenix-devmode, not
-# written yet) will build on it.
+# Terminal shells run as the named unprivileged user with /home/user and bash.
+# Let useradd allocate a free UID: LuneOS already reserves 1000 for system.
+# The service uses User=user, so it does not depend on a numeric UID.
 USERADD_PACKAGES = "${PN}"
-USERADD_PARAM:${PN} = "--uid 1000 --home-dir /home/user --create-home --shell /bin/bash --user-group user"
+USERADD_PARAM:${PN} = "--home-dir /home/user --create-home --shell /bin/bash --user-group user"
 
 SYSTEMD_SERVICE:${PN} = "phoenix-pty.service"
 SYSTEMD_AUTO_ENABLE = "enable"
