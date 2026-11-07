@@ -698,7 +698,7 @@ CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ test
 
 What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-156`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-158`
 
 Every check (tools/ci-checks.sh):
 
@@ -932,7 +932,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,89
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-154 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -952,6 +952,12 @@ python3 tools/test-device-profiles.py
 
 ```sh
 python3 tools/test-wam-user-agent.py
+```
+
+A browser's burst of connections while tools/serve-rootfs.py is busy:
+
+```sh
+python3 tools/test-serve-rootfs.py
 ```
 
 ```sh

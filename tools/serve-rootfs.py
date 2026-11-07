@@ -1222,6 +1222,20 @@ def inject_runtime(data):
     return RUNTIME_TAG + data
 
 
+class Server(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    # The listen queue: connections the browser has made that this
+    # server's one accept loop has not taken in yet. Chromium keeps up to
+    # six to a host open, and with HTTP/1.0 every request is a new one, so
+    # a page that writes a dozen script tags at once (Enyo 1.0's loader)
+    # sends them faster than the loop, which shares the GIL with the
+    # handlers' threads, takes them in. socketserver's queue holds 5: on a
+    # Mac the connection after them is reset (net::ERR_CONNECTION_RESET,
+    # a script that never runs), on Linux it is dropped and tried again a
+    # second later. tools/test-serve-rootfs.py.
+    request_queue_size = socket.SOMAXCONN
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=8765)
@@ -1252,8 +1266,7 @@ def main():
     INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
     seed_preinstalled()
     rescan_installed()
-    srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
-    srv.daemon_threads = True
+    srv = Server((args.host, args.port), Handler)
     srv.verbose = args.verbose
     srv.terminal = args.terminal
     srv.terminal_shell = args.terminal_shell

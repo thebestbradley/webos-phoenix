@@ -175,7 +175,7 @@ it("Without a GPU", "The shell tells by the renderer whether a GPU draws, and pr
 
 sec("Test: as CI runs them", "CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ tests below. `./phoenix test` builds and installs nothing first.")
 it("The quick checks", "What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.", B, WP,
-   "webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-156",
+   "webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-158",
    [("./phoenix test --quick", "every check (tools/ci-checks.sh)"), ("./phoenix test --quick --list", "their IDs"),
     ("./phoenix test --quick typecheck unit-tests", "only these"), ("./phoenix test --quick --fail-fast", "stop at the first failure")])
 it("Every web app test, or CI's shard of them", "The tests in `tools/web-tests.txt`, one after another, each one's time in a summary; CI runs them in four shards balanced by the times in the list. Build the apps first (`./phoenix`, or `npm run build` in `apps/` and the demos as their READMEs say) and install Playwright (`./phoenix --tests`).", B, WP,
@@ -206,8 +206,9 @@ it("Run the C++ tests", "There's nothing for `ctest` to find: run each test prog
 it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,89-92 · tools/check-device.sh:8-15",
    ["./phoenix check-device", "./phoenix check-device --all", "./phoenix check-device --strict",
     ("./phoenix check-device --parse fairphone-fp6", "also BitBake's parse check of the named machines (Linux, not as root)", {"os": L})])
-it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
+it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-154 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
+    ("python3 tools/test-serve-rootfs.py", "a browser's burst of connections while tools/serve-rootfs.py is busy"),
     "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
 it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144",
