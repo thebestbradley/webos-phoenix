@@ -175,6 +175,15 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   stay text (their pictures were not released). Tests:
   `tools/test-links.cjs`.
 
+In both, where the engine no longer runs unload listeners (Chromium 158 and
+later, by its unload permissions policy: adding one only logs a "Permissions
+policy violation"), the runtime runs the ones a page adds on its window on
+`pagehide` instead, as the page goes: Enyo 1.0's window manager handing the
+app's root to another window, dashboards and network alerts telling their
+app they were closed, Email's and Calendar's clean-up
+(`tools/test-runtime-unload.cjs`). Where unload still runs (the simulator's
+Chromium 140, WebAppMgr's 120 and 151) it leaves them alone.
+
 Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
