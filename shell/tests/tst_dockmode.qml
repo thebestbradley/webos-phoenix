@@ -42,6 +42,11 @@ Item {
         }
 
         function init() {
+            // Dock mode's own QML stays quiet: any warning from it fails the
+            // test (an attach Qt.callLater left on a slot the Repeater had
+            // let go once threw "Cannot read property 'source' of undefined"
+            // while every test still passed).
+            failOnWarning(/DockMode\w*\.qml:/);
             if (shell.dockMode)
                 shell.exitDockMode(false);
             status.charger = "none";
@@ -390,6 +395,26 @@ Item {
             tryCompare(dock, "currentAppId", dock.timeAppId, 1000);
             compare(dock.windowKey("test.slides"), "");
             compare(dock.exhibitions.length, 1);
+        }
+
+        // Any change to the exhibitions makes every slot again (the Repeater
+        // over the list): the window in front moves into its new slot at
+        // once, and nothing is left to run on the slots let go.
+        function test_newSlotsKeepTheWindow() {
+            enterNow();
+            dock.switchTo("test.slides");
+            var w = windows.windowFor(dock.windowKey("test.slides"));
+            verify(w);
+            var stage = findChild(shell, "dockStage");
+            // Twice in one go: the first new slots go before the event loop runs.
+            status.exhibitionApps = ["test.slides"];
+            status.exhibitionApps = ["test.slides"];
+            verify(w.parent && w.parent.parent && w.parent.parent.parent === stage, "in a slot on the stage");
+            compare(w.parent.parent.objectName, "dockSlot_test.slides");
+            verify(w.visible);
+            wait(50);
+            verify(w.parent.parent.parent === stage);
+            compare(dock.currentAppId, "test.slides");
         }
 
         function test_onlyTheOneInFrontRuns() {
