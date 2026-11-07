@@ -107,9 +107,13 @@ runs:
         tar -xzf apps-built.tar.gz
         rm apps-built.tar.gz
 
+    # One Playwright, so the tests' Chromium changes only with a commit:
+    # playwright@1 moved to 1.65.0 on 5 November 2026, Chrome 156 to 158
+    # (which runs no unload listeners), and the web tests failed on pull
+    # requests that changed no web page. 1.65.0: Chrome 158.0.8127.18.
     - name: Playwright and its Chromium
       if: inputs.playwright == 'true'
       shell: bash
       run: |
-        npm install -g playwright@1
+        npm install -g playwright@1.65.0
         playwright install --with-deps chromium
