@@ -22,7 +22,8 @@
 //   MARKETPLACE_NAME      the catalog's name (default: Phoenix Marketplace)
 //   MARKETPLACE_FETCH_LOCAL  1: copies of apps' pictures (SafeFetch) may come
 //                         from http://127.0.0.1 too (the simulator's and the
-//                         tests' local sites); never set on a server
+//                         tests' local sites); only: from there alone, no
+//                         other site asked (the tests'); never set on a server
 //   MARKETPLACE_FETCH_PROXY  an egress proxy the operator trusts for those
 //                         copies (it resolves the names; default: none)
 //   MARKETPLACE_UPDATES   the system update feed it serves at /updates/
@@ -65,7 +66,8 @@ function marketplace_config(): array
         'db_pass' => getenv('MARKETPLACE_DB_PASS') ?: null,
         'base_url' => rtrim(getenv('MARKETPLACE_BASE_URL') ?: 'http://127.0.0.1:8088/v1/', '/') . '/',
         'name' => getenv('MARKETPLACE_NAME') ?: 'Phoenix Marketplace',
-        'fetch_local' => getenv('MARKETPLACE_FETCH_LOCAL') === '1',
+        'fetch_local' => in_array(getenv('MARKETPLACE_FETCH_LOCAL'), ['1', 'only'], true),
+        'fetch_only_local' => getenv('MARKETPLACE_FETCH_LOCAL') === 'only',
         'fetch_proxy' => getenv('MARKETPLACE_FETCH_PROXY') ?: null,
         'updates' => rtrim(getenv('MARKETPLACE_UPDATES') ?: rtrim($data, '/') . '/updates', '/'),
         'dev' => getenv('MARKETPLACE_DEV') === '1',

@@ -10,6 +10,8 @@
 // - https only; plain http and the loopback address only where the
 //   configuration allows them explicitly (MARKETPLACE_FETCH_LOCAL=1: the
 //   simulator's and the tests' local sites), and nothing else then either;
+//   MARKETPLACE_FETCH_LOCAL=only: 127.0.0.1 alone, no other host asked or
+//   even looked up (the tests: they wait on no site outside this computer);
 // - the host's addresses are looked up here and every one must be a public
 //   unicast address: no loopback, private (RFC 1918), link-local
 //   (169.254/16, the cloud metadata service's), shared (100.64/10),
@@ -64,16 +66,19 @@ final class SafeFetch
     /**
      * $allowLocal: plain http to the loopback address 127.0.0.1 is allowed (and only that besides
      * public https). $resolve: host => addresses, for the tests; the system's resolver otherwise.
+     * $onlyLocal: 127.0.0.1 and nothing else (it implies $allowLocal).
      */
     public function __construct(private bool $allowLocal = false, ?callable $resolve = null, private ?string $proxy = null,
-                                private int $timeout = 8)
+                                private int $timeout = 8, private bool $onlyLocal = false)
     {
+        $this->allowLocal = $allowLocal || $onlyLocal;
         $this->resolve = \Closure::fromCallable($resolve ?? [self::class, 'systemResolve']);
     }
 
     public static function fromConfig(array $config): self
     {
-        return new self(!empty($config['fetch_local']), $config['fetch_resolve'] ?? null, $config['fetch_proxy'] ?? null);
+        return new self(!empty($config['fetch_local']), $config['fetch_resolve'] ?? null, $config['fetch_proxy'] ?? null,
+                        onlyLocal: !empty($config['fetch_only_local']));
     }
 
     /** Whether $ip (v4 or v6) is a public unicast address. */
@@ -127,6 +132,9 @@ final class SafeFetch
         }
         if ($scheme !== 'https' && !($scheme === 'http' && $this->allowLocal)) {
             return $this->refuse("not https: $url");
+        }
+        if ($this->onlyLocal && $host !== '127.0.0.1') {
+            return $this->refuse("not on this computer (only 127.0.0.1 here): $url");
         }
         $port = (int) ($u['port'] ?? ($scheme === 'https' ? 443 : 80));
         $ips = @inet_pton($host) !== false ? [$host] : ($this->resolve)($host);
