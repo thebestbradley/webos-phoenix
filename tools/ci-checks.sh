@@ -147,6 +147,7 @@ checks() {
     check device-firmware "Firmware joined and put into an image (tools/device-firmware.py)" python3 tools/test-device-firmware.py
     check device-profiles "The device profiles: their device.json files, the VM's choice at boot" python3 tools/test-device-profiles.py
     check wam-user-agent "The device's web app user agent (WebAppMgr's conf.sh)" python3 tools/test-wam-user-agent.py
+    check serve-rootfs "serve-rootfs.py answers a browser's burst of connections while busy" python3 tools/test-serve-rootfs.py
     check make-utm "UTM bundles (scripts/make-utm.sh, tools/check-utm-bundle.py)" python3 tools/test-make-utm.py
     check mac-build "The Mac's image build on either layer stack (scripts/mac-build.sh, container-build.sh)" --needs rsync python3 tools/test-mac-build.py
     check php-marketplace "Marketplace catalog service (PHP)" --needs php php server/marketplace/tests/run.php

@@ -551,6 +551,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-back.cjs` | The back gesture: an app takes Back where it can go back (Enyo 1 and 2, Phoenix, Ionic) and leaves it at its top level, where the card minimizes |
 | `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
+| `python3 tools/test-serve-rootfs.py` | `tools/serve-rootfs.py` answers every connection a browser makes while it is busy (its listen queue: on a Mac, one too many is reset and a page's script never runs) |
 | `python3 tools/test-install-rootfs.py` | What `tools/install-rootfs.py` puts in a device image (its `--list`; the apps built first): each bus service's luna-service2 files and the code it runs, Open webOS's app services with OSE's bus files, db8 kinds and activities, the wallpapers, `servers.json` |
 | `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
 | `build/siminstances-test` | The simulators' registry behind Window > Simulators: two find each other (in one process and in two), one brings the other forward, a crashed one's entry is dropped |
