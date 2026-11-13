@@ -630,6 +630,31 @@ check($local->get("$base/loop", 1 << 20) === null && $local->refused === 'too ma
 check($local->get("$base/big.png", 1 << 20) === null && str_contains($local->refused, 'larger than'), 'SafeFetch: no more than the size allowed');
 check($local->get('http://10.0.0.1/i.png', 1 << 20) === null && $local->get('https://[fe80::1]/i.png', 1 << 20) === null,
       'SafeFetch local mode: still nothing internal besides 127.0.0.1');
+// Only this computer (MARKETPLACE_FETCH_LOCAL=only, the browser tests' catalogs): a public site is
+// neither fetched nor looked up, so a test never waits on one.
+$lookups = [];
+$only = new SafeFetch(false, $resolver, null, 8, true);
+$ok = $only->get("$base/icon.png", 1 << 20) === $png;
+$onlyRefused = [];
+foreach (['https://ok.example/i.png', "http://rebind.example:$port/icon.png", "$base/to-private-name"] as $u) {
+    if ($only->get($u, 1 << 20) !== null || !str_contains($only->refused, 'not on this computer')) {
+        $onlyRefused[] = "$u ($only->refused)";
+    }
+}
+check($ok && !$onlyRefused && !$lookups, 'SafeFetch only-local mode: 127.0.0.1 is reached, and no other host is asked or looked up ('
+      . implode(' ', $onlyRefused) . implode(' ', $lookups) . ')');
+$cfg = function (string|false $v): array {
+    $v === false ? putenv('MARKETPLACE_FETCH_LOCAL') : putenv("MARKETPLACE_FETCH_LOCAL=$v");
+    $c = marketplace_config();
+    return [$c['fetch_local'], $c['fetch_only_local']];
+};
+check($cfg(false) === [false, false] && $cfg('1') === [true, false] && $cfg('only') === [true, true] && $cfg('yes') === [false, false],
+      'MARKETPLACE_FETCH_LOCAL: 1 adds 127.0.0.1, only is 127.0.0.1 alone, anything else neither');
+putenv('MARKETPLACE_FETCH_LOCAL=only');
+$fromOnly = SafeFetch::fromConfig(['fetch_resolve' => $resolver] + marketplace_config());
+putenv('MARKETPLACE_FETCH_LOCAL');
+check($fromOnly->get("$base/icon.png", 1 << 20) === $png && $fromOnly->get('https://ok.example/i.png', 1 << 20) === null
+      && str_contains($fromOnly->refused, 'not on this computer') && !$lookups, '... and the catalog\'s copies follow it');
 proc_terminate($site);
 
 // ---- Connector packages in the catalog (phase C4) ----------------------------------------------
