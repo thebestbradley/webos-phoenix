@@ -97,6 +97,78 @@
         });
     })();
 
+    // ---- unload listeners (Chromium 158 and later) ---------------------------------
+    //
+    // The original frameworks and apps clean up as their window goes with
+    // unload listeners on the window: Enyo 1.0's window manager takes the
+    // window out of the app's list and hands the app's root to another of its
+    // windows (palm/system/windows/manager.js:134-142); a dashboard's content
+    // and a network alert destroy themselves, which tells their app the user
+    // threw them away (palm/system/dashboard-window/DashboardContent.js:80-95,
+    // lib/networkalerts/source/NetworkAlertsContent.js:45-54); both Enyos'
+    // dispatchers hand unload to the app's ApplicationEvents onUnload
+    // (enyo-1.0 dom/Dispatcher.js:13, enyo-2 source/dom/dispatcher.js:45);
+    // Email lets new mail notify again when its main card goes and destroys
+    // its views (mail/source/MailApp.js:99-107,169-175,
+    // compose/source/Compose.js:192-200); Calendar stops its first-launch
+    // watch (app/calendar.js:59-61). Chromium 158 turned unload off by default
+    // (its unload permissions policy): adding such a listener only logs
+    // "Permissions policy violation: unload is not allowed in this document."
+    // and the listener never runs, as the page goes or as its frame is taken
+    // out. Where the page's policy says unload is not allowed, a listener
+    // added for it goes to pagehide instead, which still fires then, just
+    // before unload would have: called with an unload event (its target the
+    // document, as unload's is), and only when the page is really going
+    // (persisted false; a page kept in the back/forward cache is not
+    // unloaded). removeEventListener, capture, once and signal work as they
+    // do for unload. Where unload is allowed (the simulator's Qt WebEngine,
+    // Chromium 140; WebAppMgr's 120 and 151 on a device; Chromium to 157),
+    // nothing changes. Here, before the device's return below, so that a
+    // device's engine gets it too when it moves on.
+    (function unloadListenersOnPagehide() {
+        var doc = global.document, policy = doc && doc.featurePolicy;
+        if (!policy || typeof policy.allowsFeature !== "function" || policy.allowsFeature("unload")) return;
+        var add = global.addEventListener, remove = global.removeEventListener;
+        if (typeof add !== "function" || typeof remove !== "function") return;
+        var routed = [];    // {listener, capture, onPagehide}
+        function captures(options) { return typeof options === "boolean" ? options : !!(options && options.capture); }
+        function routedIndex(listener, capture) {
+            for (var i = 0; i < routed.length; i++)
+                if (routed[i].listener === listener && routed[i].capture === capture) return i;
+            return -1;
+        }
+        // The window's own: window.addEventListener(...), or a bare
+        // addEventListener(...) (this is undefined in here).
+        function onWindow(target) { return target === undefined || target === null || target === global; }
+        global.addEventListener = function (type, listener, options) {
+            if (type !== "unload" || !onWindow(this)) return add.apply(this, arguments);
+            var capture = captures(options), opts = options && typeof options === "object" ? options : {};
+            if (!listener || routedIndex(listener, capture) >= 0 || (opts.signal && opts.signal.aborted)) return;
+            var entry = { listener: listener, capture: capture };
+            entry.onPagehide = function (e) {
+                if (e.persisted) return;
+                if (opts.once) global.removeEventListener("unload", listener, capture);
+                var unload = new Event("unload");
+                try {
+                    Object.defineProperty(unload, "target", { value: doc });
+                    Object.defineProperty(unload, "currentTarget", { value: global });
+                } catch (x) { /* as made */ }
+                if (typeof listener === "function") listener.call(global, unload);
+                else if (typeof listener.handleEvent === "function") listener.handleEvent(unload);
+            };
+            routed.push(entry);
+            add.call(global, "pagehide", entry.onPagehide, capture);
+            if (opts.signal) opts.signal.addEventListener("abort", function () { global.removeEventListener("unload", listener, capture); });
+        };
+        global.removeEventListener = function (type, listener, options) {
+            if (type !== "unload" || !onWindow(this)) return remove.apply(this, arguments);
+            var i = routedIndex(listener, captures(options));
+            if (i < 0) return;
+            remove.call(global, "pagehide", routed[i].onPagehide, routed[i].capture);
+            routed.splice(i, 1);
+        };
+    })();
+
     // ---- The text indexer (PalmSystem.runTextIndexer) ------------------------------
     (function () {
         // One pass over a stretch of text (no tags): the first kind that

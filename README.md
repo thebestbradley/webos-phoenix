@@ -543,6 +543,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
 | `node tools/test-accounts.cjs` | Account templates found and reloaded as connectors are installed and removed, Accounts' "Find More ..." opening the Marketplace, Accounts launched with `{templateId}`, a template's Enyo 1.0 sign-in drawn in a frame of a page without Enyo 1.0 |
 | `node tools/test-runtime-csp.cjs` | The runtime in a page whose Content-Security-Policy forbids eval (Passwords', Authenticator's): no violation, the runtime's own services answer, and a page without one still hosts the simulated services |
+| `node tools/test-runtime-unload.cjs` | The original apps' unload listeners in a Chromium that no longer runs unload (158 and later): no permissions policy violation, each runs on pagehide as the page goes or its frame is taken out (capture, once, signal, removed, back/forward cache), and Enyo 1.0's window manager hands the app's root to another window when the main one closes |
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 | `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |
