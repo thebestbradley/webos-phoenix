@@ -46,6 +46,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -57,7 +58,6 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QTcpServer>
-#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <algorithm>
@@ -167,31 +167,62 @@ static int fakePhpServer(int port)
     }
 }
 
-// Whether what answers on the port within a second says it is the server
-// process `serving` started (for the stand-in php's `php -r '... fsockopen
-// ...' PORT ID`, serve.sh's serves_here: GET /_phoenix/serving).
-static int fakeAnswers(int port, const char *serving)
+// A connection to 127.0.0.1:PORT, made within timeoutMs: its socket (non
+// blocking; the caller closes it), or -1 with errno ECONNREFUSED (nothing
+// listens there), ETIMEDOUT (no answer in time) or what else went wrong.
+// Asked of the system (a non-blocking connect, then the socket's SO_ERROR),
+// not of QAbstractSocket::waitForConnected: Qt 6.12.0's takes a refused
+// connection for one made, on a Mac (qtbase 5a6009c00e: its waitForWrite
+// calls connect() again, which on a socket whose connection was refused
+// says EISCONN there, and SO_ERROR is no longer looked at first), so the
+// test's looks at a port found every stopped catalog still answering.
+static int connectLocal(int port, int timeoutMs)
 {
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
-        return 2;
+        return -1;
     ::fcntl(fd, F_SETFL, ::fcntl(fd, F_GETFL) | O_NONBLOCK);
     sockaddr_in a {};
     a.sin_family = AF_INET;
     a.sin_port = htons(quint16(port));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (::connect(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) != 0) {
-        if (errno != EINPROGRESS)
-            return 1;
+    int err = ::connect(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) == 0 ? 0 : errno;
+    if (err == EINPROGRESS) {
+        // A signal (a child process ending) cuts the wait short: waited
+        // on for what is left.
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
         pollfd p { fd, POLLOUT, 0 };
-        if (::poll(&p, 1, 1000) != 1)
-            return 1;
-        int err = 0;
-        socklen_t len = sizeof err;
-        ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-        if (err != 0)
-            return 1;
+        int n;
+        do {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now()).count();
+            n = ::poll(&p, 1, int(std::max<long long>(left, 0)));
+        } while (n < 0 && errno == EINTR);
+        if (n == 0) {
+            err = ETIMEDOUT;
+        } else if (n < 0) {
+            err = errno;
+        } else {
+            socklen_t len = sizeof err;
+            if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) != 0)
+                err = errno;
+        }
     }
+    if (err != 0) {
+        ::close(fd);
+        errno = err;
+        return -1;
+    }
+    return fd;
+}
+
+// Whether what answers on the port within a second says it is the server
+// process `serving` started (for the stand-in php's `php -r '... fsockopen
+// ...' PORT ID`, serve.sh's serves_here: GET /_phoenix/serving).
+static int fakeAnswers(int port, const char *serving)
+{
+    const int fd = connectLocal(port, 1000);
+    if (fd < 0)
+        return 1;
     static const char request[] = "GET /_phoenix/serving HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
     if (::write(fd, request, sizeof request - 1) != ssize_t(sizeof request - 1))
         return 1;
@@ -221,11 +252,12 @@ static quint16 freePort()
 static bool answers(quint16 port)
 {
     for (int i = 0; i < 3; ++i) {
-        QTcpSocket socket;
-        socket.connectToHost(QHostAddress(QHostAddress::LocalHost), port);
-        if (socket.waitForConnected(500))
+        const int fd = connectLocal(port, 500);
+        if (fd >= 0) {
+            ::close(fd);
             return true;
-        if (socket.error() != QAbstractSocket::SocketTimeoutError)
+        }
+        if (errno != ETIMEDOUT)
             return false;
     }
     return false;
@@ -239,17 +271,26 @@ static bool answers(quint16 port)
 static bool refused(quint16 port)
 {
     for (int i = 0; i < 3; ++i) {
-        QTcpSocket socket;
-        socket.connectToHost(QHostAddress(QHostAddress::LocalHost), port);
-        if (socket.waitForConnected(1000))
+        const int fd = connectLocal(port, 1000);
+        if (fd >= 0) {
+            ::close(fd);
             return false;
-        if (socket.error() != QAbstractSocket::SocketTimeoutError)
-            return socket.error() == QAbstractSocket::ConnectionRefusedError;
+        }
+        if (errno != ETIMEDOUT)
+            return errno == ECONNREFUSED;
     }
     return false;
 }
 
-// Runs the event loop until cond() or timeoutMs.
+// Runs the event loop until cond() or timeoutMs, looking every 20 ms. Not
+// more often: a look at a port is a connection, and on a Mac the port each
+// one went from stays taken for 30 s once it is closed (TIME_WAIT). Looked
+// at as fast as the loop turns (processEvents returns at once when nothing
+// waits), a wait on a catalog still up (the watch's grace) made thousands a
+// second and took all 16,384 such ports within two seconds; then no
+// connection could be made for half a minute, neither the test's (neither
+// answering nor refused: EADDRNOTAVAIL) nor the simulators' own looks
+// (each found its catalog gone and started it again).
 template <typename F>
 static bool waitFor(F cond, int timeoutMs)
 {
@@ -257,7 +298,9 @@ static bool waitFor(F cond, int timeoutMs)
     t.start();
     bool ok = cond();
     while (!ok && t.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QEventLoop loop;
+        QTimer::singleShot(int(std::clamp<qint64>(timeoutMs - t.elapsed(), 0, 20)), &loop, &QEventLoop::quit);
+        loop.exec();
         ok = cond();
     }
     return ok;
@@ -508,10 +551,11 @@ static void lookAround()
         o += "  --- the simulators' folder\n" + indented(listed);
     }
     if (look.port) {
-        QTcpSocket s;
-        s.connectToHost(QHostAddress(QHostAddress::LocalHost), look.port);
-        o += "  --- port " + QByteArray::number(look.port) + ": "
-            + (s.waitForConnected(1000) ? QByteArray("answers") : s.errorString().toUtf8()) + '\n';
+        const int fd = connectLocal(look.port, 1000);
+        const int err = errno;
+        if (fd >= 0)
+            ::close(fd);
+        o += "  --- port " + QByteArray::number(look.port) + ": " + (fd >= 0 ? QByteArray("answers") : QByteArray(std::strerror(err))) + '\n';
     }
     o += "  --- processes\n" + processes();
     o += "  ===\n";
@@ -565,6 +609,16 @@ int main(int argc, char **argv)
     if (qEnvironmentVariableIsSet("SIMMARKETPLACE_TEST_KEEP")) {
         root.setAutoRemove(false);
         std::printf("kept: %s\n", qPrintable(root.path()));
+    }
+    {
+        // The test's own look at a port, which every check of a catalog
+        // gone or still there rests on: a port something listens on
+        // answers, one nothing listens on refuses.
+        QTcpServer listening;
+        listening.listen(QHostAddress::LocalHost, 0);
+        check(answers(listening.serverPort()) && !refused(listening.serverPort()), "a port something listens on answers");
+        const quint16 nothing = freePort();
+        check(refused(nothing) && !answers(nothing), "a port nothing listens on refuses");
     }
     // The catalog's folder: the shared one, here the test's own.
     const QString folder = root.filePath(QStringLiteral("catalog"));
