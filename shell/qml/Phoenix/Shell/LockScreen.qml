@@ -205,11 +205,36 @@ Item {
     // (LockWindow::changeState, slotBannerActivated/Deactivated,
     // :836-946, 1024-1045).
     property var notifications: null
-    // Bumped as the rows' contents change, for the dashboard's copies.
-    property int _rowsRevision: 0
+    // The dashboard's rows, newest first: copies, made again whenever the
+    // rows change (a row added or gone, a layer pushed on a stack, a live
+    // activity's progress), as ListModel.get's object does not tell its
+    // readers of a change. Made here, in the model's signals, never in a
+    // binding: a binding that reads that object depends on its roles, and
+    // its first read of a name the model has no role for (a row without
+    // progress) builds the object's properties, which notifies those roles
+    // while the binding still runs, a binding loop.
+    property var _rows: []
+    function _copyRows() {
+        var rows = [];
+        for (var i = notifications ? notifications.count - 1 : -1; i >= 0; --i) {
+            var n = notifications.get(i);
+            rows.push({
+                appId: n.appId, windowKey: n.windowKey || "", title: n.title, body: n.body,
+                color: n.color, glyph: n.glyph, icon: n.icon, progress: n.progress,
+                clickableWhenLocked: !!n.clickableWhenLocked,
+                layerCount: n.layerCount > 1 ? n.layerCount : 1, layers: n.layers || ""
+            });
+        }
+        _rows = rows;
+    }
+    onNotificationsChanged: _copyRows()
     Connections {
         target: lock.notifications
-        function onDataChanged() { lock._rowsRevision++; }
+        function onRowsInserted() { lock._copyRows(); }
+        function onRowsRemoved() { lock._copyRows(); }
+        function onRowsMoved() { lock._copyRows(); }
+        function onDataChanged() { lock._copyRows(); }
+        function onModelReset() { lock._copyRows(); }
     }
     property bool bannerActive: false
     property string bannerText: ""
@@ -679,7 +704,7 @@ Item {
             : Math.max(1, Math.min(Theme.lockDashboardMaxItems,
                 1 + Math.floor((_room - Theme.dashboardItemHeight * 1.5) / (Theme.dashboardItemHeight + dividerHeight)) + 1))
         readonly property bool halfLast: maxItems > 1
-        readonly property int count: lock.notifications ? Math.min(lock.notifications.count, maxItems) : 0
+        readonly property int count: Math.min(lock._rows.length, maxItems)
         readonly property real contentHeight: count * Theme.dashboardItemHeight + Math.max(0, count - 1) * dividerHeight
             - (count === maxItems && halfLast ? Theme.dashboardItemHeight / 2 : 0)
         visible: opacity > 0
@@ -710,20 +735,7 @@ Item {
                     delegate: Column {
                         id: row
                         required property int index
-                        // A copy of the row, made again whenever the rows
-                        // change (a layer pushed on a stack, a live
-                        // activity's progress): ListModel.get's object does
-                        // not tell its readers of a change.
-                        readonly property var entry: {
-                            var rev = lock._rowsRevision;
-                            var n = lock.notifications.get(lock.notifications.count - 1 - index);
-                            return {
-                                appId: n.appId, windowKey: n.windowKey || "", title: n.title, body: n.body,
-                                color: n.color, glyph: n.glyph, icon: n.icon, progress: n.progress,
-                                clickableWhenLocked: !!n.clickableWhenLocked,
-                                layerCount: n.layerCount > 1 ? n.layerCount : 1, layers: n.layers || ""
-                            };
-                        }
+                        readonly property var entry: lock._rows[index]
                         width: dashboardRows.width
                         DashboardItem {
                             objectName: "lockDashboardItem"

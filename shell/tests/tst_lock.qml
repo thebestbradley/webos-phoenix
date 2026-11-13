@@ -369,6 +369,11 @@ Item {
         }
 
         function init() {
+            // The lock screen's QML stays quiet: any warning from it fails
+            // the test (the dashboard's copy of each row, made in a binding,
+            // once logged "Binding loop detected for property "entry"" four
+            // times a row while every test still passed).
+            failOnWarning(/LockScreen\.qml:/);
             // Over the first lock screen (declared after it).
             lock2.visible = true;
             lock2.locked = true;
@@ -417,6 +422,21 @@ Item {
             compare(dash.count, 6);
             compare(items().length, 6);
             compare(dash.contentHeight, 5.5 * 52 + 5 * 2);
+        }
+
+        // The rows follow the model as it changes under them: a row's words,
+        // a row gone, a row added.
+        function test_dashboardFollowsTheModel() {
+            add("One"); add("Two"); add("Three");
+            var dash = findChild(lock2, "lockDashboard");
+            tryCompare(dash, "opacity", 1, 1000);
+            notes.setProperty(1, "title", "Two again");
+            compare(items()[1].title, "Two again");
+            notes.remove(1);
+            compare(dash.count, 2);
+            compare(items().map(function (r) { return r.title; }), ["Three", "One"]);
+            add("Four");
+            compare(items().map(function (r) { return r.title; }), ["Four", "Three", "One"]);
         }
 
         function test_hiddenWhenTurnedOff() {
