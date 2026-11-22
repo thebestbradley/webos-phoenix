@@ -791,6 +791,16 @@
             runtime.busCall("luna://org.webosphoenix.shellhost/post", { type: String(type), payload: payload || {} }, null);
         };
 
+        // ---- Settings > Accessibility on this page ---------------------------------
+        // Text size and high contrast (applyAccessibilityToPage), from the
+        // system preference as luna-sysservice keeps it (getPreferences
+        // {subscribe}, which sends the keys that change).
+        runtime.busCall("luna://com.webos.service.systemservice/getPreferences",
+                        { keys: ["accessibility"], subscribe: true }, function (r) {
+            if (r && r.returnValue !== false && r.accessibility && typeof r.accessibility === "object")
+                applyAccessibilityToPage(r.accessibility);
+        });
+
         // ---- The shell's events for this page ------------------------------------
         // {type, payload}; runtime.onShellEvent(type, fn(payload)) adds one.
         // Only the card's own page listens (not the frames in it: the share
@@ -2196,6 +2206,31 @@
             repeatDelay: typeof a.keyRepeatDelay === "number" ? Math.max(0, Math.round(a.keyRepeatDelay)) : 500,
             repeatInterval: ms(a.keyRepeatInterval) || 50
         };
+    }
+
+    // Settings > Accessibility > Text size (accessibility.textSize, a
+    // percentage; 100 is the default): the page's root font size, which
+    // Ember Glass's rem sizes (--eg-text-*, --eg-space-*; the default apps)
+    // follow. At 100 the page keeps its own (the browser's 16px), so nothing
+    // changes by default. Legacy webOS had no system text size (only some
+    // apps' own, e.g. Email's and Memos'); this is Phoenix's, as iOS's
+    // Dynamic Type and Android's font scale do for every app.
+    // Function declarations only: installDevice (above, which returns before
+    // this code runs) uses them too. 50% to 200%.
+    function textSizePercent(a) {
+        var v = a && typeof a.textSize === "number" && isFinite(a.textSize) ? Math.round(a.textSize) : 100;
+        return Math.max(50, Math.min(200, v));
+    }
+    // The accessibility preference on this page's <html>: its text size and
+    // high contrast (phoenix-high-contrast; @phoenix/ui styles.css).
+    function applyAccessibilityToPage(a) {
+        try {
+            var root = global.document && global.document.documentElement;
+            if (!root) return;
+            var pct = textSizePercent(a || {});
+            if (root.style) root.style.fontSize = pct === 100 ? "" : pct + "%";
+            if (root.classList) root.classList.toggle("phoenix-high-contrast", !!(a && a.highContrast));
+        } catch (e) { /* no document */ }
     }
 
     function prefs() {
@@ -21158,7 +21193,9 @@
     //                      medications, notes, organDonor, contacts: [{personId,
     //                      name, number, relation}], showWhenLocked}
     //   accessibility      Settings > Accessibility: {reduceMotion,
-    //                      highContrast, monoAudio, captions; the hardware
+    //                      highContrast, monoAudio, captions, textSize (a
+    //                      percentage, 100 the default: every page's root
+    //                      font size, applyAccessibilityToPage); the hardware
     //                      keyboard's stickyKeys, slowKeys (ms, 0 off),
     //                      bounceKeys (ms, 0 off), keyRepeatDelay /
     //                      keyRepeatInterval (ms; no delay: the keyboard's
@@ -21222,7 +21259,7 @@
 
         defaultPrefs.firstUseComplete = false;
         defaultPrefs.emergencyInfo = {};
-        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, monoAudio: false, captions: false };
+        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, monoAudio: false, captions: false, textSize: 100 };
 
         var nobody = { cancelled: function () { return false; } };
         function setPreferences(p) { setPrefs(p, function () {}, nobody); }
@@ -21272,13 +21309,10 @@
             });
         } catch (e) { /* ignore */ }
 
-        // ---- Accessibility: high contrast on every page -------------------------------
+        // ---- Accessibility: high contrast and text size on every page -----------------
 
         function applyContrast() {
-            var a = prefs().accessibility || {};
-            var root = global.document && global.document.documentElement;
-            if (!root || !root.classList) return true;
-            root.classList.toggle("phoenix-high-contrast", !!a.highContrast);
+            applyAccessibilityToPage(prefs().accessibility || {});
             return true;
         }
         applyContrast();

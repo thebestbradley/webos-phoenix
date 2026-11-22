@@ -137,6 +137,7 @@
 12 node tools/test-help.cjs --tablet --out app-tests/help-tablet
 16 node tools/test-emergency.cjs --out app-tests/emergency-phone
 16 node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
+6 node tools/test-text-size.cjs --out app-tests/text-size-phone
 15 node tools/test-location.cjs --out app-tests/location-phone
 15 node tools/test-location.cjs --tablet --out app-tests/location-tablet
 2 node tools/test-security.cjs --out app-tests/security

@@ -539,6 +539,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-hardware.cjs` | Settings > Hardware and First Use's Hardware step: newer firmware after its licence, a driver the kernel lacks (a failed install rolled back), another catalog with Developer Mode, a catalog with the wrong key refused, the hardware report, the firmware licences in Device Info (needs PHP) |
 | `node tools/test-help.cjs` | Help, and Just Type finding it |
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
+| `node tools/test-text-size.cjs` | Settings > Accessibility > Text size: every page's root font size (rem) follows it, live |
 | `node tools/test-location.cjs` | Location Services and permissions |
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
 | `node tools/test-accounts.cjs` | Account templates found and reloaded as connectors are installed and removed, Accounts' "Find More ..." opening the Marketplace, Accounts launched with `{templateId}`, a template's Enyo 1.0 sign-in drawn in a frame of a page without Enyo 1.0 |
