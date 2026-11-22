@@ -12,6 +12,10 @@
 //                 runtime puts phoenix-high-contrast on every page's <html>;
 //                 @phoenix/ui styles.css)
 //   captions      Videos shows a video's subtitles even when turned off there
+//   textSize      text size in the apps, a percentage (100 the default): the
+//                 runtime sets every page's root font size from it, which
+//                 Ember Glass's rem sizes follow (@phoenix/ui's px do not)
+//                 (phoenix-runtime.js applyAccessibilityToPage)
 //   monoAudio     stored for the audio service; nothing reads it yet (the note)
 //   stickyKeys, slowKeys, bounceKeys, keyRepeatDelay, keyRepeatInterval
 //                 a hardware keyboard's accessibility, as iOS's (GAPS V8 (4)):
@@ -27,6 +31,9 @@ const DELAYS = [{ label: "Off", value: "0" }, { label: "0.3 seconds", value: "30
 export const REPEATS: Record<string, [number, number] | null> = {
     keyboard: null, off: [0, 50], slow: [1000, 100], normal: [500, 50], fast: [250, 30],
 };
+export const TEXT_SIZES = [{ label: "Small", value: "85" }, { label: "Default", value: "100" },
+                           { label: "Large", value: "115" }, { label: "Larger", value: "130" },
+                           { label: "Largest", value: "150" }];
 export const REPEAT_OPTIONS = [{ label: "As the keyboard does", value: "keyboard" }, { label: "Off", value: "off" },
                                { label: "Slow", value: "slow" }, { label: "Normal", value: "normal" }, { label: "Fast", value: "fast" }];
 export function repeatChoice(p?: AccessibilityPrefs): string {
@@ -49,6 +56,8 @@ export function AccessibilityPage() {
         <Page>
             <PageHeader title="Accessibility" icon="icons/accessibility.png" />
             <Group label="Vision">
+                <ListSelector<string> title="Text size" value={String(prefs?.textSize ?? 100)} testId="a11y-textSize"
+                    options={TEXT_SIZES} onChange={(v) => set({ textSize: Number(v) })} />
                 {toggle("highContrast", "High contrast", "Darker text and stronger outlines in the apps")}
                 {toggle("reduceMotion", "Reduce motion", "Cards, the launcher and the lock screen appear without animating")}
             </Group>

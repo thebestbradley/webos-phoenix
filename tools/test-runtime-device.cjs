@@ -210,6 +210,28 @@ function page(appId, appinfo, launchParams, opts) {
     check(p.calls[before + 3].url === "luna://com.webos.service.systemservice/getPreferences", "systemservice's OSE name");
 }
 
+// ---- Settings > Accessibility: text size and high contrast ---------------------------
+
+{
+    const p = page("org.webosphoenix.tasks", { id: "org.webosphoenix.tasks" });
+    const sub = p.callsTo("luna://com.webos.service.systemservice/getPreferences")
+        .find((c) => c.json.subscribe === true && (c.json.keys || []).indexOf("accessibility") >= 0);
+    check(!!sub, "the page subscribes to the accessibility preference on the bus");
+    const root = p.doc.documentElement;
+    const classes = new Set();
+    root.classList = { toggle: (c, on) => { if (on) classes.add(c); else classes.delete(c); }, contains: (c) => classes.has(c) };
+    const answer = (a) => sub.bridge.onservicecallback(JSON.stringify({ returnValue: true, subscribed: true, accessibility: a }));
+    answer({ textSize: 100, highContrast: false });
+    check(root.style.fontSize === "", "text size 100: the page's root font size is left alone");
+    answer({ textSize: 130, highContrast: true });
+    check(root.style.fontSize === "130%", "text size 130: the root font size is 130% (rem follows)");
+    check(classes.has("phoenix-high-contrast"), "high contrast on the device too");
+    answer({ textSize: 10 });
+    check(root.style.fontSize === "50%" && !classes.has("phoenix-high-contrast"), "kept to 50% at least; high contrast off");
+    sub.bridge.onservicecallback(JSON.stringify({ returnValue: true, subscribed: true }));
+    check(root.style.fontSize === "50%", "an answer without the key changes nothing");
+}
+
 // ---- Window properties ----------------------------------------------------------------
 
 {

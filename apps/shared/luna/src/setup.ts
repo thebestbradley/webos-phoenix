@@ -52,6 +52,8 @@ export interface AccessibilityPrefs {
     monoAudio?: boolean;
     /** Show captions where videos have them. */
     captions?: boolean;
+    /** Text size in every app, a percentage (100, the default: 16px to the rem; the runtime sets each page's root font size). */
+    textSize?: number;
     /** Hardware keyboard: a modifier pressed on its own holds for the next key (twice: until pressed again). */
     stickyKeys?: boolean;
     /** Hardware keyboard: a key counts only once held this long (ms; 0 off). */
