@@ -540,6 +540,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-help.cjs` | Help, and Just Type finding it |
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
 | `node tools/test-text-size.cjs` | Settings > Accessibility > Text size: every page's root font size (rem) follows it, live |
+| `node tools/test-locale-dir.cjs` | The system language on every page: `PalmSystem.locale` from `localeInfo`, `<html lang>` and `<html dir>` (right to left) from the first frame, live |
 | `node tools/test-location.cjs` | Location Services and permissions |
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
 | `node tools/test-accounts.cjs` | Account templates found and reloaded as connectors are installed and removed, Accounts' "Find More ..." opening the Marketplace, Accounts launched with `{templateId}`, a template's Enyo 1.0 sign-in drawn in a frame of a page without Enyo 1.0 |

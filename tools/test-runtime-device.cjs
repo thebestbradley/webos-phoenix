@@ -15,8 +15,9 @@
 // and comes back from it (paste, card activation, the app menu), the
 // PalmSystem calls WebAppMgr drops (neva's injection defines them,
 // WebAppMgr ignores them) put in place, the page's own features (Edit in
-// the app menu, links that leave the app), and the share sheet served in
-// the page with the rest on the bus.
+// the app menu, links that leave the app), the share sheet served in the
+// page with the rest on the bus, and the system language on the page's
+// <html lang> and <html dir>.
 //
 //   node tools/test-runtime-device.cjs
 //
@@ -85,7 +86,7 @@ class Target {
 
 // A page of app appId whose appinfo.json is appinfo, launched with params.
 // opts.wamPalmSystem: WebAppMgr's own no-op methods on PalmSystem, as neva's
-// injection defines them.
+// injection defines them. opts.locale: WebAppMgr's PalmSystem.locale.
 function page(appId, appinfo, launchParams, opts) {
     opts = opts || {};
     const props = [];
@@ -138,7 +139,8 @@ function page(appId, appinfo, launchParams, opts) {
         location: { pathname: "/usr/palm/applications/" + appId + "/index.html", search: "", href: "file:///usr/palm/applications/" + appId + "/index.html", protocol: "file:" },
         navigator: { userAgent: "WebAppManager" },
         PalmServiceBridge: NativeBridge,
-        PalmSystem: Object.assign({ launchParams: JSON.stringify(launchParams || {}), identifier: appId + " 0" }, wam),
+        PalmSystem: Object.assign({ launchParams: JSON.stringify(launchParams || {}), identifier: appId + " 0" },
+                                  opts.locale ? { locale: opts.locale } : {}, wam),
         webOSSystem: { window: { setProperty: (k, v) => props.push([k, v]) } },
         XMLHttpRequest: XHR,
         KeyboardEvent: FakeEvent, Event: FakeEvent, CustomEvent: FakeEvent,
@@ -230,6 +232,41 @@ function page(appId, appinfo, launchParams, opts) {
     check(root.style.fontSize === "50%" && !classes.has("phoenix-high-contrast"), "kept to 50% at least; high contrast off");
     sub.bridge.onservicecallback(JSON.stringify({ returnValue: true, subscribed: true }));
     check(root.style.fontSize === "50%", "an answer without the key changes nothing");
+}
+
+// ---- The system language: <html lang> and <html dir> ---------------------------------
+
+{
+    // WebAppMgr's PalmSystem.locale (from the settings service's
+    // localeInfo.locales.UI), on the root before the app's first frame.
+    const p = page("org.webosphoenix.tasks", { id: "org.webosphoenix.tasks" }, {}, { locale: "ar-SA" });
+    const root = p.doc.documentElement;
+    check(root.getAttribute("lang") === "ar-SA" && root.getAttribute("dir") === "rtl",
+          "WebAppMgr's locale ar-SA: <html lang=ar-SA dir=rtl> at once (" + root.getAttribute("lang") + ", " + root.getAttribute("dir") + ")");
+    check(p.g.PalmSystem.locale === "ar-SA", "WebAppMgr's own PalmSystem.locale is left as it is");
+    const sub = p.callsTo("luna://com.webos.settingsservice/getSystemSettings")
+        .find((c) => c.json.subscribe === true && (c.json.keys || []).indexOf("localeInfo") >= 0);
+    check(!!sub, "the page subscribes to the settings service's localeInfo");
+    const answer = (ui) => sub.bridge.onservicecallback(JSON.stringify({ returnValue: true, subscribed: true, method: "getSystemSettings",
+                                                                         settings: { localeInfo: { locales: { UI: ui, FMT: ui } } } }));
+    answer("en-US");
+    check(root.getAttribute("lang") === "en-US" && root.getAttribute("dir") === "ltr", "localeInfo en-US: lang en-US, ltr");
+    answer("he-IL");
+    check(root.getAttribute("lang") === "he-IL" && root.getAttribute("dir") === "rtl", "he-IL: right to left, live");
+    answer("ku-Arab-IQ");
+    check(root.getAttribute("dir") === "rtl" && root.getAttribute("lang") === "ku-Arab-IQ", "ku-Arab: right to left");
+    answer("ku-TR");
+    check(root.getAttribute("dir") === "ltr", "ku (Latin): left to right");
+    sub.bridge.onservicecallback(JSON.stringify({ returnValue: true, subscribed: true, settings: {} }));
+    check(root.getAttribute("lang") === "ku-TR", "an answer without localeInfo changes nothing");
+
+    // The original's form from WebAppMgr ("fa_ir") works too; none leaves the page alone.
+    const q = page("org.webosphoenix.tasks", { id: "org.webosphoenix.tasks" }, {}, { locale: "fa_ir" });
+    check(q.doc.documentElement.getAttribute("lang") === "fa-IR" && q.doc.documentElement.getAttribute("dir") === "rtl",
+          "fa_ir: lang fa-IR, right to left");
+    const r = page("org.webosphoenix.tasks", { id: "org.webosphoenix.tasks" });
+    check(r.doc.documentElement.getAttribute("lang") === null && r.doc.documentElement.getAttribute("dir") === null,
+          "without a locale from WebAppMgr the root is left until the settings service answers");
 }
 
 // ---- Window properties ----------------------------------------------------------------

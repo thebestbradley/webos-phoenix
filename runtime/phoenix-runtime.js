@@ -801,6 +801,18 @@
                 applyAccessibilityToPage(r.accessibility);
         });
 
+        // ---- The system language on this page ----------------------------------------
+        // <html lang> and <html dir> (applyLocaleToPage): from WebAppMgr's
+        // PalmSystem.locale at once, before the app's first frame, then from
+        // the settings service's localeInfo.locales.UI, which WebAppMgr's
+        // locale comes from, as it changes.
+        applyLocaleToPage(ps && ps.locale);
+        runtime.busCall("luna://com.webos.settingsservice/getSystemSettings",
+                        { keys: ["localeInfo"], subscribe: true }, function (r) {
+            var info = r && r.returnValue !== false && r.settings && r.settings.localeInfo;
+            if (info && info.locales && info.locales.UI) applyLocaleToPage(info.locales.UI);
+        });
+
         // ---- The shell's events for this page ------------------------------------
         // {type, payload}; runtime.onShellEvent(type, fn(payload)) adds one.
         // Only the card's own page listens (not the frames in it: the share
@@ -1051,9 +1063,11 @@
             return launchParams;
         },
         set launchParams(v) { launchParams = v; },
-        locale: store.get("prefs", {}).locale || "en_us",
-        localeRegion: "us",
-        phoneRegion: "us",
+        // The system language, read when asked (systemLocale, below): Settings
+        // > Language & Region and First Use change it while pages run.
+        get locale() { return legacyLocale(systemLocale().ui); },
+        get localeRegion() { return systemLocale().region; },
+        get phoneRegion() { return systemLocale().phoneRegion; },
         timeFormat: store.get("prefs", {}).timeFormat || "HH12",
         TZ: (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
         screenOrientation: "up",
@@ -2233,6 +2247,91 @@
         } catch (e) { /* no document */ }
     }
 
+    // ---- The system language: PalmSystem.locale, <html lang> and <html dir> --------
+    //
+    // The original's PalmSystem.locale was "en_us" (language _ country, lower
+    // case), localeRegion the region's country ("us") and phoneRegion the
+    // phone's ("us"): luna-sysmgr's Preferences (Src/base/settings/
+    // Preferences.cpp; the system preferences locale {languageCode,
+    // countryCode, phoneRegion: {countryCode}} and region {countryCode}),
+    // as Mojo (Mojo.Locale) and Enyo 1.0 (enyo.g11n) read them. On webOS
+    // OSE the system language is the settings service's
+    // localeInfo.locales.UI ("ar-SA"; FMT is the region for dates and
+    // numbers), which WebAppMgr gives its pages as PalmSystem.locale
+    // (webappmanager's WebAppManagerServiceLuna, getSystemLocalePreferences);
+    // Settings > Language & Region and First Use set it. So: the language
+    // from localeInfo.locales.UI ("ar-SA" as "ar_sa"), the old preference
+    // when it has none; the region from FMT, else the region preference,
+    // else UI's. Function declarations: installDeviceShell (above) uses
+    // them too.
+    //
+    // A tag in either form ("ar-SA", "ar_sa", "zh-Hant-TW", "ku-Arab-IQ"):
+    // {language, script, region}, or null.
+    function localeParts(tag) {
+        var parts = String(tag || "").replace(/_/g, "-").split("-");
+        var language = (parts.shift() || "").toLowerCase();
+        if (!/^[a-z]{2,3}$/.test(language)) return null;
+        var out = { language: language, script: "", region: "" };
+        parts.forEach(function (x) {
+            if (!out.script && !out.region && /^[A-Za-z]{4}$/.test(x))
+                out.script = x.charAt(0).toUpperCase() + x.slice(1).toLowerCase();
+            else if (!out.region && /^([A-Za-z]{2}|[0-9]{3})$/.test(x))
+                out.region = x.toUpperCase();
+        });
+        return out;
+    }
+    // The BCP 47 tag (<html lang>): "ar-SA".
+    function localeTag(p) {
+        return p.language + (p.script ? "-" + p.script : "") + (p.region ? "-" + p.region : "");
+    }
+    // The original's form (PalmSystem.locale): "ar_sa". Without the script,
+    // which Mojo and Enyo 1.0 would take for the country.
+    function legacyLocale(p) {
+        return p.language + (p.region ? "_" + p.region.toLowerCase() : "");
+    }
+    // Right to left: the languages written in a right-to-left script by
+    // default (Arabic, Hebrew (he, and iw, its old code, which Java and
+    // Android still use), Persian, Urdu, Pashto, Yiddish (yi, ji), Central
+    // Kurdish, Sindhi, Uyghur, Dhivehi); a script named in the tag decides
+    // instead (ku-Arab right to left, ku and ku-Latn left to right).
+    function localeDirection(p) {
+        if (!p) return "ltr";
+        if (p.script) return /^(Arab|Hebr|Thaa|Syrc|Nkoo|Adlm|Rohg|Mand|Samr|Mend|Yezi)$/.test(p.script) ? "rtl" : "ltr";
+        return /^(ar|he|iw|fa|ur|ps|yi|ji|ckb|sd|ug|dv)$/.test(p.language) ? "rtl" : "ltr";
+    }
+    // The page's <html lang> and <html dir> for a tag in either form; as
+    // data-phoenix-motion and the text size, before the app's first frame
+    // and again whenever the language changes. A tag that is not one
+    // changes nothing.
+    function applyLocaleToPage(tag) {
+        try {
+            var root = global.document && global.document.documentElement;
+            var p = localeParts(tag);
+            if (!root || !root.setAttribute || !p) return;
+            var lang = localeTag(p), dir = localeDirection(p);
+            if (root.getAttribute("lang") !== lang) root.setAttribute("lang", lang);
+            if (root.getAttribute("dir") !== dir) root.setAttribute("dir", dir);
+        } catch (e) { /* no document */ }
+    }
+    // Off the device: the simulated settings service's localeInfo (the
+    // shared store's settings:state), else the system preference locale
+    // (a string, or the original's {languageCode, countryCode}), else en_us.
+    // {ui: localeParts, region, phoneRegion} (lower case).
+    function systemLocale() {
+        var st = store.get("settings:state", null);
+        var info = st && st.settings && st.settings[""] && st.settings[""].localeInfo;
+        var locales = (info && info.locales) || {};
+        var raw = store.get("prefs", {}) || {};
+        var pref = raw.locale;
+        var prefTag = typeof pref === "string" ? pref
+            : pref && typeof pref.languageCode === "string" ? pref.languageCode + "_" + (pref.countryCode || "") : "";
+        var ui = localeParts(locales.UI) || localeParts(prefTag) || localeParts("en_us");
+        var fmt = localeParts(locales.FMT);
+        var region = (fmt && fmt.region) || (raw.region && raw.region.countryCode) || ui.region || "us";
+        var phone = (pref && typeof pref === "object" && pref.phoneRegion && pref.phoneRegion.countryCode) || region;
+        return { ui: ui, region: String(region).toLowerCase(), phoneRegion: String(phone).toLowerCase() };
+    }
+
     function prefs() {
         var p = store.get("prefs", {});
         var out = {};
@@ -2255,6 +2354,9 @@
         } catch (e) { /* no document */ }
     }
     applyMotion();
+    // The system language on this page now (the simulated settings service
+    // applies it again when localeInfo changes, here or in another page).
+    applyLocaleToPage(localeTag(systemLocale().ui));
 
     var prefWatchers = [];
     // Another page (another card, Settings) changed the preferences: this
@@ -7365,6 +7467,10 @@
         };
 
         // ---- com.webos.settingsservice ------------------------------------------------
+
+        // localeInfo.locales.UI changed (Settings > Language & Region, First
+        // Use; in this page or another): the page's <html lang> and dir.
+        listeners.push(function () { applyLocaleToPage(localeTag(systemLocale().ui)); });
 
         function settingsFor(s, category, keys) {
             var all = s.settings[category || ""] || {};
