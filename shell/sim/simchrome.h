@@ -37,6 +37,7 @@ class QMenuBar;
 class QQuickView;
 class QTimer;
 class QToolBar;
+class SimKeyCapture;
 
 class SimChrome : public QMainWindow
 {
@@ -65,6 +66,11 @@ public:
     // A line of text asked for (sim.qml: Simulate > Location > Custom...);
     // "" when cancelled.
     Q_INVOKABLE QString askText(const QString &title, const QString &label, const QString &text);
+
+    // Device > Capture Keyboard (sim.qml): the keys the computer keeps for
+    // itself go to the screen (SimKeyCapture); on and off, and whether on.
+    Q_INVOKABLE void toggleKeyboardCapture();
+    Q_INVOKABLE bool keyboardCaptured() const;
 
     // Window > Simulators: the simulators running for this user, this one
     // among them, listed (start) unless list is false (a run that only
@@ -126,6 +132,11 @@ private:
     void showInstance(const SimInstances::Instance &instance);
     // Asked by another simulator: this window in front, with the focus.
     void bringToFront();
+    // The window's title: the name, what the screen is, and the keyboard
+    // captured.
+    void updateTitle();
+    // Capture Keyboard turned on, or not: why, and what to do.
+    void keyCaptureFailed(int failure, const QString &error);
 
     QQuickView *m_view;
     QWidget *m_container;
@@ -160,4 +171,7 @@ private:
     QTimer *m_instancesLater;
     QTimer *m_instanceInfoLater;
     int m_otherInstances = 0;
+    // Device > Capture Keyboard, once the window is shown.
+    SimKeyCapture *m_keyCapture = nullptr;
+    QString m_screenInfo;
 };

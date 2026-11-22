@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "simchrome.h"
+#include "simkeycapture.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -41,6 +42,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <memory>
 
 #ifdef Q_OS_MACOS
@@ -103,6 +105,27 @@ void askWindowManagerToActivate(quint32 window)
 constexpr bool kMac = true;
 #else
 constexpr bool kMac = false;
+#endif
+
+#ifdef Q_OS_MACOS
+// --check-chrome: the keys a window gets, each to a function (true: taken).
+// Watched for the whole program and installed last, so before the shell's
+// own filters (SystemKeys takes Ctrl+Tab, the next card).
+class KeySpy : public QObject
+{
+public:
+    KeySpy(QObject *window, std::function<bool(QKeyEvent *)> seen) : m_window(window), m_seen(std::move(seen)) {}
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_window && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease))
+            return m_seen(static_cast<QKeyEvent *>(event));
+        return QObject::eventFilter(watched, event);
+    }
+private:
+    QObject *m_window;
+    std::function<bool(QKeyEvent *)> m_seen;
+};
 #endif
 
 } // namespace
@@ -391,6 +414,39 @@ bool SimChrome::checkChrome()
     // Without the window system's say (an inactive app) there is nothing to check.
     if (outer && !back)
         ok = false;
+
+#ifdef Q_OS_MACOS
+    // Device > Capture Keyboard: a key the tap takes (⌘Tab) handed to the
+    // window reaches the screen as the shell reads it, Ctrl+Tab, pressed and
+    // let go of (and goes no further here). The tap itself needs
+    // Accessibility access.
+    bool pressed = false, released = false;
+    KeySpy spy(m_view, [&pressed, &released](QKeyEvent *key) {
+        if (key->key() != Qt::Key_Tab || !(key->modifiers() & Qt::ControlModifier))
+            return false;
+        (key->type() == QEvent::KeyPress ? pressed : released) = true;
+        return true;
+    });
+    qApp->installEventFilter(&spy);
+    const bool sent = SimKeyCapture::sendCommandTabForCheck(windowHandle(), true)
+                      && SimKeyCapture::sendCommandTabForCheck(windowHandle(), false);
+    clock.restart();
+    while (sent && clock.elapsed() < 3000 && !(pressed && released))
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    qApp->removeEventFilter(&spy);
+    // AppKit hands a window keys only while the app is active: without the
+    // window system's say there is nothing to check, as above.
+    const bool active = SimMac::isActive();
+    std::printf("phoenix-sim: keyboard capture: ⌘Tab handed to the window reaches the screen as Ctrl+Tab: %s\n",
+                pressed && released ? "yes" : !active ? "not checked (another app is active)" : pressed ? "pressed only" : "no");
+    if (m_keyCapture) {
+        const QString app = m_keyCapture->launchingApp();
+        std::printf("phoenix-sim: keyboard capture: Accessibility access (to tap the keyboard): %s%s\n",
+                    SimKeyCapture::permitted() ? "yes" : "no", app.isEmpty() ? "" : qPrintable(QStringLiteral(" (asked of %1)").arg(app)));
+    }
+    if (active && !(pressed && released))
+        ok = false;
+#endif
     std::printf("phoenix-sim: chrome check %s\n", ok ? "passed" : "FAILED");
     std::fflush(stdout);
     return ok;
@@ -783,6 +839,54 @@ void SimChrome::showWithScreen(const QSize &screen)
     }, Qt::QueuedConnection);
     resizeScreen(screen.width(), screen.height());
     m_container->setFocus();
+
+    // Device > Capture Keyboard: the screen's keys watched for the chord,
+    // the Mac's keys taken for this window.
+    if (!m_keyCapture) {
+        m_keyCapture = new SimKeyCapture(m_view, windowHandle(), this);
+        connect(m_keyCapture, &SimKeyCapture::activeChanged, this, [this](bool on) {
+            updateTitle();
+            refreshChecks();
+            // sim.qml says so on the screen a moment.
+            QQuickItem *root = m_view->rootObject();
+            if (root && root->metaObject()->indexOfMethod("simKeyboardCaptured(QVariant,QVariant)") >= 0)
+                QMetaObject::invokeMethod(root, "simKeyboardCaptured", Q_ARG(QVariant, on),
+                                          Q_ARG(QVariant, SimKeyCapture::chordText()));
+        });
+        connect(m_keyCapture, &SimKeyCapture::startFailed, this, [this](SimKeyCapture::Failure failure, const QString &error) {
+            keyCaptureFailed(int(failure), error);
+        });
+    }
+}
+
+void SimChrome::toggleKeyboardCapture()
+{
+    if (m_keyCapture)
+        m_keyCapture->toggle();
+}
+
+bool SimChrome::keyboardCaptured() const
+{
+    return m_keyCapture && m_keyCapture->isActive();
+}
+
+void SimChrome::keyCaptureFailed(int failure, const QString &error)
+{
+    auto *box = new QMessageBox(QMessageBox::Warning, displayName(), tr("The keyboard cannot be captured."),
+                                QMessageBox::Close, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setInformativeText(error);
+    if (kMac && failure == int(SimKeyCapture::Failure::Permission)) {
+        box->setText(tr("Capture Keyboard needs Accessibility access."));
+        QPushButton *open = box->addButton(tr("Open Accessibility Settings"), QMessageBox::ActionRole);
+        open->disconnect();
+        connect(open, &QPushButton::clicked, box, [box]() {
+            QDesktopServices::openUrl(QUrl(QStringLiteral(
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")));
+            box->close();
+        });
+    }
+    box->open();
 }
 
 void SimChrome::resizeScreen(int width, int height)
@@ -804,7 +908,17 @@ void SimChrome::resizeScreen(int width, int height)
 
 void SimChrome::setScreenInfo(const QString &info)
 {
-    setWindowTitle(info.isEmpty() ? displayName() : displayName() + QStringLiteral(" \u2014 ") + info);
+    m_screenInfo = info;
+    updateTitle();
+}
+
+void SimChrome::updateTitle()
+{
+    const QString dash = QStringLiteral(" \u2014 ");
+    QString title = m_screenInfo.isEmpty() ? displayName() : displayName() + dash + m_screenInfo;
+    if (keyboardCaptured())
+        title += dash + tr("Keyboard Captured (%1 lets go)").arg(SimKeyCapture::chordText());
+    setWindowTitle(title);
 }
 
 void SimChrome::setToolbarShown(bool shown)
@@ -928,6 +1042,10 @@ void SimChrome::showShortcuts()
         note += QLatin1Char(' ')
               + tr("On a Mac, F1 to F12 need fn (macOS keeps them for itself), Home is fn+Left Arrow, "
                    "and Ctrl is Command (⌘).");
+    note += QLatin1Char(' ')
+          + (kMac ? tr("Device > Capture Keyboard (%1) gives the device the keys macOS keeps for itself: ⌘Tab, ⌘Space, ⌘H.")
+                  : tr("Device > Capture Keyboard (%1) gives the device the keys the window manager keeps for itself, such as Alt+Tab."))
+                .arg(SimKeyCapture::chordText());
     auto *label = new QLabel(note, dialog);
     label->setWordWrap(true);
     layout->addWidget(label);
