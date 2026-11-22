@@ -45,6 +45,12 @@ Owner's direction (29 September 2026):
 - **2.0 builds on 1.x and never reverts it.** It only expands on what 1.x
   built, so that it stays true to webOS. Removing or replacing a 1.x
   feature or behaviour in 2.0 needs the owner's agreement first.
+- **1.x is the core** (owner, 22 November 2026). A modern feature that 1.x
+  does not have today belongs to 2.0 alone, unless the owner names it for
+  1.x: so far, the list in the first point above and the "1.0 backlog: from
+  2.0, in the classic style" below. Core bug fixes and security fixes are
+  the exception: they are made here first, even when they are found in
+  2.0, and reach 2.0 when it merges this repository's main.
 
 The two share the platform (OSE, the services, the apps' data), so work
 below the UI serves both. M0 to M5 and the 1.0 release are 1.x; 2.0 and the
