@@ -184,6 +184,28 @@ app they were closed, Email's and Calendar's clean-up
 (`tools/test-runtime-unload.cjs`). Where unload still runs (the simulator's
 Chromium 140, WebAppMgr's 120 and 151) it leaves them alone.
 
+In both, the runtime puts the system language on the page's root before the
+app's first frame (it is a render-blocking script in the head), as it does
+`data-phoenix-motion` and the text size: `<html lang>` (the BCP 47 tag,
+`ar-SA`) and `<html dir>` (`rtl` for Arabic, Hebrew (`he`, `iw`), Persian,
+Urdu, Pashto, Yiddish, Central Kurdish, Sindhi, Uyghur and Dhivehi, or a
+right-to-left script named in the tag, as `ku-Arab`; `ltr` otherwise, `ku`
+and `sd-Latn` included), and again in every open page when the language
+changes. The language is the settings service's `localeInfo.locales.UI`
+(Settings > Language & Region, First Use). In the simulator `PalmSystem.locale`
+is that language in the original's form (`ar_sa`: language and country,
+lower case, the script left out, as luna-sysmgr's `Preferences` gave it and
+Mojo and Enyo 1.0 read it), `localeRegion` the region (`locales.FMT`'s
+country) and `phoneRegion` the system preference `locale.phoneRegion`, else
+the region; read each time they are asked, so a page started before a change
+sees the new one. Without `localeInfo`, the system preference `locale`
+(`"fa_ir"` or `{languageCode, countryCode}`) is used, then `en_us`. On a
+device WebAppMgr's own `PalmSystem.locale` (which comes from the same
+`localeInfo`) is left as it is: the root takes it at once, then follows a
+`getSystemSettings {keys: ["localeInfo"], subscribe: true}`. The runtime only
+sets the attributes: how a page lays itself out right to left is the app's
+(`tools/test-locale-dir.cjs`, `tools/test-runtime-device.cjs`).
+
 Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
@@ -1206,7 +1228,7 @@ same request and reply shapes:
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
 | Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow` (Phoenix: the number row, `true`, `false` or unset, `null`: the form factor's own, on for the tablet keyboard, which had one, off for the phone's, the owner, 12 October 2026; one choice for both form factors once set; systemStatus `tweaks.numberRow`, `null` when unset), `x_palm_virtualkeyboard_settings` `"keyboard size"` (the tablet keyboard's size, -2 to 1, XS to L, 0 the default, where `VirtualKeyboardPreferences.cpp:178-197` kept it beside the keyboard in use; Settings > Text Assist > Keyboard size on tablet layouts writes it, and so does the keyboard's hide key held, the shell's host status `keyboardSize`; every writer of the preference keeps the other keys; systemStatus `keyboardSize`), `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back. Personal Dictionary (Phoenix): `x_palm_textinput.userWords` (the words added) and `removedWords` (`{word: ms}`, learned words deleted, which the keyboard drops once) reach the keyboard as `textAssist.userWords` / `removedWords`; the shell reports the words it learned that its list lacks as host status `learnedWords` (getSystemStatus `learnedWords`), and its "Add" after an undone correction as `dictionaryWordAdded`, which the writer page adds to `userWords` | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
-| Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
+| Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`; the runtime gives `locales.UI` to every page as `PalmSystem.locale`, `<html lang>` and `<html dir>`, live; see [phoenix-runtime.js](#phoenix-runtimejs)) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
 | Backup | `org.webosphoenix.service.backup` `getStatus`, `configure`, `backupNow`, `listBackups`, `inspect`, `restore`, `deleteBackup` | see [Backup](#backup) |
 | Accessibility | system service `get/setPreferences` `accessibility {reduceMotion, highContrast, monoAudio, captions, textSize}` (Phoenix key; the runtime puts `textSize`, a percentage, on every page's root font size and high contrast on its `<html>`, on a device too through a `getPreferences` subscription) | `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
