@@ -174,7 +174,7 @@ unmock node; unmock whisper-cli; unmock llama-server; unmock php
 rm -rf "$BUILD/whisper" "$BUILD/wakeword" "$BUILD/kitten" "$BUILD/models"
 phoenix check
 check "Linux, nothing there: what it would install, with sizes" \
-    'has "install  voice: Kitten TTS (model and dictionary, ONNX Runtime) (about 39 MB, 57 MB on disk, checked by their SHA-256)"' \
+    'has "install  voice: Kitten TTS (model and dictionary, ONNX Runtime) (about 185 MB, 57 MB on disk, checked by their SHA-256)"' \
     'has "get-kitten.py --dest $BUILD/kitten"' \
     'has "install  built-in language model: Qwen3 0.6B (639 MB, checked by its SHA-256)"' \
     'has "get-base-model.py --dest $BUILD/models"' '[ ! -e "$BUILD/kitten" ]' \

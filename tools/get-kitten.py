@@ -11,8 +11,11 @@ computer (phoenix-sim and the tts-test), each checked against its SHA-256:
                BSD-2-Clause, at a pinned commit; phoenix-tts's permissive
                phonemizer
   the runtime  ONNX Runtime 1.30.0's libonnxruntime (MIT), Microsoft's own
-               Linux build (x86-64, aarch64; an 11 MB download, 29 MB);
-               on a Mac Homebrew's onnxruntime (./phoenix installs it)
+               Linux build (x86-64, aarch64; 29 MB), from Microsoft's
+               NuGet package Microsoft.ML.OnnxRuntime (a 157 MB download
+               for every platform's build; only the library, its LICENSE
+               and ThirdPartyNotices.txt are kept); on a Mac Homebrew's
+               onnxruntime (./phoenix installs it)
 
     tools/get-kitten.py [--dest build/kitten]
 
@@ -22,11 +25,10 @@ PHOENIX_ONNXRUNTIME). On a device meta-phoenix installs all three
 """
 
 import argparse
-import io
 import os
 import platform
 import sys
-import tarfile
+import zipfile
 
 HF = "https://huggingface.co/KittenML/kitten-tts-nano-0.2/resolve/9c81564aa56c6fb79f83780e87099357b88d6617/"
 MODEL = [
@@ -40,11 +42,18 @@ WORDS = [
     ("cmudict.LICENSE", CMUDICT + "LICENSE", "bd4ce8e44170a5f9f481310ca85c51de3c4f851a65e679b40e603b143bd3542a"),
 ]
 ORT_VERSION = "1.30.0"
-ORT = {
-    "x86_64": ("https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz",
-               "a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd"),
-    "aarch64": ("https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-aarch64-1.30.0.tgz",
-                "e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da"),
+# ONNX Runtime's release archives were on GitHub (microsoft/onnxruntime),
+# which has answered 404 since about 17 November 2026, with no word from
+# Microsoft of a new home. Its NuGet package is Microsoft's own C/C++
+# distribution (onnxruntime.ai/docs/install, "C#/C/C++/WinML"), signed by
+# Microsoft and immutable on nuget.org, and holds the same Linux builds
+# (libonnxruntime.so, soname libonnxruntime.so.1, glibc 2.28) as the
+# archives did. Its SHA-512 is nuget.org's catalog's packageHash.
+ORT = ("https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.30.0/microsoft.ml.onnxruntime.1.30.0.nupkg",
+       "30df119bd9164eaa187666d93147448fdd4a9a1a3caf83f1505daf7af2d1c5d2", 157230753)
+ORT_LIB = {
+    "x86_64": "runtimes/linux-x64/native/libonnxruntime.so",
+    "aarch64": "runtimes/linux-arm64/native/libonnxruntime.so",
 }
 
 
@@ -78,16 +87,22 @@ def main():
     lib = os.path.join(dest, "libonnxruntime.so.1")
     if system == "Darwin":
         print("ONNX Runtime: Homebrew's onnxruntime (brew install onnxruntime; ./phoenix does it)")
-    elif system != "Linux" or machine not in ORT:
+    elif system != "Linux" or machine not in ORT_LIB:
         print(f"no ONNX Runtime build for {system} {machine}: install libonnxruntime and set PHOENIX_ONNXRUNTIME")
     elif not os.path.exists(lib):
-        url, sha = ORT[machine]
-        with tarfile.open(fileobj=io.BytesIO(fetch(url, sha)), mode="r:gz") as t:
-            top = os.path.commonpath(t.getnames())
-            write(lib, t.extractfile(f"{top}/lib/libonnxruntime.so.{ORT_VERSION}").read())
-            os.chmod(lib, 0o755)
-            write(os.path.join(dest, "onnxruntime.LICENSE"), t.extractfile(f"{top}/LICENSE").read())
-            write(os.path.join(dest, "onnxruntime.ThirdPartyNotices.txt"), t.extractfile(f"{top}/ThirdPartyNotices.txt").read())
+        sys.path.insert(0, here)
+        from fetch import download
+        url, sha, size = ORT
+        nupkg = os.path.join(dest, f"onnxruntime-{ORT_VERSION}.nupkg")
+        download(url, nupkg, sha, size)
+        try:
+            with zipfile.ZipFile(nupkg) as z:
+                write(lib, z.read(ORT_LIB[machine]))
+                os.chmod(lib, 0o755)
+                write(os.path.join(dest, "onnxruntime.LICENSE"), z.read("LICENSE"))
+                write(os.path.join(dest, "onnxruntime.ThirdPartyNotices.txt"), z.read("ThirdPartyNotices.txt"))
+        finally:
+            os.remove(nupkg)
     size = sum(os.path.getsize(os.path.join(dest, f)) for f in os.listdir(dest))
     print("Kitten TTS:", dest, f"({size / 1e6:.0f} MB)")
 

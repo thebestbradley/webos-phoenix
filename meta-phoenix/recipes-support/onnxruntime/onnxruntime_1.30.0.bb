@@ -8,9 +8,13 @@
 # three where this one exists, and phoenix-tts says when it is missing
 # (Speech then speaks with Flite).
 #
-# PREBUILT: Microsoft's own Linux release (x86-64, aarch64; built on glibc
-# 2.28, so it runs on scarthgap's), checked by its SHA-256: the same
-# archives tools/get-kitten.py fetches for the simulator. meta-openembedded
+# PREBUILT: Microsoft's own Linux builds (x86-64, aarch64; built on glibc
+# 2.28, so it runs on scarthgap's), from Microsoft's NuGet package
+# Microsoft.ML.OnnxRuntime (one 157 MB package for every platform, signed by
+# Microsoft), checked by its SHA-256: the same package tools/get-kitten.py
+# fetches for the simulator. The release archives on GitHub
+# (microsoft/onnxruntime) have answered 404 since about 17 November 2026;
+# the package holds the same libraries. meta-openembedded
 # has no onnxruntime recipe (checked 9 October 2026); building it from
 # source (CMake, its own copies of protobuf, abseil, Eigen and more, an hour
 # or more of compiling) is a recipe of its own, to do: it would give armv7
@@ -24,23 +28,25 @@ SUMMARY = "ONNX Runtime inference library (libonnxruntime), prebuilt"
 HOMEPAGE = "https://onnxruntime.ai"
 SECTION = "libs"
 LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://LICENSE;md5=0f7e3b1308cb5c00b372a6e78835732d"
+# The package's LICENSE is the release archives' with CRLF line ends.
+LIC_FILES_CHKSUM = "file://LICENSE;md5=6ec46c8a226c1c19f68d1af2644f15a8"
 
-ORT_ARCH = "${@{'x86_64': 'x64', 'aarch64': 'aarch64'}.get(d.getVar('TARGET_ARCH'), 'none')}"
-SRC_URI = "https://github.com/microsoft/onnxruntime/releases/download/v${PV}/onnxruntime-linux-${ORT_ARCH}-${PV}.tgz;name=${TARGET_ARCH}"
-SRC_URI[x86_64.sha256sum] = "a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd"
-SRC_URI[aarch64.sha256sum] = "e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da"
+ORT_ARCH = "${@{'x86_64': 'x64', 'aarch64': 'arm64'}.get(d.getVar('TARGET_ARCH'), 'none')}"
+# A .nupkg is a zip: fetched as a .zip so do_unpack unzips it.
+SRC_URI = "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${PV}/microsoft.ml.onnxruntime.${PV}.nupkg;downloadfilename=microsoft.ml.onnxruntime.${PV}.zip;subdir=onnxruntime-${PV}"
+SRC_URI[sha256sum] = "30df119bd9164eaa187666d93147448fdd4a9a1a3caf83f1505daf7af2d1c5d2"
 
 COMPATIBLE_HOST = "(x86_64|aarch64).*-linux.*"
 
-S = "${UNPACKDIR}/onnxruntime-linux-${ORT_ARCH}-${PV}"
+S = "${UNPACKDIR}/onnxruntime-${PV}"
 
+do_unpack[depends] += "unzip-native:do_populate_sysroot"
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
 do_install() {
     install -d ${D}${libdir} ${D}${datadir}/doc/onnxruntime
-    install -m 0755 ${S}/lib/libonnxruntime.so.${PV} ${D}${libdir}/
+    install -m 0755 ${S}/runtimes/linux-${ORT_ARCH}/native/libonnxruntime.so ${D}${libdir}/libonnxruntime.so.${PV}
     ln -sf libonnxruntime.so.${PV} ${D}${libdir}/libonnxruntime.so.1
     install -m 0644 ${S}/ThirdPartyNotices.txt ${D}${datadir}/doc/onnxruntime/
 }

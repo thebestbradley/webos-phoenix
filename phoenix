@@ -632,7 +632,7 @@ assistant_models() {
     elif [ $OFFLINE = 1 ]; then
         skip "voice (--offline): answers are spoken with espeak-ng, say or Flite"
     else
-        if [ "$OS" = Darwin ]; then size="about 28 MB"; else size="about 39 MB, 57 MB on disk"; fi
+        if [ "$OS" = Darwin ]; then size="about 28 MB"; else size="about 185 MB, 57 MB on disk"; fi
         installing "voice: Kitten TTS (model and dictionary$([ "$OS" = Darwin ] || echo ', ONNX Runtime'))" "$size, checked by their SHA-256"
         run "$PYTHON" "$REPO_DIR/tools/get-kitten.py" --dest "$kitten"
     fi

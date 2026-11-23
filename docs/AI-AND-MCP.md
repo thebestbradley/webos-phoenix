@@ -828,7 +828,7 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | The voice: `phoenix-tts` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix); its `onnxruntime_c_api.h` MIT |
 | Kitten TTS nano 0.2 (24 MB) | `build/kitten` (`tools/get-kitten.py`) | `build/kitten` | `kitten-tts-nano`, in the image, `/usr/share/phoenix/kitten` | Apache-2.0 (KittenML: code, weights and voices) |
 | The CMU Pronouncing Dictionary (3.6 MB) | `build/kitten` | `build/kitten` | `cmudict`, `/usr/share/phoenix/kitten` | BSD-2-Clause |
-| ONNX Runtime 1.30 (29 MB) | Homebrew `onnxruntime` | `build/kitten` (Microsoft's build, 11 MB download) | `onnxruntime`, Microsoft's build (x86-64, aarch64; `PHOENIX_KITTEN`) | MIT |
+| ONNX Runtime 1.30 (29 MB) | Homebrew `onnxruntime` | `build/kitten` (Microsoft's build, from its 157 MB NuGet package) | `onnxruntime`, Microsoft's build (x86-64, aarch64; `PHOENIX_KITTEN`) | MIT |
 | Spoken answers when Kitten cannot | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
 
 Each setup script installs all of it by default, skips what is already
