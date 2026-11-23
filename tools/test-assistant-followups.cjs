@@ -19,10 +19,14 @@
 //
 //   node tools/test-assistant-followups.cjs [--tablet] [--night] [--out DIR]
 //
-// The page's clock is set to a time zone where it is 12:00-ish (--night:
-// 23:00-ish, the tablet's default), so what the quiet hours (22:00-08:00)
-// do to the questions is the same whenever the test runs: by day they go
-// one at a time, by night together at 08:00.
+// The page's clock starts at a fixed moment and runs on from there: 12:00
+// (--night: 23:00, the tablet's default) on 5 October 2026, UTC. The hour
+// makes what the quiet hours (22:00-08:00) do to the questions the same
+// whenever the test runs: by day they go one at a time, by night together
+// at 08:00. The date keeps the days the commands name (the 20th, the 21st)
+// ahead: on the real date a run on the 20th or the 21st had the lunch or
+// the dinner already past, and its question rightly dropped (22 November
+// 2026: "the 21st at 7pm" at 23:00 on the 21st).
 //
 // Build the app first (cd apps && npm run build -w assistant).
 
@@ -51,14 +55,8 @@ const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "assistant-followups-tests", tablet ? "tablet" : "phone");
 const viewport = tablet ? { width: 1024, height: 740 } : { width: 320, height: 452 };
 const night = args.includes("--night") || (tablet && !args.includes("--day"));
-// Etc/GMT-N is UTC+N: the zone whose hour now is the one wanted.
-function zoneAt(hour) {
-    let off = hour - new Date().getUTCHours();
-    if (off > 14) off -= 24;
-    if (off < -12) off += 24;
-    return off === 0 ? "Etc/GMT" : "Etc/GMT" + (off > 0 ? "-" : "+") + Math.abs(off);
-}
-const timezoneId = zoneAt(night ? 23 : 12);
+const timezoneId = "UTC";
+const startAt = Date.UTC(2026, 9, 5, night ? 23 : 12, 0, 0);
 const port = 8790 + Math.floor(Math.random() * 80);
 const appUrl = `http://127.0.0.1:${port}/usr/palm/applications/org.webosphoenix.assistant/index.html`;
 const A = "luna://org.webosphoenix.assistant/";
@@ -89,7 +87,8 @@ async function main() {
         await waitForServer(`http://127.0.0.1:${port}/apps.json`, 10000);
         const browser = await chromium.launch();
         const context = await browser.newContext({ viewport, timezoneId });
-        console.log(`clock: ${night ? "night" : "day"} (${timezoneId})`);
+        await context.clock.install({ time: startAt });
+        console.log(`clock: ${night ? "night" : "day"} (${new Date(startAt).toISOString()}, ${timezoneId})`);
         const errors = [], notes = [];
         const app = await context.newPage();
         app.on("pageerror", (e) => errors.push(e.message));
