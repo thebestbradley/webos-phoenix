@@ -553,12 +553,42 @@ function createPackagesService(deps) {
                     });
                 }, Promise.resolve([]));
             }).then(function (results) {
-                save(s);
+                saveRefreshed(s, list, results);
                 return applyRevocations().then(null, function (e) { log("revocations: " + e.message); }).then(function () {
                     return { returnValue: true, results: results, sources: load().sources.map(publicSource) };
                 });
             });
         });
+    }
+
+    // What a refresh read (s, its copy of the state; list, the sources it
+    // read; results, how each went), put into the state as it is now. The
+    // copy was taken before the catalogs were read, which takes a while (the
+    // Marketplace reads them each time it opens), so what changed meanwhile
+    // stays: an install's record, a source turned off, a kind hidden,
+    // another refresh's read. A source removed meanwhile, or moved to
+    // another address or key, does not take what was read for it, nor does
+    // one whose kept index is newer.
+    var REFRESHED = ["lastBuild", "count", "name", "refreshed", "error", "fingerprint"];
+    function saveRefreshed(s, list, results) {
+        var cur = load();
+        list.forEach(function (src, i) {
+            var now = sourceOf(cur, src.id), r = results[i];
+            if (!now || now.url !== src.url || (now.key || null) !== (src.key || null) || (now.root || null) !== (src.root || null)) return;
+            if (!r || !r.ok) {
+                now.error = src.error;
+                if (src.fingerprint) now.fingerprint = src.fingerprint;
+                return;
+            }
+            if (typeof now.lastBuild === "number" && typeof src.lastBuild === "number" && src.lastBuild < now.lastBuild) return;
+            REFRESHED.forEach(function (k) { if (k in src) now[k] = src[k]; });
+            if (s.indexes[src.id]) cur.indexes[src.id] = s.indexes[src.id];
+        });
+        // The revocation list: the newest one read.
+        if (s.revocations && !(cur.revocations && cur.revocations.sequence > s.revocations.sequence)) cur.revocations = s.revocations;
+        if (s.revocationsError) cur.revocationsError = s.revocationsError;
+        if (s.rolloutId && !cur.rolloutId) cur.rolloutId = s.rolloutId;
+        save(cur);
     }
 
     // ---- Which apps are offered here (docs/APP-STORE.md 3.17) ------------------------------
@@ -1284,9 +1314,11 @@ function createPackagesService(deps) {
             if (!p || !p.url || !p.key) return Promise.resolve(fail("BAD_PARAMS", "url and key are required"));
             var key = b64.fromBase64(p.key);
             if (key.length !== 32) return Promise.resolve(fail("BAD_PARAMS", "key: a base64 Ed25519 public key"));
-            var s = load(), base = String(p.url).replace(/\/*$/, "/");
-            var src = s.sources.filter(function (x) { return x.kind === "phoenix" && x.url.replace(/\/*$/, "/") === base; })[0];
+            var base = String(p.url).replace(/\/*$/, "/");
             return catalog.fingerprint(key, deps.crypto.sha256).then(function (fp) {
+                // The state as it is once the fingerprint is there (an install may have ended meanwhile).
+                var s = load();
+                var src = s.sources.filter(function (x) { return x.kind === "phoenix" && x.url.replace(/\/*$/, "/") === base; })[0];
                 if (!src) {
                     src = { id: "c" + Date.now().toString(36), name: p.name || base, kind: "phoenix", url: base, enabled: true, builtin: false };
                     s.sources.push(src);

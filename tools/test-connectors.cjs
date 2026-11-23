@@ -65,6 +65,83 @@ async function until(fn, ms, step) {
     return null;
 }
 
+// In every page and frame, before the runtime: what its services are asked
+// and answer (window.__phoenixLunaTrace, the last 600 calls; .now() is the
+// page's clock in it), for a failure's diagnosis. Wrapping the runtime's
+// registry of services (runtime.services, which dispatch reads at each call)
+// sees the calls of the runtime's own services too, as the Marketplace's
+// service asking the installer and the application manager, not only the
+// app's. A reply is a few words: a list of records is its length, and which
+// of the watched ids are in it.
+function traceLuna(watch) {
+    const MAX = 600, t0 = performance.now();
+    const trace = window.__phoenixLunaTrace = [];
+    trace.now = () => Math.round(performance.now() - t0);
+    const short = (v, n) => {
+        let s;
+        try { s = JSON.stringify(v); } catch (e) { s = String(v); }
+        return s && s.length > n ? s.slice(0, n) + "…" : s;
+    };
+    const summary = (r) => {
+        if (!r || typeof r !== "object") return short(r, 120);
+        const o = {};
+        Object.keys(r).forEach((k) => {
+            const v = r[k];
+            if (!Array.isArray(v) || !v.some((x) => x && typeof x === "object")) { o[k] = v; return; }
+            const ids = v.map((x) => x && (x.id || x.appId || x.templateId || x._id)).filter(Boolean);
+            o[k] = v.length <= 6 ? "[" + ids.join(",") + "]"
+                : "[" + v.length + (watch.length ? "; with: " + (watch.filter((w) => ids.includes(w)).join(",") || "none watched") : "") + "]";
+        });
+        return short(o, 400);
+    };
+    const wrapped = new WeakMap();
+    const wrapMethods = (name, methods) => {
+        if (!methods || typeof methods !== "object") return methods;
+        if (wrapped.has(methods)) return wrapped.get(methods);
+        const fns = new Map();
+        const w = new Proxy(methods, {
+            get(target, key) {
+                const fn = target[key];
+                if (typeof fn !== "function" || typeof key !== "string") return fn;
+                if (!fns.has(fn)) {
+                    fns.set(fn, function (params, reply, ctx, method) {
+                        const e = { t: trace.now(), uri: "luna://" + name + (method || key), from: (ctx && ctx.caller) || "",
+                                    params: short(params, 200), n: 0, replies: [] };
+                        trace.push(e);
+                        if (trace.length > MAX) trace.shift();
+                        // The first replies and the last one (a subscription's end).
+                        const logged = function (r) {
+                            e.n++;
+                            const line = trace.now() + "ms " + summary(r);
+                            if (e.replies.length < 6) e.replies.push(line);
+                            else e.replies[5] = "(#" + e.n + ") " + line;
+                            return reply.apply(this, arguments);
+                        };
+                        return fn.call(this, params, logged, ctx, method);
+                    });
+                }
+                return fns.get(fn);
+            }
+        });
+        wrapped.set(methods, w);
+        return w;
+    };
+    let rt;
+    Object.defineProperty(window, "__phoenixRuntime", {
+        configurable: true,
+        get() { return rt; },
+        set(v) {
+            rt = v;
+            if (v && v.services && typeof v.services === "object" && !v.services.__traced) {
+                const registry = v.services;
+                v.services = new Proxy(registry, {
+                    get(target, key) { return key === "__traced" ? true : typeof key === "string" ? wrapMethods(key, target[key]) : target[key]; }
+                });
+            }
+        }
+    });
+}
+
 async function main() {
     for (const f of ["apps/tasks/dist/index.html", "apps/messaging/dist/index.html", "apps/sharesheet/dist/index.html", "apps/marketplace/dist/index.html",
                      "apps/shared/connector-kit/lib/index.js"]) {
@@ -117,13 +194,45 @@ async function main() {
 
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
+        await context.addInitScript(traceLuna, ["org.webosphoenix.todoist", "org.webosphoenix.bluesky"]);
         const errors = [], host = [];
+        // For a failure's diagnosis: the requests that failed or took long,
+        // those to the host (serve-rootfs's installer and proxy) and its
+        // list of apps; the runtime's and the Marketplace service's console
+        // lines, and every error and warning. The last 400 of each.
+        const started = Date.now(), net = [], consoleLines = [];
+        const keep = (list, x) => { list.push(x); if (list.length > 400) list.shift(); };
+        const pageOf = (u) => u.replace(/\?.*$/, "").replace(/^.*\/applications\//, "");
+        const reqPath = (u) => u.replace(origin, "").replace(/\?.*$/, "");
+        // What a request is: its path, and for the host's proxy the address it fetches.
+        const what = (r) => {
+            let u = reqPath(r.url());
+            if (u === "/__phoenix/proxy") try { u += " " + JSON.parse(r.postData() || "{}").url.replace(/\?.*$/, ""); } catch (e) { /* as is */ }
+            return u;
+        };
+        const frameOf = (r) => { try { return pageOf(r.frame().url()); } catch (e) { return ""; } };
+        const inFlight = new Map();
+        context.on("request", (r) => inFlight.set(r, { at: Date.now() - started, method: r.method(), url: what(r), from: frameOf(r) }));
+        context.on("requestfailed", (r) => {
+            inFlight.delete(r);
+            keep(net, { at: Date.now() - started, failed: (r.failure() || {}).errorText || "failed", method: r.method(), url: what(r), from: frameOf(r) });
+        });
+        context.on("requestfinished", async (r) => {
+            inFlight.delete(r);
+            const t = r.timing(), ms = Math.round(t.responseEnd);
+            const res = await r.response().catch(() => null), status = res ? res.status() : 0;
+            if (!(ms > 2000 || status >= 400 || /^\/(__phoenix\/|usr\/share\/phoenix\/apps\.json)/.test(reqPath(r.url())))) return;
+            keep(net, { at: Date.now() - started, ms, status, method: r.method(), url: what(r), from: frameOf(r) });
+        });
         context.on("page", (p) => {
-            p.on("pageerror", (e) => errors.push(p.url().replace(/\?.*$/, "").replace(/^.*\/applications\//, "") + ": " + e.message));
+            p.on("pageerror", (e) => errors.push(pageOf(p.url()) + ": " + e.message));
             p.on("console", (m) => {
                 const t = m.text();
                 if (t.startsWith("__phoenix__")) host.push(JSON.parse(t.slice(11)));
                 if (process.env.CONNECTORS_VERBOSE && !t.startsWith("__phoenix__")) console.log("    [" + m.type() + "] " + t);
+                // (A response's "Failed to load resource" is in net, with its address.)
+                if ((m.type() === "error" || m.type() === "warning" || /^\[(marketplace|phoenix-runtime)\]/.test(t)) && !/^Failed to load resource/.test(t))
+                    keep(consoleLines, { at: Date.now() - started, page: pageOf(p.url()), type: m.type(), text: t.slice(0, 300) });
             });
         });
         const shot = (p, name) => p.screenshot({ path: path.join(outDir, name + ".png") });
@@ -166,6 +275,91 @@ async function main() {
         await market.waitForSelector("[data-testid=tab-connections]");
         await shellSays(market);
         await market.click("[data-testid=tab-connections]");
+        // Install did not end in Set up: why, from the page, its luna traffic
+        // since the tap (clickAt, the page's clock; clickWall, this test's)
+        // and the host. Install's own steps (ConnectorPackage.tsx install()):
+        // getDevMode, then the packages service's install, whose last reply
+        // says installed; then load() asks listInstalled, which must list the
+        // app for Set up. Printed, and written next to the screenshots.
+        const diagnoseInstall = async (name, clickAt, clickWall) => {
+            const appId = "org.webosphoenix." + name;
+            const page = await market.evaluate(([since, id]) => {
+                const q = (tid) => document.querySelector("[data-testid=" + tid + "]");
+                const ui = ["install-progress", "install-error", "devmode-needed", "connector-installed", "install-skipped",
+                            "connector-install", "set-up", "open-accounts"].filter(q).map((tid) =>
+                    tid + (q(tid).disabled ? " (disabled)" : "") + ": " + (q(tid).textContent || "").replace(/\s+/g, " ").trim().slice(0, 80));
+                let state = null;
+                try { state = JSON.parse(localStorage.getItem("phoenix:marketplace:state") || "null"); } catch (e) { state = null; }
+                const trace = window.__phoenixLunaTrace;
+                return { ui, now: trace ? trace.now() : -1, traced: !!trace,
+                         recorded: state && state.installed ? Object.keys(state.installed).includes(id) : null,
+                         calls: trace ? trace.filter((e) => e.t >= since) : [] };
+            }, [clickAt, appId]).catch((e) => ({ ui: [], calls: [], evalError: e.message }));
+            // As things are now.
+            const listedNow = await luna(market, "luna://org.webosphoenix.service.packages/listInstalled", {})
+                .then((r) => r.returnValue === false ? "fails: " + r.errorText : (r.apps || []).some((a) => a.id === appId) ? "lists it" : "does not list it")
+                .catch((e) => "not asked: " + e.message);
+            const appsNow = await luna(market, "luna://com.webos.applicationManager/listApps", {})
+                .then((r) => (r.apps || []).some((a) => a.id === appId) ? "lists it" : "does not list it").catch((e) => "not asked: " + e.message);
+            const hostNow = await fetch(origin + "/usr/share/phoenix/apps.json").then((r) => r.json())
+                .then((l) => l.some((a) => a.id === appId) ? "lists it" : "does not list it").catch((e) => "unreachable: " + e.message);
+            const onDisk = fs.existsSync(path.join(installedDir, "usr/palm/applications", appId, "appinfo.json"));
+
+            const calls = page.calls, last = (e) => e && e.replies.length ? e.replies[e.replies.length - 1] : "";
+            const of = (re) => calls.filter((e) => re.test(e.uri));
+            const devmode = of(/devmode\/getDevMode$/).filter((e) => !/"subscribe":true/.test(e.params));
+            const inst = of(/service\.packages\/install$/).filter((e) => e.params.includes('"' + name) || e.params.includes(appId));
+            const ended = inst.length && /"state":"(installed|failed)"/.test(last(inst[inst.length - 1]));
+            const listed = of(/service\.packages\/listInstalled$/);
+            let verdict;
+            if (!page.traced) verdict = "no luna trace in the page (" + (page.evalError || "the tracer did not load") + ")";
+            else if (!devmode.length && !inst.length) verdict = "the tap did not reach install(): no getDevMode call since it";
+            else if (!inst.length) verdict = devmode.some((e) => e.replies.length)
+                ? "(a') getDevMode answered, but install() did not ask the packages service to install"
+                : "(a) install() is waiting for getDevMode's reply";
+            else if (!ended) verdict = "the install has not ended: its last reply " + (last(inst[inst.length - 1]) || "none");
+            else if (/"state":"failed"/.test(last(inst[inst.length - 1]))) verdict = "the install failed: " + last(inst[inst.length - 1]);
+            else {
+                const endT = +((/(\d+)ms /.exec(last(inst[inst.length - 1])) || [])[1] || 0);
+                const after = listed.filter((e) => e.t >= endT);
+                const answer = after.length ? last(after[after.length - 1]) : "";
+                verdict = !after.length ? "installed, but load() did not ask listInstalled after it"
+                    : /"returnValue":false/.test(answer) ? "(b) installed, then listInstalled failed: " + answer
+                    : !answer ? "(b) installed, then listInstalled did not answer"
+                    : answer.includes(appId) ? "installed, and listInstalled lists it: the page did not show Set up"
+                    : "(b) installed, then listInstalled answered without it: " + answer;
+            }
+            const since = clickWall - started;
+            const report = {
+                verdict, ui: page.ui, recordedInState: page.recorded, listInstalledNow: listedNow, listAppsNow: appsNow,
+                hostAppsJson: hostNow, onDisk, tapAt: clickAt, pageNow: page.now,
+                luna: calls.map((e) => e.t + "ms " + e.uri + (e.from ? " (from " + e.from + ")" : "") + " " + e.params
+                                       + (e.replies.length ? "\n        -> " + e.replies.join("\n        -> ") : "\n        -> (no reply)")),
+                requests: net.filter((r) => r.at >= since - 2000).map((r) => "+" + (r.at - since) + "ms " + r.method + " " + r.url
+                                       + (r.failed ? " FAILED " + r.failed : " " + r.status + " in " + r.ms + " ms") + (r.from ? " (" + r.from + ")" : "")),
+                unanswered: [...inFlight.values()].map((r) => r.method + " " + r.url + ", asked " + Math.round((Date.now() - started - r.at) / 1000)
+                                                        + " s ago" + (r.from ? " (" + r.from + ")" : "")),
+                failedRequests: net.filter((r) => r.failed).map((r) => r.at + "ms " + r.method + " " + r.url + " " + r.failed + " (" + r.from + ")"),
+                console: consoleLines.filter((c) => c.at >= since - 2000).map((c) => "+" + (c.at - since) + "ms " + c.page + " [" + c.type + "] " + c.text),
+                pageErrors: errors.slice()
+            };
+            fs.writeFileSync(path.join(outDir, "install-failed-" + name + ".json"), JSON.stringify(report, null, 2));
+            console.log("    install of " + name + " did not end in Set up: " + verdict);
+            console.log("    the page shows: " + (page.ui.join("; ") || "none of the install's parts"));
+            console.log("    now: the service's record " + (page.recorded === null ? "unreadable" : page.recorded ? "has it" : "does not have it")
+                        + "; listInstalled " + listedNow + "; listApps " + appsNow + "; the host's apps.json " + hostNow
+                        + "; its folder " + (onDisk ? "is" : "is not") + " in the installed apps");
+            console.log("    luna since the tap (" + calls.length + " calls):");
+            report.luna.slice(-60).forEach((l) => console.log("      " + l));
+            console.log("    requests since the tap (failed, slow, the host's):");
+            report.requests.slice(-40).forEach((l) => console.log("      " + l));
+            if (report.unanswered.length) console.log("    requests not answered yet:");
+            report.unanswered.slice(-20).forEach((l) => console.log("      " + l));
+            if (report.failedRequests.length) console.log("    failed requests in this run: " + report.failedRequests.length);
+            report.failedRequests.slice(-20).forEach((l) => console.log("      " + l));
+            report.console.slice(-30).forEach((l) => console.log("      console " + l));
+            if (errors.length) console.log("    page errors: " + errors.join("; "));
+        };
         const install = async (group, templateId, name) => {
             const row = "[data-testid=group-" + group + "] [data-testid='account-" + templateId + "']";
             await market.waitForSelector(row, { timeout: 20000 });
@@ -176,8 +370,13 @@ async function main() {
             const text = await market.textContent("[data-testid=account-page]");
             check(/Phoenix's servers: none/.test(text) && /experimental/i.test(text), name + "'s page: no Phoenix server in between, experimental");
             await shot(market, "2-" + name + "-page");
+            const clickAt = await market.evaluate(() => (window.__phoenixLunaTrace ? window.__phoenixLunaTrace.now() : 0)), clickWall = Date.now();
             await market.click("[data-testid=connector-install]");
-            await market.waitForSelector("[data-testid=set-up]", { timeout: 30000 }).catch(async (e) => { await shot(market, "install-failed-" + name); throw e; });
+            await market.waitForSelector("[data-testid=set-up]", { timeout: 30000 }).catch(async (e) => {
+                await shot(market, "install-failed-" + name);
+                await diagnoseInstall(name, clickAt, clickWall).catch((d) => console.log("    no diagnosis: " + d.message));
+                throw e;
+            });
             check(await market.locator("[data-testid=devmode-needed]").count() === 0, name + " installed without Developer Mode (Phoenix's own, from the catalog the device ships with)");
             await market.goBack().catch(() => {});
             await market.goto(appUrl("org.webosphoenix.marketplace"));
