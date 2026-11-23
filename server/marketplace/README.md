@@ -203,8 +203,12 @@ nor IPv6's ::1, fc00::/7, fe80::/10, ff00::/8 or an IPv4 address inside
 IPv6); the connection is pinned to the address checked (no DNS rebinding);
 each of at most three redirects is checked again; size and time are
 capped. `MARKETPLACE_FETCH_LOCAL=1` lets it reach http://127.0.0.1 as well,
-for the tests' local sites only; `MARKETPLACE_FETCH_PROXY` names an egress
-proxy the operator trusts (it then resolves the names).
+for the tests' local sites only; `MARKETPLACE_FETCH_LOCAL=only` reaches
+http://127.0.0.1 alone, without looking another host up (the browser tests'
+catalogs: a curated app's icon is its initials at once, rather than a
+first copy from its real site on the test's clock);
+`MARKETPLACE_FETCH_PROXY` names an egress proxy the operator trusts (it
+then resolves the names).
 
 `bin/serve.sh` publishes the index again at each start, and runs PHP's
 server with several workers, since a first copy waits on its site.
