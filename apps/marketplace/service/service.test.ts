@@ -37,7 +37,9 @@ function makeService(sources: Any[], preinstalled?: Any[]) {
                     // The shell's layout (getSystemStatus formFactor): the device's class; "" until it says.
                     formFactor: "",
                     // The apps the device came with (not removable), by id: their versions.
-                    builtins: {} as Record<string, string> };
+                    builtins: {} as Record<string, string>,
+                    // A catalog's index read only once this is let go (a refresh that takes a while); held: it was asked for.
+                    holdIndex: null as Promise<void> | null, held: false };
     const luna = {
         call: async (uri: string, params: Any) => {
             if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
@@ -74,7 +76,14 @@ function makeService(sources: Any[], preinstalled?: Any[]) {
         }
     };
     const service = createPackagesService({
-        luna, request: http.request, requestBytes: http.requestBytes, gzip,
+        luna, request: http.request, gzip,
+        requestBytes: async (req: Any) => {
+            if (world.holdIndex && /\/index\.json$/.test(req.url)) {
+                world.held = true;
+                await world.holdIndex;
+            }
+            return http.requestBytes(req);
+        },
         crypto: {
             sha256: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha256").update(b).digest()),
             sha512: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest())
@@ -472,6 +481,36 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         world.state.sources[0].keyFromDevice = false;
         sources[0] = { ...sources[0], key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" };
         expect((await service.refresh({ id: "phoenix" })).results[0]).toMatchObject({ ok: true });
+    });
+
+    // The Marketplace reads the catalogs each time it opens (and again when
+    // the simulator's catalog starts): an install, a kind hidden or a catalog
+    // turned off while the catalogs are read stays, and what was read is
+    // taken (tools/test-connectors.cjs once found its Install button back
+    // after the connector was installed: the refresh had written back the
+    // state it read before the install).
+    it("keeps what changes while the catalogs are read: an install that ends meanwhile stays installed", async () => {
+        const { service, world } = makeService([...defaults(), { id: "other", name: "Other", kind: "preware", url: feed.feedUrl, enabled: true }]);
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const before = (await service.getSources()).sources.find((x: Any) => x.id === "phoenix").refreshed;
+        let letGo = () => {};
+        world.holdIndex = new Promise<void>((r) => { letGo = r; });
+        const refreshing = service.refresh({});
+        for (let i = 0; i < 200 && !world.held; i++) await new Promise((r) => setTimeout(r, 10));
+        expect(world.held).toBe(true);
+        expect(await service.install({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).toMatchObject({ returnValue: true, state: "installed" });
+        await service.setKind({ kind: "legacy", enabled: false });
+        await service.setSource({ id: "other", enabled: false });
+        letGo();
+        const r = await refreshing;
+        expect(r.results.find((x: Any) => x.id === "phoenix")).toMatchObject({ ok: true });
+        expect((await service.listInstalled()).apps.map((a: Any) => a.id)).toEqual(["org.webosphoenix.pwa.tides"]);
+        expect((await service.getAvailability()).kinds.find((k: Any) => k.id === "legacy")).toMatchObject({ hidden: true });
+        const sources = (await service.getSources()).sources;
+        expect(sources.find((x: Any) => x.id === "other")).toMatchObject({ enabled: false });
+        // What the refresh read is kept.
+        expect(sources.find((x: Any) => x.id === "phoenix").refreshed).not.toBe(before);
+        expect((await service.browse({ section: "web", category: "Travel" })).apps.map((a: Any) => a.id)).toContain("org.webosphoenix.pwa.tides");
     });
 
     it("installs a connector from the catalog in Developer Mode only, checked against the signed SHA-256", async () => {
