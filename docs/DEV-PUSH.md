@@ -314,7 +314,15 @@ Apply is **replace by default**: the overlay ends up holding exactly the
 bundle's files, so pushing the repository's state twice is the same as
 once, and a file put back to the image's version in the repository leaves
 the overlay. `nova push --add` adds to what is there instead (for a fix
-sent on top of another developer's).
+sent on top of another developer's). Under a grant (9.1) a replace puts
+back only what the grant may change: the overlay ends up holding exactly
+the bundle's files within the grant's parts, and the rest as it was, so an
+apps-only grant never reverts the owner's shell, service or role changes
+(nor restarts the shell for them). The device works out the whole change
+(files, removals and these implicit reverts), checks every path's part
+against the grant before it accepts the bundle, and the waiting entry in
+Pushed Changes lists the reverts and the restarts they cause. The
+platform's key and a paired computer replace everything, as before.
 
 ### 4.5 Restart only what changed
 
@@ -519,7 +527,13 @@ device connected, else the last used.
 One protocol on every link: **HTTPS (TLS 1.3) on TCP port 6965**, beside
 novacom's 6968-6971 (to check against IANA's registry before it is fixed).
 JSON requests, the bundle as the body; `novad` answers with progress lines
-as they happen. Over:
+as they happen. Each connection is answered one request at a time and only
+as fast as it reads: while an answer waits unsent `novad` reads nothing
+more from it, and a stream it does not read (`log -f`) ends it once 8 MB
+wait. Before a computer is paired (or while Developer Mode is off) its
+connection may send only JSON messages of 64 KB at most, 256 KB and 32
+requests in all, for three minutes, and 8 such connections at once; a TLS
+handshake has 10 seconds (`lib/proto.js` `LIMITS`). Over:
 
 - **the LAN** (Wi-Fi or Ethernet): only while Developer Mode's "Push over
   network" switch is on, and only on private addresses;
@@ -581,9 +595,15 @@ As adb does, never as novacom did:
 4. Settings lists the paired computers with their names, fingerprints and
    last use, and removes them. A key the signed revocation list names
    (9.1) leaves the list and the `user` account's authorized_keys when the
-   list arrives; its open connections are closed, and new ones are refused
-   at the TLS handshake, as is pairing it again. Turning Developer Mode off stops `novad`
-   listening; Full Erase forgets everything.
+   list arrives, and new connections are refused at the TLS handshake, as
+   is pairing it again. Whenever a computer stops being authorized, for
+   whatever reason (Remove, `nova unpair`, a revocation, Developer Mode
+   turned off, its key forgotten), its open connections close, a `forward`
+   (the inspector, the QML debugger, SSH) or a `log -f` among them: one
+   check of every authenticated connection against the paired list and
+   Developer Mode, after every change `novad` reports and every 5 seconds.
+   Turning Developer Mode off stops `novad` listening; Full Erase forgets
+   everything.
 
 A paired computer's key is also a trusted bundle key (section 9.1), so a
 bundle it made with `nova package --system` can come by the server channel
@@ -649,8 +669,8 @@ A waiting bundle posts a notification: "Developer changes from <name>:
 A new group, **Pushed Changes**, at the end of the Developer Mode pane:
 
 - **Waiting**: each bundle with its sender, key fingerprint, note, the
-  files it changes (grouped: Shell, Web apps, Services, System pages), and
-  what it will restart ("The system UI will restart"). **Apply** asks for the
+  files it changes (grouped: Shell, Web apps, Services, System pages), what
+  a replace puts back as the image has it (4.4), and what it will restart ("The system UI will restart"). **Apply** asks for the
   device passcode (as turning Developer Mode on does), **Decline** drops it.
 - **On this device**: the overlay's state: the build, the number of files
   and their list, each bundle applied, by whom and when, and the restarts
@@ -1034,8 +1054,16 @@ computer able to test only the code it committed to.
   outlive Revert to Image. `verify()` weighs every trust entry of the
   signing key (any live grant that allows the bundle authorizes it; the
   reason given otherwise is the newest grant's). A revocation list removes
-  the revoked paired keys and their SSH lines, and `lib/proto.js` closes
-  their connections and refuses them at the handshake. A pairing run's
+  the revoked paired keys and their SSH lines, and `lib/proto.js` refuses
+  them at the handshake. Any computer that stops being authorized
+  (unpaired, revoked, Developer Mode off) loses its open connections and
+  streams (`lib/proto.js` recheck, 6.4). A grant's replace reverts only
+  within the grant's parts, and the waiting entry lists those reverts
+  (4.4).
+- **Bounded connections** (6.2): backpressure on both sides (nothing more
+  is read from a computer while an answer to it waits unsent), a cap on
+  what may wait for a stream, and limits on unauthenticated connections
+  (message size, bytes, requests, lifetime, how many at once). A pairing run's
   confirmation is taken only in the window it began in.
 - **The Luna methods** are 7.4's plus `restartNow`, `addGrant`,
   `setRevocations`, `restart` and `rescan` (what `nova` needs); every one

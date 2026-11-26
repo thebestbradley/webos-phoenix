@@ -326,20 +326,54 @@ function createNova(deps) {
         return busy.then(function (r) { busy = null; return r; }, function (e) { busy = null; throw e; });
     }
 
+    // The parts a bundle may change, from the trust entry that authorizes
+    // it: a grant's parts (9.1); null (every part) for the platform's key
+    // and a paired computer.
+    function scopeOf(entry) {
+        return entry && entry.kind === "grant" ? ((entry.grant && entry.grant.parts) || []).slice() : null;
+    }
+    // A replace's implicit reverts (4.4): the paths the overlay changes now
+    // (state s) that the bundle leaves out, within scope only: a grant's
+    // replace puts back what that grant could change itself, and leaves the
+    // rest (the owner's paired computers' shell, service or role changes,
+    // say) as it is. An add reverts nothing.
+    function revertsFor(mode, paths, scope, s) {
+        if (mode !== "replace") return [];
+        var inBundle = {};
+        paths.forEach(function (p) { inBundle[p] = true; });
+        return Object.keys(s.files).concat(Object.keys(s.removed)).filter(function (p) {
+            return !inBundle[p] && (!scope || scope.indexOf(devpush.partOf(p)) >= 0);
+        }).sort();
+    }
+    // Everything a verified bundle changes on this overlay: its files and
+    // removals and the implicit reverts, every path's part checked against
+    // the scope of the entry that authorizes it (verify() checks the
+    // manifest's parts; this checks the whole effective set), and the
+    // restarts they all need. -> {reverts, paths, restart}
+    function changeSet(v, s) {
+        var m = v.manifest, scope = scopeOf(v.trust);
+        var own = m.files.map(function (f) { return f.path; }).concat(m.removed);
+        var reverts = revertsFor(m.mode, own, scope, s);
+        var paths = own.concat(reverts);
+        var outside = scope ? devpush.partsFor(paths).filter(function (p) { return scope.indexOf(p) < 0; }) : [];
+        if (outside.length) {
+            throw fail("OUT_OF_SCOPE", "The grant " + v.trust.grant.id + " does not allow changes to " + outside.join(", "));
+        }
+        return { reverts: reverts, paths: paths, restart: devpush.restartsFor(paths) };
+    }
+
     // A checked bundle into the overlay (4.4): replace (the overlay ends up
-    // holding exactly the bundle's files: the others go back to the image's)
-    // or add; every write through the backend; a failure part way puts every
-    // path back as it was and says which file failed. Then the restarts.
+    // holding exactly the bundle's files: the others go back to the image's,
+    // within a grant's parts: changeSet) or add; every write through the
+    // backend; a failure part way puts every path back as it was and says
+    // which file failed. Then the restarts.
     function applyVerified(v, bytes, signature, onProgress) {
         var m = v.manifest;
         var progress = onProgress || function () {};
         var s = currentState();
         var b = backend(s.build);
-        var inBundle = {};
-        m.files.forEach(function (f) { inBundle[f.path] = true; });
-        m.removed.forEach(function (p) { inBundle[p] = true; });
-        var reverts = m.mode === "replace"
-            ? Object.keys(s.files).concat(Object.keys(s.removed)).filter(function (p) { return !inBundle[p]; }).sort() : [];
+        var cs = changeSet(v, s);
+        var reverts = cs.reverts;
         var ops = v.files.map(function (f) { return { op: "write", path: f.path, data: f.data, mode: f.mode }; })
             .concat(m.removed.map(function (p) { return { op: "remove", path: p }; }))
             .concat(reverts.map(function (p) { return { op: "revert", path: p }; }));
@@ -391,8 +425,7 @@ function createNova(deps) {
             addLog({ event: "applied", bundle: m.id, by: m.by, name: v.trust.name || null, kind: v.trust.kind, files: m.files.length });
             // The device works the restarts out from the paths itself; the
             // bundle's own list is only what its maker expected.
-            var paths = m.files.map(function (f) { return f.path; }).concat(m.removed, reverts);
-            return runRestarts(devpush.restartsFor(paths), progress);
+            return runRestarts(cs.restart, progress);
         }).then(function (restarted) {
             changed();
             return { applied: m.id, files: m.files.length, removed: m.removed.length, reverted: reverts.length, restarted: restarted,
@@ -489,14 +522,23 @@ function createNova(deps) {
         var dir = P(WAITING);
         var names;
         try { names = fs.readdirSync(dir); } catch (e) { return []; }
+        var s = currentState();
         return names.filter(function (n) { return /\.json$/.test(n); }).map(function (n) {
-            try { return JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch (e) { return null; }
+            var meta;
+            try { meta = JSON.parse(fs.readFileSync(path.join(dir, n), "utf8")); } catch (e) { return null; }
+            // What its Apply would put back now (the overlay may have changed
+            // since it came), and the restarts with those reverts.
+            var own = (meta.files || []).concat(meta.removed || []);
+            meta.reverts = revertsFor(meta.mode, own, meta.scope === undefined ? null : meta.scope, s);
+            meta.restart = devpush.restartsFor(own.concat(meta.reverts));
+            return meta;
         }).filter(Boolean).sort(function (a, c) { return a.received < c.received ? -1 : 1; });
     }
     // A checked bundle the owner must Apply: from the platform's key, a
     // granted key, or a paired computer's key that is not the one sending it.
     function enqueue(v, bytes, signature, from) {
         var m = v.manifest;
+        var cs = changeSet(v, currentState());
         var dir = P(WAITING);
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
         fs.writeFileSync(path.join(dir, m.id + ".ipk"), Buffer.from(bytes), { mode: 0o600 });
@@ -506,7 +548,11 @@ function createNova(deps) {
             id: m.id, by: m.by, fingerprint: keys.fingerprint(m.by), kind: v.trust.kind, name: v.trust.name || null,
             grant: v.trust.grant ? v.trust.grant.id : null, note: m.note || null, made: m.made, received: now().toISOString(),
             from: from || null, mode: m.mode, parts: m.parts, roles: m.parts.indexOf("roles") >= 0,
-            files: m.files.map(function (f) { return f.path; }), removed: m.removed, restart: v.restart, size: size, bytes: bytes.length
+            files: m.files.map(function (f) { return f.path; }), removed: m.removed,
+            // A replace's implicit reverts and the parts they may come from
+            // (listWaitingSync works them out again against the overlay as
+            // it is then); restart: for the files, removals and reverts.
+            scope: scopeOf(v.trust), reverts: cs.reverts, restart: cs.restart, size: size, bytes: bytes.length
         };
         fs.writeFileSync(path.join(dir, m.id + ".json"), JSON.stringify(meta, null, 1) + "\n", { mode: 0o600 });
         addLog({ event: "waiting", bundle: m.id, by: m.by, name: meta.name, kind: meta.kind });

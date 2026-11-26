@@ -46,22 +46,45 @@ function fail(code, text) {
 
 // ---- Frames ---------------------------------------------------------------------------
 
-function frames(socket) {
+// Frames read ahead of the one being handled: past this many the socket is
+// paused (the reader's backpressure), so a peer that sends faster than its
+// requests are answered holds at most this many and one partial frame.
+var READ_AHEAD = 2;
+
+// socket, opts? {check(kind, length) -> Error | null (each frame's header,
+// once: a refusal closes the connection), maxOutput (bytes: a message
+// written while more than this waits unsent closes the connection, a
+// reader too slow for a stream)}
+function frames(socket, opts) {
+    opts = opts || {};
     var buf = Buffer.alloc(0);
-    var queue = [], waiting = [], closed = null, detached = false;
+    var queue = [], waiting = [], closed = null, detached = false, held = false, checked = false;
     function deliver(item) {
         if (waiting.length) waiting.shift().resolve(item);
         else queue.push(item);
     }
     function onData(chunk) {
         if (detached) return;
-        buf = Buffer.concat([buf, chunk]);
-        while (buf.length >= 5) {
+        buf = buf.length ? Buffer.concat([buf, chunk]) : chunk;
+        pump();
+    }
+    function pump() {
+        while (!detached && buf.length >= 5) {
+            if (queue.length >= READ_AHEAD) {
+                if (!held) { held = true; socket.pause(); }
+                return;
+            }
             var kind = String.fromCharCode(buf[0]), n = buf.readUInt32BE(1);
             if ((kind !== "J" && kind !== "B") || (kind === "J" && n > MAX_JSON) || n > MAX_BYTES) {
                 return shut(fail("PROTOCOL", "not nova's protocol"));
             }
+            if (!checked && opts.check) {
+                var refused = opts.check(kind, n);
+                if (refused) return shut(refused);
+            }
+            checked = true;
             if (buf.length < 5 + n) break;
+            checked = false;
             var body = buf.subarray(5, 5 + n);
             buf = buf.subarray(5 + n);
             if (kind === "J") {
@@ -90,19 +113,45 @@ function frames(socket) {
     socket.on("data", onData);
     socket.on("close", function () { shut(null); });
     socket.on("error", function (e) { shut(fail("CLOSED", e.message)); });
+    // -> socket.write's answer: false once the peer is behind (see drained).
     function write(kind, payload) {
+        if (closed) return false;
+        if (opts.maxOutput && socket.writableLength > opts.maxOutput) {
+            shut(fail("SLOW_READER", "The other end does not read what it is sent"));
+            return false;
+        }
         var h = Buffer.alloc(5);
         h[0] = kind.charCodeAt(0);
         h.writeUInt32BE(payload.length, 1);
-        socket.write(Buffer.concat([h, payload]));
+        return socket.write(Buffer.concat([h, payload]));
     }
     return {
-        send: function (obj) { write("J", Buffer.from(JSON.stringify(obj), "utf8")); },
-        sendBytes: function (b) { write("B", Buffer.from(b)); },
+        send: function (obj) { return write("J", Buffer.from(JSON.stringify(obj), "utf8")); },
+        sendBytes: function (b) { return write("B", Buffer.from(b)); },
         next: function () {
-            if (queue.length) return Promise.resolve(queue.shift());
+            if (queue.length) {
+                var item = queue.shift();
+                if (held && !detached) { held = false; socket.resume(); pump(); }
+                return Promise.resolve(item);
+            }
             if (closed) return Promise.reject(closed);
             return new Promise(function (resolve, reject) { waiting.push({ resolve: resolve, reject: reject }); });
+        },
+        // Resolves once what was written has gone (at once when nothing
+        // waits): the writer's backpressure. Rejects if the connection closes.
+        drained: function () {
+            if (closed) return Promise.reject(closed);
+            if (!socket.writableNeedDrain) return Promise.resolve();
+            return new Promise(function (resolve, reject) {
+                function done() {
+                    socket.removeListener("drain", done);
+                    socket.removeListener("close", done);
+                    if (closed || socket.destroyed) reject(closed || fail("CLOSED", "The connection closed"));
+                    else resolve();
+                }
+                socket.on("drain", done);
+                socket.on("close", done);
+            });
         },
         // The stream from here on is not frames (forward): what came
         // already, then the socket.
@@ -133,36 +182,96 @@ function isPrivate(addr) {
 
 // ---- The device's end ------------------------------------------------------------------
 
+// What one connection may cost the device (6.2). Over USB or the LAN in
+// Developer Mode anyone can connect, so before a computer is paired (an
+// "unauthenticated" connection: its key is not paired, or Developer Mode
+// is off) it may send only small JSON messages, so many requests and bytes,
+// for a while (time enough to read the code the device shows and pair),
+// with so many such connections at once. Every connection, paired or not,
+// is answered one request at a time and only as fast as it reads: while an
+// answer waits unsent nothing more is read from it, and a stream (log -f)
+// it does not read closes it once maxOutput waits.
+var LIMITS = {
+    handshakeMs: 10000,             // the TLS handshake
+    maxConnections: 256,            // every connection, a forward's included
+    unauthMax: 8,                   // unauthenticated connections at once
+    unauthMs: 180000,               // an unauthenticated connection's life (the pairing window is 120 s)
+    unauthRequests: 32,             // requests before it is authenticated (pairing takes three)
+    unauthBytes: 256 * 1024,        // bytes before it is authenticated
+    unauthFrame: 64 * 1024,         // one message before it is authenticated (JSON only)
+    maxOutput: 8 * 1024 * 1024,     // what may wait unsent before a streamed message
+    recheckMs: 5000                 // how often connections are checked against who is authorized
+};
+
 // nova: createNova()'s object. opts: {host, port, name (this device's, for
 // hello), allow(remoteAddress) -> bool, luna(uri, params) -> Promise
 // (nova luna-send), log(follow, filter, onLine) -> stop(), connect(port)
-// -> net.Socket (nova forward), onError(text)}. -> {server, listening:
-// Promise<port>, close()}
+// -> net.Socket (nova forward), onError(text), limits (LIMITS' names, to
+// override)}. -> {server, listening: Promise<port>, close()}
 function createServer(nova, opts) {
+    var limits = Object.assign({}, LIMITS, opts.limits || {});
     var k = nova.deviceKey();
     var server = tls.createServer({ key: k.pem, cert: k.cert, requestCert: true, rejectUnauthorized: false,
-                                    minVersion: "TLSv1.3", maxVersion: "TLSv1.3" });
-    var conns = new Set();
+                                    minVersion: "TLSv1.3", maxVersion: "TLSv1.3", handshakeTimeout: limits.handshakeMs });
+    server.maxConnections = limits.maxConnections;
+    // socket -> {key, authed, requests, bytes, timer}
+    var conns = new Map();
+    // A computer is authorized while Developer Mode is on and its key is
+    // paired (isPaired: and not revoked).
+    function authorized(key) { return nova.devMode() && nova.isPaired(key); }
+    function unauthenticated() {
+        var n = 0;
+        conns.forEach(function (c) { if (c.key && !c.authed) n++; });
+        return n;
+    }
+    // An unauthenticated connection has limits.unauthMs to become
+    // authenticated; an authenticated one has no deadline (a forward or a
+    // log follow can be quiet for hours).
+    function setAuthed(socket, c, on) {
+        c.authed = on;
+        if (c.timer) { clearTimeout(c.timer); c.timer = null; }
+        if (!on) {
+            c.timer = setTimeout(function () { socket.destroy(); }, limits.unauthMs);
+            if (c.timer.unref) c.timer.unref();
+        }
+    }
     server.on("secureConnection", function (socket) {
-        conns.add(socket);
-        socket.on("close", function () { conns.delete(socket); });
+        var c = { key: null, authed: false, requests: 0, bytes: 0, timer: null };
+        conns.set(socket, c);
+        socket.on("close", function () { if (c.timer) clearTimeout(c.timer); conns.delete(socket); });
         if (opts.allow && !opts.allow(socket.remoteAddress)) return socket.destroy();
         var clientKey = keys.peerKey(socket.getPeerX509Certificate());
         if (!clientKey) return socket.destroy();
         // A revoked key (9.1) is trusted for nothing, hello included.
         if (nova.isRevoked(clientKey)) return socket.destroy();
-        socket.novaKey = clientKey;
-        serve(nova, opts, socket, clientKey).then(null, function (e) {
+        var on = authorized(clientKey);
+        if (!on && unauthenticated() >= limits.unauthMax) return socket.destroy();
+        c.key = clientKey;
+        setAuthed(socket, c, on);
+        serve(nova, opts, socket, c, limits, setAuthed.bind(null, socket, c)).then(null, function (e) {
             if (e.code !== "CLOSED" && opts.onError) opts.onError(e.message);
             socket.destroy();
         });
     });
     server.on("tlsClientError", function () { /* a client that is not nova */ });
-    // A revocation list that names a connected computer's key ends its
-    // connections, a forward or a log follow among them.
-    var unwatch = nova.watch(function () {
-        conns.forEach(function (s) { if (s.novaKey && nova.isRevoked(s.novaKey)) s.destroy(); });
-    });
+    // One check for every way a computer stops being authorized: unpaired
+    // (Remove in Settings, nova unpair), its key revoked by a signed list,
+    // Developer Mode turned off, or its keys forgotten (Full Erase): its
+    // authenticated connections end, a forward (the inspector, the QML
+    // debugger, SSH) or a log follow among them; and a revoked key's
+    // others too. After every change novad reports, and every recheckMs
+    // (Developer Mode is a flag file another service writes).
+    function recheck() {
+        conns.forEach(function (c, s) {
+            if (!c.key) return;
+            try {
+                if (nova.isRevoked(c.key) || (c.authed && !authorized(c.key))) s.destroy();
+            } catch (e) { s.destroy(); }
+        });
+    }
+    var unwatch = nova.watch(recheck);
+    var timer = setInterval(recheck, limits.recheckMs);
+    if (timer.unref) timer.unref();
     var listening = new Promise(function (resolve, reject) {
         server.once("error", reject);
         server.listen(opts.port === undefined ? PORT : opts.port, opts.host || "127.0.0.1", function () { resolve(server.address().port); });
@@ -172,14 +281,28 @@ function createServer(nova, opts) {
         listening: listening,
         close: function () {
             unwatch();
-            conns.forEach(function (s) { s.destroy(); });
+            clearInterval(timer);
+            conns.forEach(function (c, s) { s.destroy(); });
             return new Promise(function (resolve) { server.close(function () { resolve(); }); });
         }
     };
 }
 
-function serve(nova, opts, socket, clientKey) {
-    var f = frames(socket);
+// c: the connection's {key, authed, requests, bytes}; authed(on) marks it.
+function serve(nova, opts, socket, c, limits, authed) {
+    var clientKey = c.key;
+    var f = frames(socket, {
+        maxOutput: limits.maxOutput,
+        // Before it is authenticated: small JSON messages, so many bytes.
+        check: function (kind, n) {
+            if (c.authed) return null;
+            c.bytes += 5 + n;
+            if (kind !== "J" || n > limits.unauthFrame || c.bytes > limits.unauthBytes) {
+                return fail("PROTOCOL", "Too much from a computer that is not paired");
+            }
+            return null;
+        }
+    });
     var run = null;
     function reply(obj) { f.send(Object.assign({ ok: true }, obj || {})); }
     function error(e) { f.send({ ok: false, code: e.code || "FAILED", error: e.message || String(e) }); }
@@ -188,10 +311,17 @@ function serve(nova, opts, socket, clientKey) {
         return p ? p.name : null;
     }
     function loop() {
-        return f.next().then(function (m) {
+        // The next request only once the last answer has gone: a computer
+        // that does not read holds one answer on the device, not all of them.
+        return f.drained().then(function () { return f.next(); }).then(function (m) {
             if (!m.json) throw fail("PROTOCOL", "a request was expected");
             var req = m.json;
             var paired = nova.isPaired(clientKey);
+            if (!c.authed && paired && nova.devMode()) authed(true);
+            if (!c.authed && ++c.requests > limits.unauthRequests) {
+                socket.destroy();
+                throw fail("CLOSED", "Too many requests from a computer that is not paired");
+            }
             return Promise.resolve().then(function () {
                 if (req.op === "hello") {
                     var img = nova.image();
@@ -208,7 +338,9 @@ function serve(nova, opts, socket, clientKey) {
                     if (!run) throw fail("NOT_PAIRING", "pair first");
                     var r = run;
                     run = null;
-                    return reply(r.finish(req.confirm, req.proof, r.name));
+                    var done = r.finish(req.confirm, req.proof, r.name);
+                    authed(true);
+                    return reply(done);
                 }
                 if (!paired) throw fail("NOT_PAIRED", "This computer is not paired with the device: run nova pair");
                 switch (req.op) {
@@ -239,7 +371,11 @@ function serve(nova, opts, socket, clientKey) {
                         if (!r.returnValue) throw fail(r.errorCode, r.errorText);
                         reply({ result: r });
                     });
-                case "unpair": return nova.unpair(clientKey).then(function () { reply({}); });
+                case "unpair":
+                    // Not authorized from here on: the answer, then the end
+                    // of the connection (recheck leaves this one to it).
+                    authed(false);
+                    return nova.unpair(clientKey).then(function () { reply({}); socket.end(); return "piped"; });
                 case "luna":
                     if (!opts.luna) throw fail("UNSUPPORTED", "Luna calls are not available here");
                     if (!/^luna:\/\/[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]*$/.test(String(req.uri || ""))) throw fail("BAD_PARAMS", "uri: luna://service/method");
@@ -264,6 +400,9 @@ function serve(nova, opts, socket, clientKey) {
                             if (rest.length) local.write(rest);
                             socket.pipe(local);
                             local.pipe(socket);
+                            // Closed by recheck (no longer authorized) or the
+                            // computer: the device's end goes with it.
+                            socket.once("close", function () { local.destroy(); });
                             resolve("piped");
                         });
                     });
@@ -379,5 +518,5 @@ function pair(conn, opts) {
     });
 }
 
-module.exports = { PORT: PORT, EXPORTER_LABEL: EXPORTER_LABEL, FORWARD_PORTS: FORWARD_PORTS, frames: frames, isPrivate: isPrivate,
+module.exports = { PORT: PORT, EXPORTER_LABEL: EXPORTER_LABEL, FORWARD_PORTS: FORWARD_PORTS, LIMITS: LIMITS, frames: frames, isPrivate: isPrivate,
                    createServer: createServer, connect: connect, pair: pair, connectLocal: function (port) { return net.connect(port, "127.0.0.1"); } };

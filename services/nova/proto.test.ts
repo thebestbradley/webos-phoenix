@@ -13,6 +13,7 @@
 import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import tls from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -267,6 +268,151 @@ describe("pairing and pinned keys over TLS 1.3", () => {
         await expect(c2.request({ op: "luna", uri: "luna://com.example/x" })).rejects.toBeTruthy();
         c2.close();
         expect(core.paired()).toEqual([]);
+    });
+
+    // ---- Bounded output and unauthenticated connections ----
+
+    // A raw TLS connection with a key, for frames the client library would
+    // not send (several requests without reading the answers).
+    function raw(key = computer, at = port): Promise<Any> {
+        return new Promise((resolve, reject) => {
+            const s = tls.connect({ host: "127.0.0.1", port: at, key: key.pem, cert: key.cert, rejectUnauthorized: false,
+                                    checkServerIdentity: () => undefined, minVersion: "TLSv1.3" }, () => resolve(s));
+            s.on("error", reject);
+        });
+    }
+    function frame(kind: string, payload: Buffer) {
+        const hd = Buffer.alloc(5);
+        hd[0] = kind.charCodeAt(0);
+        hd.writeUInt32BE(payload.length, 1);
+        return Buffer.concat([hd, payload]);
+    }
+    const req = (o: Any) => frame("J", Buffer.from(JSON.stringify(o)));
+    function closedWithin(s: Any, ms: number): Promise<boolean> {
+        if (s.destroyed) return Promise.resolve(true);
+        return new Promise((resolve) => {
+            const t = setTimeout(() => resolve(false), ms);
+            s.once("close", () => { clearTimeout(t); resolve(true); });
+        });
+    }
+    // The device's end of each connection, to see what it holds for it.
+    function deviceSockets(server: Any = srv) {
+        const out: Any[] = [];
+        server.server.on("secureConnection", (s: Any) => out.push(s));
+        return out;
+    }
+
+    it("stops answering a paired computer that does not read, holding one answer at most, and sends them all once it reads", async () => {
+        const { code } = core.pairStart();
+        await pairOnce(code);
+        const BIG = "/usr/share/phoenix/qml/Phoenix/Shell/Big.qml";
+        dev.write(BIG, "x".repeat(1 << 20));
+        const held = deviceSockets();
+        const s = await raw();
+        const f = proto.frames(s);
+        s.pause();      // the computer reads nothing
+        const N = 40;
+        for (let i = 0; i < N; i++) s.write(req({ op: "get", path: BIG }));
+        let peak = 0;
+        const t0 = Date.now();
+        while (Date.now() - t0 < 1500) {
+            await new Promise((r) => setTimeout(r, 25));
+            peak = Math.max(peak, held[0] ? held[0].writableLength : 0);
+        }
+        // 40 MB of answers before; now one 1 MB answer and its header.
+        expect(peak).toBeGreaterThan(0);
+        expect(peak).toBeLessThan(3 << 20);
+        s.resume();
+        for (let i = 0; i < N; i++) {
+            const m = await f.next();
+            expect(m.json).toMatchObject({ ok: true, bytes: 1 << 20 });
+            expect((await f.next()).bytes.length).toBe(1 << 20);
+        }
+        s.destroy();
+    });
+
+    it("closes an unpaired computer that keeps asking without reading", async () => {
+        const held = deviceSockets();
+        const s = await raw(keys.generate("flood"));
+        s.pause();
+        const many = Buffer.concat(Array.from({ length: 5000 }, () => req({ op: "hello" })));
+        s.write(many);
+        // The device's end (the computer's, paused, does not see it until it reads).
+        await new Promise((r) => setTimeout(r, 200));
+        expect(await closedWithin(held[0], 5000)).toBe(true);
+        s.destroy();
+    });
+
+    it("takes no bytes and no big message before pairing", async () => {
+        const hd = Buffer.alloc(5);
+        hd[0] = 0x42;
+        hd.writeUInt32BE(50 << 20, 1);
+        const s2 = await raw(keys.generate("stranger 2"));
+        s2.write(Buffer.concat([hd, Buffer.alloc(1 << 20)]));
+        expect(await closedWithin(s2, 3000)).toBe(true);
+        const s3 = await raw(keys.generate("stranger 3"));
+        s3.write(req({ op: "hello", pad: "y".repeat(200 * 1024) }));
+        expect(await closedWithin(s3, 3000)).toBe(true);
+    });
+
+    it("bounds unpaired connections: so many at once, and each for a while; a paired computer still gets in", async () => {
+        const { code } = core.pairStart();
+        const { deviceKey } = await pairOnce(code);
+        const srv2 = proto.createServer(core, { host: "127.0.0.1", port: 0, name: "Test device", limits: { unauthMax: 2, unauthMs: 600 } });
+        const port2 = await srv2.listening;
+        try {
+            const a = await raw(keys.generate("a"), port2), b = await raw(keys.generate("b"), port2);
+            await new Promise((r) => setTimeout(r, 50));
+            const c = await raw(keys.generate("c"), port2);
+            expect(await closedWithin(c, 1000)).toBe(true);
+            expect(a.destroyed || b.destroyed).toBe(false);
+            const p = await proto.connect({ host: "127.0.0.1", port: port2, key: computer, expect: deviceKey });
+            expect((await p.request({ op: "status" })).status.paired).toBe(1);
+            expect(await closedWithin(a, 2000)).toBe(true);
+            expect(await closedWithin(b, 500)).toBe(true);
+            // The paired one is not timed out.
+            expect((await p.request({ op: "status" })).status.paired).toBe(1);
+            p.close();
+        } finally { await srv2.close(); }
+    });
+
+    // ---- A computer no longer authorized loses its open streams ----
+
+    it("a forward (the inspector, the QML debugger) ends when its computer is removed or Developer Mode goes off", async () => {
+        const echo = net.createServer((x) => x.pipe(x));
+        await new Promise<void>((r) => echo.listen(0, "127.0.0.1", () => r()));
+        const srv2 = proto.createServer(core, { host: "127.0.0.1", port: 0, name: "Test device", limits: { recheckMs: 100 },
+                                                connect: () => net.connect((echo.address() as Any).port, "127.0.0.1") });
+        const port2 = await srv2.listening;
+        async function stream(deviceKey: string) {
+            const c = await proto.connect({ host: "127.0.0.1", port: port2, key: computer, expect: deviceKey });
+            await c.request({ op: "forward", port: 9998 });
+            c.detach();
+            c.socket.resume();
+            const got = new Promise<string>((r) => c.socket.once("data", (d: Buffer) => r(d.toString())));
+            c.socket.write("ping");
+            expect(await got).toBe("ping");
+            return c;
+        }
+        try {
+            let { deviceKey } = await pairOnce(core.pairStart().code);
+            const c = await stream(deviceKey);
+            expect((await core.methods.removeKey({ key: computer.id })).removed).toBe("paired");
+            expect(await closedWithin(c.socket, 2000)).toBe(true);
+
+            ({ deviceKey } = await pairOnce(core.pairStart().code));
+            const c2 = await stream(deviceKey);
+            fs.rmSync(dev.root + "/var/luna/dev-mode-enabled");
+            expect(await closedWithin(c2.socket, 2000)).toBe(true);
+        } finally { await srv2.close(); echo.close(); }
+    });
+
+    it("nova unpair still gets its answer before its connection closes", async () => {
+        const { deviceKey } = await pairOnce(core.pairStart().code);
+        const c = await connect(deviceKey);
+        await expect(c.request({ op: "unpair" })).resolves.toMatchObject({ ok: true });
+        expect(core.paired()).toEqual([]);
+        expect(await closedWithin(c.socket, 2000)).toBe(true);
     });
 
     it("answers only hello with Developer Mode off", async () => {

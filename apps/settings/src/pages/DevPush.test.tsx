@@ -63,7 +63,7 @@ const ada: NovaWaiting = {
     id: "0123456789abcdef0123456789abcdef", by: "ed25519:x", fingerprint: "SHA256:ada", kind: "grant", name: "Ada Developer", grant: "grant-1",
     note: "Fix the card view", made: "2026-11-26T10:00:00Z", received: "2026-11-26T10:05:00Z", mode: "replace", parts: ["apps", "roles"], roles: true,
     files: ["/usr/palm/applications/org.example.demo/app.js", "/usr/share/luna-service2/roles.d/org.example.demo.role.json"], removed: [],
-    restart: ["hub", "app:org.example.demo"], size: 2048,
+    reverts: [], restart: ["hub", "app:org.example.demo"], size: 2048,
 };
 const keys: NovaKeys = {
     paired: [{ key: "AAAA", fingerprint: "SHA256:laptop", name: "Laptop", paired: "2026-11-25T10:00:00Z", lastUsed: null }],
@@ -106,6 +106,15 @@ describe("Settings > Developer Mode, dev push", () => {
         await waitFor(() => expect(screen.queryByTestId(`devpush-waiting-${ada.id}`)).toBeNull());
         expect(svc.calls).toEqual([["apply", ada.id, "0000"], ["apply", ada.id, "1234"]]);
         await waitFor(() => expect(screen.getByTestId("devpush-summary").textContent).toMatch(/1 file changed/));
+    });
+
+    it("lists what a waiting replace puts back, and the restarts that causes", async () => {
+        svc.status = status({ waiting: 1 });
+        svc.waiting = [{ ...ada, reverts: ["/usr/palm/applications/org.example.demo/old.js"], restart: ["hub", "app:org.example.demo"] }];
+        render(<DevPushGroups />);
+        expect((await screen.findByTestId("devpush-reverts")).textContent).toMatch(/Puts back as the system image has it/);
+        expect(screen.getByText("/usr/palm/applications/org.example.demo/old.js")).toBeTruthy();
+        expect(screen.queryAllByTestId("devpush-reverts")).toHaveLength(1);
     });
 
     it("Decline drops one", async () => {

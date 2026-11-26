@@ -111,6 +111,14 @@ function PushedChanges({ status }: { status: NovaStatus }) {
                     {grouped(w.files.concat(w.removed)).map(([part, paths]) => (
                         <Row key={part} title={part} subtitle={paths.length > 3 ? `${paths.slice(0, 3).join(", ")} and ${paths.length - 3} more` : paths.join(", ")} />
                     ))}
+                    {w.reverts?.length ? (
+                        <>
+                            <Note testId="devpush-reverts">Puts back as the system image has {w.reverts.length === 1 ? "it" : "them"}:</Note>
+                            {grouped(w.reverts).map(([part, paths]) => (
+                                <Row key={"revert-" + part} title={part} subtitle={paths.length > 3 ? `${paths.slice(0, 3).join(", ")} and ${paths.length - 3} more` : paths.join(", ")} />
+                            ))}
+                        </>
+                    ) : null}
                     {w.roles && <Note testId="devpush-roles">Changes what services may do (their Luna roles and permissions).</Note>}
                     {w.restart.map((r) => <Row key={r} subtitle={restartText(r)} />)}
                     <Button variant="affirmative" onClick={() => setApplying(w)} data-testid="devpush-apply">Apply</Button>

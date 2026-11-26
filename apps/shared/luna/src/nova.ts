@@ -91,6 +91,11 @@ export interface NovaWaiting {
     roles: boolean;
     files: string[];
     removed: string[];
+    /** What its Apply puts back as the image has it: a replace's paths the
+     *  overlay changes now and the bundle leaves out (a grant's: only within
+     *  its parts). */
+    reverts: string[];
+    /** The restarts for its files, removals and reverts. */
     restart: string[];
     size: number;
 }

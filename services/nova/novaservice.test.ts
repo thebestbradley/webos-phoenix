@@ -462,6 +462,32 @@ describe("Trusted Developers: the extra layer on granted keys (9.1)", () => {
         expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("me@laptop");
     });
 
+    // A replace puts back what it leaves out (4.4): under a grant, only what
+    // the grant may change, so an apps-only grant never reverts the owner's
+    // shell, service or role changes (nor restarts the shell for them); the
+    // waiting entry lists the reverts and the restarts they cause.
+    it("a grant's replace puts back only what the grant may change, and the waiting entry says so", async () => {
+        const SVC = "/usr/palm/services/org.example.svc/service.js", ROLE = "/usr/share/luna-service2/roles.d/org.example.svc.role.json";
+        const APP = SETTINGS + "index.js", OLD = SETTINGS + "old.js";
+        await push([{ path: QML, data: "paired\n" }, { path: SVC, data: "paired svc\n" }, { path: ROLE, data: "{\"paired\": 1}\n" },
+                    { path: OLD, data: "paired old\n" }]);
+        await addGrant({ parts: ["apps"] });
+        const r = await send([{ path: APP, data: "from ada\n" }]);
+        expect(r).toMatchObject({ waiting: true });
+        const w = (await core.methods.listWaiting({})).bundles[0];
+        expect(w).toMatchObject({ files: [APP], removed: [], reverts: [OLD], restart: ["app:org.webosphoenix.settings"] });
+        sys.reset();
+        const a = await core.methods.apply({ id: r.id, passCode: "1234" });
+        expect(a).toMatchObject({ returnValue: true, reverted: 1, restarted: [{ what: "app:org.webosphoenix.settings", ok: true }] });
+        expect(dev.read(OLD)).toBe(h.IMAGE[OLD]);
+        expect([dev.read(QML), dev.read(SVC), dev.read(ROLE)]).toEqual(["paired\n", "paired svc\n", "{\"paired\": 1}\n"]);
+        expect(Object.keys(state().files).sort()).toEqual([APP, QML, ROLE, SVC].sort());
+        expect(sys.calls.filter((c: string) => /^(systemctl|pkill|ls-control)/.test(c))).toEqual([]);
+        // A paired computer's replace still puts back everything it leaves out.
+        await push([{ path: QML, data: "paired again\n" }]);
+        expect(Object.keys(state().files)).toEqual([QML]);
+    });
+
     it("Remove takes a paired computer or a grant away, and its bundles with it", async () => {
         await addGrant();
         expect((await core.methods.removeKey({ key: "grant-1" })).removed).toBe("grant");
