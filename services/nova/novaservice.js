@@ -359,6 +359,18 @@ function createNova(deps) {
         if (outside.length) {
             throw fail("OUT_OF_SCOPE", "The grant " + v.trust.grant.id + " does not allow changes to " + outside.join(", "));
         }
+        // The overlay afterwards under its cap: the bundle's files and what
+        // it keeps, which a grant's replace leaves outside its parts and
+        // verify()'s spaceLeft does not see.
+        var gone = {};
+        paths.forEach(function (p) { gone[p] = true; });
+        var kept = Object.keys(s.files).filter(function (p) { return !gone[p]; })
+            .reduce(function (n, p) { return n + (s.files[p].size || 0); }, 0);
+        var size = v.files.reduce(function (n, f) { return n + f.data.length; }, 0);
+        var cap = options().overlayCap;
+        if (kept + size > cap) {
+            throw fail("NO_SPACE", "The bundle's files need " + size + " bytes; the overlay has " + Math.max(0, cap - kept) + " left");
+        }
         return { reverts: reverts, paths: paths, restart: devpush.restartsFor(paths) };
     }
 

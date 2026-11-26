@@ -488,6 +488,20 @@ describe("Trusted Developers: the extra layer on granted keys (9.1)", () => {
         expect(Object.keys(state().files)).toEqual([QML]);
     });
 
+    // What a grant's replace keeps (outside its parts) counts against the cap.
+    it("a grant's replace counts the files it keeps against the overlay's cap", async () => {
+        expect((await core.methods.setOptions({ overlayCap: 1 << 20 })).returnValue).toBe(true);
+        await push([{ path: QML, data: "y".repeat(700 * 1024) }]);
+        await addGrant({ parts: ["apps"] });
+        await expect(send([{ path: SETTINGS + "index.js", data: "z".repeat(700 * 1024) }])).rejects.toMatchObject({ code: "NO_SPACE" });
+        const r = await send([{ path: SETTINGS + "index.js", data: "z".repeat(300 * 1024) }]);
+        expect(r).toMatchObject({ waiting: true });
+        // Checked again at Apply, against the overlay as it is then.
+        await push([{ path: QML, data: "y".repeat(800 * 1024) }]);
+        expect(await core.methods.apply({ id: r.id, passCode: "1234" })).toMatchObject({ returnValue: false, errorCode: "NO_SPACE" });
+        expect((await core.methods.getStatus({})).usage).toBe(800 * 1024);
+    });
+
     it("Remove takes a paired computer or a grant away, and its bundles with it", async () => {
         await addGrant();
         expect((await core.methods.removeKey({ key: "grant-1" })).removed).toBe("grant");

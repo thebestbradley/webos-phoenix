@@ -8,7 +8,8 @@
 //     (the CDC NCM gadget Developer Mode makes, docs/DEV-PUSH.md 6.2:
 //     /etc/phoenix/nova.json "usbAddress", P3);
 //   - "Push over network" (off by default): on every address, answering
-//     only private ones (lib/proto.js isPrivate).
+//     only private ones (lib/proto.js isPrivate), and the USB link while
+//     "USB debugging" is on (one listener, lib/listeners.js).
 // It runs as root, long-running (novad.service, P3; not started on demand
 // by the hub, as it listens): it mounts the developer overlay, writes into
 // it and restarts what a bundle changes.
@@ -23,6 +24,7 @@ var fs = require("fs");
 var Service = require("webos-service");
 var nova = require("./novaservice");
 var proto = require("./lib/proto");
+var createListeners = require("./lib/listeners").createListeners;
 var system = require("./lib/system");
 
 var CONFIG = (function () {
@@ -66,29 +68,25 @@ nova.METHODS.forEach(function (name) {
     });
 });
 
-// The listeners follow Developer Mode and the two switches.
-var listeners = {};
-function listen(name, host, allow) {
-    if (listeners[name]) return;
-    var s = proto.createServer(core, {
-        host: host, port: proto.PORT, allow: allow, name: "webOS Phoenix",
-        luna: system.lunaSend, log: system.journal, connect: proto.connectLocal,
-        onError: function (t) { console.log("[nova] " + t); }
-    });
-    listeners[name] = s;
-    s.listening.then(function () { console.log("[nova] listening on " + host + ":" + proto.PORT); },
-                     function (e) { console.log("[nova] cannot listen on " + host + ": " + e.message); delete listeners[name]; });
-}
-function stop(name) {
-    if (!listeners[name]) return;
-    listeners[name].close();
-    delete listeners[name];
-}
-function follow() {
-    var on = core.devMode(), o = core.options();
-    if (on && o.usb) listen("usb", USB_ADDRESS, null); else stop("usb");
-    if (on && o.network) listen("network", "::", proto.isPrivate); else stop("network");
-}
+// The listeners follow Developer Mode and the two switches: one at a time
+// (lib/listeners.js).
+var listeners = createListeners({
+    open: function (name, host, allow) {
+        return proto.createServer(core, {
+            host: host, port: proto.PORT, allow: allow, name: "webOS Phoenix",
+            luna: system.lunaSend, log: system.journal, connect: proto.connectLocal,
+            onError: function (t) { console.log("[nova] " + t); }
+        });
+    },
+    state: function () {
+        var o = core.options();
+        return { on: core.devMode(), usb: !!o.usb, network: !!o.network };
+    },
+    usbAddress: USB_ADDRESS,
+    isPrivate: proto.isPrivate,
+    log: function (m) { console.log("[nova] " + m); }
+});
+function follow() { listeners.follow(); }
 core.watch(follow);
 follow();
 // Developer Mode is a flag file another service writes (and turning it on

@@ -204,7 +204,7 @@ var LIMITS = {
 };
 
 // nova: createNova()'s object. opts: {host, port, name (this device's, for
-// hello), allow(remoteAddress) -> bool, luna(uri, params) -> Promise
+// hello), allow(remoteAddress, localAddress) -> bool, luna(uri, params) -> Promise
 // (nova luna-send), log(follow, filter, onLine) -> stop(), connect(port)
 // -> net.Socket (nova forward), onError(text), limits (LIMITS' names, to
 // override)}. -> {server, listening: Promise<port>, close()}
@@ -239,7 +239,7 @@ function createServer(nova, opts) {
         var c = { key: null, authed: false, requests: 0, bytes: 0, timer: null };
         conns.set(socket, c);
         socket.on("close", function () { if (c.timer) clearTimeout(c.timer); conns.delete(socket); });
-        if (opts.allow && !opts.allow(socket.remoteAddress)) return socket.destroy();
+        if (opts.allow && !opts.allow(socket.remoteAddress, socket.localAddress)) return socket.destroy();
         var clientKey = keys.peerKey(socket.getPeerX509Certificate());
         if (!clientKey) return socket.destroy();
         // A revoked key (9.1) is trusted for nothing, hello included.

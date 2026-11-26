@@ -376,6 +376,77 @@ describe("pairing and pinned keys over TLS 1.3", () => {
         } finally { await srv2.close(); }
     });
 
+    // ---- One listener for USB and the network (lib/listeners.js) ----
+
+    const canBind = (host: string) => new Promise<boolean>((r) => {
+        const t = net.createServer();
+        t.once("error", () => r(false));
+        t.listen(0, host, () => t.close(() => r(true)));
+    });
+
+    it("runs USB and network push as one listener: both on binds, the USB link follows its switch, others must be private", async () => {
+        const { createListeners } = require("./lib/listeners.js") as Any;
+        const free = net.createServer();
+        await new Promise<void>((r) => free.listen(0, "127.0.0.1", () => r()));
+        const p = (free.address() as Any).port;
+        await new Promise((r) => free.close(r));
+        const ipv6 = await canBind("::");
+        const usb = "127.0.0.2";            // on lo, as the USB link's address would be
+        const state = { on: true, usb: true, network: false };
+        let privateOk = true;
+        const opened: string[] = [];
+        const l = createListeners({
+            open: (name: string, host: string, allow: Any) => { opened.push(name + "@" + host); return proto.createServer(core, { host, port: p, allow, name: "Test device" }); },
+            state: () => state, usbAddress: usb, isPrivate: () => privateOk,
+        });
+        const hello = async (host: string) => {
+            const c = await proto.connect({ host, port: p, key: computer, expect: null });
+            try { return (await c.request({ op: "hello" })).device; } finally { c.close(); }
+        };
+        try {
+            await l.follow();
+            expect(l.current()).toBe("usb");
+            expect(await hello(usb)).toBe("Test device");
+            await expect(hello("127.0.0.1")).rejects.toBeTruthy();  // not bound there
+
+            // Network on: the wildcard binds the port the USB address had
+            // (beside it, Linux refuses it: EADDRINUSE).
+            state.network = true;
+            await l.follow();
+            expect(l.current()).toBe("network");
+            expect(opened[0]).toBe("usb@" + usb);
+            expect(opened.slice(1)).toEqual(ipv6 ? ["network@::"] : ["network@::", "network@0.0.0.0"]);
+            expect(await hello(usb)).toBe("Test device");
+            expect(await hello("127.0.0.1")).toBe("Test device");
+            privateOk = false;                  // only the USB link, while its switch is on
+            await expect(hello("127.0.0.1")).rejects.toBeTruthy();
+            expect(await hello(usb)).toBe("Test device");
+            state.usb = false;
+            await expect(hello(usb)).rejects.toBeTruthy();
+            privateOk = true;
+
+            // Network off again: back to USB alone; Developer Mode off: none.
+            state.usb = true; state.network = false;
+            await l.follow();
+            expect(l.current()).toBe("usb");
+            expect(await hello(usb)).toBe("Test device");
+            state.on = false;
+            await l.follow();
+            expect(l.current()).toBeNull();
+            await expect(hello(usb)).rejects.toBeTruthy();
+        } finally { state.on = false; await l.follow(); }
+    });
+
+    it("on Linux a wildcard listener cannot bind beside the USB address's (why there is one listener)", async () => {
+        const wild = (await canBind("::")) ? "::" : "0.0.0.0";
+        const a = net.createServer(), b = net.createServer();
+        await new Promise<void>((r) => a.listen(0, "127.0.0.2", () => r()));
+        const p = (a.address() as Any).port;
+        const err = await new Promise<Any>((r) => { b.once("error", r); b.listen(p, wild, () => r(null)); });
+        a.close(); if (!err) b.close();
+        expect(err && err.code).toBe("EADDRINUSE");
+    });
+
     // ---- A computer no longer authorized loses its open streams ----
 
     it("a forward (the inspector, the QML debugger) ends when its computer is removed or Developer Mode goes off", async () => {
