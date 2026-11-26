@@ -301,6 +301,36 @@ print(json.dumps([ir.overlayable(p, rules) for p in json.loads(sys.argv[1])]))`,
         git("checkout", "--", "shell/native/thing.cpp");
     });
 
+    await t("the maker: every services folder with native sources needs an image", async () => {
+        // Compiled code a bundle cannot carry (section 10): a folder with C or C++ sources or a
+        // CMakeLists.txt, or one compiled into others (services/common's json.cpp). A folder added
+        // later fails here until it is in devpush-paths.json's "compiled".
+        const services = path.join(REPO, "services");
+        const native = /\.(c|cc|cpp|h|hpp)$|^CMakeLists\.txt$/;
+        const hasNative = (dir) => fs.readdirSync(dir, { withFileTypes: true }).some((e) =>
+            e.name !== "node_modules" && (e.isDirectory() ? hasNative(path.join(dir, e.name)) : native.test(e.name)));
+        const missing = fs.readdirSync(services, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && hasNative(path.join(services, e.name)))
+            .map((e) => "services/" + e.name + "/")
+            .filter((d) => !devpush.RULES.compiled.includes(d));
+        assert.deepStrictEqual(missing, [], "native services folders missing from compiled: " + missing.join(", "));
+    });
+
+    await t("the maker: changes that unpack past the device's limit are refused before signing", async () => {
+        // Files that compress well make a small bundle that unpacks too large: the device refuses
+        // those (verify, maxUnpackedBytes), so the maker must too. The limit lowered for the test.
+        const saved = devpush.RULES.maxUnpackedBytes;
+        write("shell/assets/images/zeros.bin", Buffer.alloc(64 * 1024));
+        try {
+            devpush.RULES.maxUnpackedBytes = 32 * 1024;
+            const e = await rejects(make({ only: ["/usr/share/phoenix/assets"] }), "TOO_BIG");
+            assert.match(e.message, /unpack/);
+        } finally {
+            devpush.RULES.maxUnpackedBytes = saved;
+            fs.unlinkSync(path.join(FAKE, "shell/assets/images/zeros.bin"));
+        }
+    });
+
     await t("the maker: an unstamped manifest, another product line, unbuilt apps", async () => {
         const m = JSON.parse(fs.readFileSync(IMAGE_JSON, "utf8"));
         await rejects(make({ manifest: Object.assign({}, m, { build: "unstamped" }) }), "UNSTAMPED");

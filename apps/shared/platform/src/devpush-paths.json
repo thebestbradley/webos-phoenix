@@ -29,11 +29,14 @@
     ],
     "compiled": [
         "shell/native/",
+        "services/common/",
         "services/devices/",
         "services/keyboard/",
         "services/l2cap/",
         "services/pdeath/",
         "services/pty/",
+        "services/tts/",
+        "services/wakeword/",
         "meta-phoenix/"
     ],
     "maxBundleBytes": 67108864,

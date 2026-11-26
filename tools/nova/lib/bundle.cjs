@@ -235,6 +235,14 @@ async function makeSystemBundle(opts) {
     const problems = devpush.checkManifest(m);
     if (problems.length) throw fail("BAD_BUNDLE", "The bundle would not be valid: " + problems[0], { problems });
 
+    // What the device refuses unpacked (devpush.js, maxUnpackedBytes) is refused here too, before
+    // anything is signed: files that compress well can make a small bundle that unpacks too large.
+    const unpacked = data.reduce((n, f) => n + f.data.length, 0);
+    if (unpacked > RULES.maxUnpackedBytes) {
+        throw fail("TOO_BIG", "The changes unpack to " + unpacked + " bytes; the most a device takes is " +
+                   RULES.maxUnpackedBytes + " (256 MB). Push fewer parts (--only)");
+    }
+
     const bytes = await writeBundle(m, data);
     if (bytes.length > RULES.maxBundleBytes) {
         throw fail("TOO_BIG", "The bundle is " + bytes.length + " bytes; the most is 64 MB (" + RULES.maxBundleBytes + "). Push fewer parts (--only)");
