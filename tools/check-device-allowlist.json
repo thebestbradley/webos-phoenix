@@ -222,10 +222,6 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:no-permissions:org.webosphoenix.settings": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:no-permissions:org.webosphoenix.sharesheet": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
