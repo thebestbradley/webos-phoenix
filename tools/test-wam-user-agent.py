@@ -174,6 +174,37 @@ for SH in SHELLS:
                 if os.path.isfile(p):
                     check("Upstream-Status:" in open(p).read(), "%s has an Upstream-Status" % n)
 
+# The web inspector only in Developer Mode, and then on the loopback only
+# (conf.sh: webapp-mgr.sh.in turns --remote-debugging-port=9998 on for every
+# image, and sources conf.sh after building WAM_SWITCHES).
+UPSTREAM_SWITCHES = ("--no-sandbox --ozone-platform=wayland --remote-debugging-port=9998 "
+                     "--user-data-dir=/var/lib/wam --webos-wam")
+for SH in SHELLS:
+    with tempfile.TemporaryDirectory() as tmp:
+        flag = os.path.join(tmp, "dev-mode-enabled")
+        for devmode in (False, True):
+            if devmode:
+                open(flag, "w").close()
+            env = dict(os.environ, WAM_SWITCHES=UPSTREAM_SWITCHES, WAM_EXTRA_FLAGS="",
+                       PHOENIX_DEVMODE_FLAG=flag, PHOENIX_DEVICE_JSON=os.path.join(tmp, "none.json"),
+                       PHOENIX_UA_CLIENT_HINTS_FILE=os.path.join(tmp, "none"))
+            script = ('. %s || :\nprintf "%%s\\n" "$WAM_SWITCHES" "${phoenix_wam_switches-unset}"\n'
+                      % shlex.quote(CONF))
+            out = subprocess.run(SH + ["-c", script], env=env, capture_output=True, text=True, check=True).stdout
+            switches, leftover = out.rstrip("\n").split("\n")
+            words = switches.split()
+            what = "%s, Developer Mode %s" % (SH[0], "on" if devmode else "off")
+            check([w for w in words if not w.startswith("--remote-debugging")]
+                  == UPSTREAM_SWITCHES.replace(" --remote-debugging-port=9998", "").split(),
+                  "%s: the other switches kept, in order, got %r" % (what, switches))
+            if devmode:
+                check("--remote-debugging-port=9998" in words and "--remote-debugging-address=127.0.0.1" in words,
+                      "%s: the inspector on port 9998, loopback only, got %r" % (what, switches))
+            else:
+                check(not any(w.startswith("--remote-debugging") for w in words),
+                      "%s: no inspector port, got %r" % (what, switches))
+            check(leftover == "unset", "%s: conf.sh leaves no phoenix_wam_ names, got %r" % (what, leftover))
+
 if failures:
     print("%d failed" % len(failures))
     sys.exit(1)
