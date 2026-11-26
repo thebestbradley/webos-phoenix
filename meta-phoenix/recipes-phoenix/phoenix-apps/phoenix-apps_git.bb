@@ -81,9 +81,16 @@ PHOENIX_API_KEY ?= ""
 # website, which a notice may also link to (besides the feeds and API hosts).
 PHOENIX_NOTICES_KEY ?= ""
 PHOENIX_SITE_URL ?= ""
+# Dev push (docs/DEV-PUSH.md 9.1): the platform's dev-signing key (the
+# public half, base64 Ed25519), whose bundles devices in Developer Mode
+# take; empty: only computers paired with the device and keys it was
+# granted.
+PHOENIX_DEVPUSH_KEY ?= ""
 
 do_install() {
-    ${PYTHON} ${S}/tools/install-rootfs.py ${D}
+    # --manifest: /usr/share/phoenix/manifest.json, "unstamped" (the image
+    # stamps it with its build: phoenix-devpush.bbclass; docs/DEV-PUSH.md 8.1).
+    ${PYTHON} ${S}/tools/install-rootfs.py ${D} --manifest
     # The simulator's servers.json (this computer's servers) is replaced
     # with the image's.
     ${PYTHON} ${S}/tools/servers-json.py ${D}${sysconfdir}/palm/phoenix/servers.json \
@@ -93,7 +100,8 @@ do_install() {
         --catalog-key "${PHOENIX_CATALOG_KEY}" --catalog-root "${PHOENIX_CATALOG_ROOT_KEY}" \
         --updates-key "${PHOENIX_UPDATES_KEY}" --updates-root "${PHOENIX_UPDATES_ROOT_KEY}" \
         --drivers-key "${PHOENIX_DRIVERS_KEY}" --account-key "${PHOENIX_API_KEY}" \
-        --notices-key "${PHOENIX_NOTICES_KEY}" --site "${PHOENIX_SITE_URL}"
+        --notices-key "${PHOENIX_NOTICES_KEY}" --site "${PHOENIX_SITE_URL}" \
+        --devpush-key "${PHOENIX_DEVPUSH_KEY}"
     # OSE's audiod plays raw PCM only (no MP3, no WAV header): every system
     # sound, ringtone and app sound gets "<file>.pcm", 16-bit 44.1 kHz
     # stereo, which the shell plays (tools/sounds-to-pcm.py,
@@ -128,6 +136,7 @@ FILES:${PN} = " \
     ${datadir}/phoenix/sounds \
     ${datadir}/phoenix/product.json \
     ${datadir}/phoenix/release-notes.json \
+    ${datadir}/phoenix/manifest.json \
     ${datadir}/luna-service2 \
     ${sysconfdir}/palm \
 "

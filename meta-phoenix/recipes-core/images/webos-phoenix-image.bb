@@ -37,6 +37,12 @@ IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty
 # geometry (docs/HARDWARE.md, "Device configuration").
 IMAGE_INSTALL:append = " phoenix-device-config"
 
+# Dev push (docs/DEV-PUSH.md): novad, the developer overlay at boot and
+# their configuration; at image time the build id, Developer Mode off as
+# built and the image's manifest stamped (phoenix-devpush.bbclass).
+IMAGE_INSTALL:append = " phoenix-devmode"
+inherit phoenix-devpush
+
 # The web apps' user agent: Chrome on Android at the current Chrome stable
 # major, set in WebAppMgr at each start (/etc/wam/plugins/conf.sh;
 # docs/APP-RUNTIME.md, "The user agent").

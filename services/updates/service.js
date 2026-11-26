@@ -59,6 +59,7 @@ var methods = updates.createUpdatesService({
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
     },
     power: function () { return node.power(); },
+    overlays: { clearOthers: function () { return node.clearOtherOverlays(); } },
     luna: { call: lunaCall },
     servers: function () { return platformDevice.servers(lunaCall, function (m) { console.log("[updates] " + m); }); },
     state: {

@@ -1,0 +1,6 @@
+{
+    "usbAddress": "172.16.42.1",
+    "shellUnit": "surface-manager-daemon.service",
+    "wamUnit": "webapp-mgr.service",
+    "authorizedKeys": "/home/user/.ssh/authorized_keys"
+}

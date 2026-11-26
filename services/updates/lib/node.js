@@ -232,5 +232,34 @@ function requestBytes(req) {
     });
 }
 
-module.exports = { osRelease: osRelease, createRauc: createRauc, download: download, power: power, request: request,
+// Dev push's developer overlays (docs/DEV-PUSH.md 4.6) are kept per build
+// under /var/lib/phoenix/overlay/<BUILD_ID>, with the overlay's state.json
+// (its "build") beside them. Once the running build is good, the others go:
+// they can never be mounted on this build, and a fall back to the other slot
+// is only possible before mark-good. -> the names removed
+function clearOtherOverlays(opts) {
+    opts = opts || {};
+    var dir = opts.dir || "/var/lib/phoenix/overlay";
+    var build = opts.build !== undefined ? opts.build : osRelease(opts.osRelease).BUILD_ID;
+    var gone = [];
+    if (!build) return gone;
+    var names;
+    try { names = fs.readdirSync(dir); } catch (e) { return gone; }
+    names.forEach(function (n) {
+        var full = path.join(dir, n);
+        var st;
+        try { st = fs.lstatSync(full); } catch (e) { return; }
+        if (n === "state.json") {
+            var s = null;
+            try { s = JSON.parse(fs.readFileSync(full, "utf8")); } catch (e) { s = null; }
+            if (s && s.build && s.build !== build) { fs.rmSync(full, { force: true }); gone.push(n); }
+        } else if (st.isDirectory() && n !== build) {
+            fs.rmSync(full, { recursive: true, force: true });
+            gone.push(n);
+        }
+    });
+    return gone;
+}
+
+module.exports = { osRelease: osRelease, clearOtherOverlays: clearOtherOverlays, createRauc: createRauc, download: download, power: power, request: request,
                    requestBytes: requestBytes };

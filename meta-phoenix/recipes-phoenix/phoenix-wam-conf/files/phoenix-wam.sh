@@ -103,9 +103,9 @@ fi
 # could inspect and drive every web app, the Lock Screen's PIN entry and
 # Accounts' sign-ins included. This file is sourced after the switches are
 # built (webapp-mgr.sh.in:278-279), so it takes the port away unless
-# Developer Mode is on (Developer Mode's flag file: LuneOS's
-# org.webosports.service.devmode, DevModeAssistants.js:23-28 at 65588c2d,
-# and Phoenix's own provider to come, docs/DEV-PUSH.md 4.2). In Developer
+# Developer Mode is on (Developer Mode's flag file: OSE's
+# com.palm.service.devmode, devmode_service.js:20-27 at 94b6921, which
+# Phoenix's provider, services/devmode, keeps too). In Developer
 # Mode it listens on the device's loopback only: a computer reaches it
 # through the developer's paired connection (nova forward, SSH), never
 # straight over the network (docs/DEV-HELPER.md 9, 13).
@@ -117,7 +117,7 @@ for phoenix_wam_switch in $WAM_SWITCHES; do
         *) phoenix_wam_switches="$phoenix_wam_switches $phoenix_wam_switch" ;;
     esac
 done
-if [ -e "${PHOENIX_DEVMODE_FLAG:-/var/luna/dev-mode-enabled}" ]; then
+if [ -e "${PHOENIX_DEVMODE_FLAG:-/var/luna/preferences/devmode_enabled}" ]; then
     phoenix_wam_switches="$phoenix_wam_switches --remote-debugging-port=9998 --remote-debugging-address=127.0.0.1"
 fi
 WAM_SWITCHES=$phoenix_wam_switches

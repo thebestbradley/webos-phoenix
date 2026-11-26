@@ -21,6 +21,7 @@
         "application.launcher",
         "application.operation",
         "marketplace.management",
+        "phoenix.devmode.query",
         "systemmanager.query"
     ]
 }

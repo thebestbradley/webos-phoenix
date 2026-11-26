@@ -52,7 +52,7 @@ function makeRoot(opts) {
         files: Object.keys(IMAGE).filter((p) => !devpush.pathProblem(p)).sort().map((p) => ({
             path: p, size: Buffer.byteLength(IMAGE[p]), sha256: crypto.createHash("sha256").update(IMAGE[p]).digest("hex"), mode: "0644" })),
     }));
-    if (opts.devMode !== false) W("/var/luna/dev-mode-enabled", "");
+    if (opts.devMode !== false) W("/var/luna/preferences/devmode_enabled", "");
     fs.mkdirSync(path.join(root, "home/user/.ssh"), { recursive: true });
     return { root, master, read: (p) => { try { return fs.readFileSync(path.join(root, p), "utf8"); } catch (e) { return null; } },
              write: W, exists: (p) => fs.existsSync(path.join(root, p)) };

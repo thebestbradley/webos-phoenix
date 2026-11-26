@@ -1,3 +1,3 @@
 {
-    "org.webosphoenix.hardware": ["activity.operation", "notification.operation", "phoenix.ongoing"]
+    "org.webosphoenix.hardware": ["activity.operation", "notification.operation", "phoenix.ongoing", "phoenix.devmode.query"]
 }

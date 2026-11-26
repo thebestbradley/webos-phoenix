@@ -16,6 +16,7 @@
         "systemsettings.query",
         "systemsettings.management",
         "vpn.management",
-        "telephony.query"
+        "telephony.query",
+        "phoenix.devmode.query"
     ]
 }

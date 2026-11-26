@@ -10,7 +10,9 @@ dev bundle format and its checks, the image's manifest, the bundle maker
 and `nova package`; then `novad` / `org.webosphoenix.nova` over a fake
 root, pairing, the `nova` device commands, the simulator's overlay and
 Settings' Pushed Changes; section 12, "P1 as built" and "P2 as built");
-P3 onwards still a plan. 1.0
+P3's image side built (27 November 2026: Developer Mode's provider, the
+units, the manifest stamped at image time; "P3 as built"), to be checked
+on the VM image (P3v); P3b and P4 onwards still a plan. 1.0
 (this repository) is the core; 2.0 (phoenix-ember-glass-ui) gets it by
 merging 1.0.
 
@@ -177,7 +179,7 @@ and phoenix-ember-glass-ui `e11c38f1`:
   `com.webos.service.devmode` `getDevMode` / `setDevMode`; Settings,
   `services/account/accountservice.js:605` and
   `services/hardware/hardwareservice.js:156` read it. **Phoenix's own image
-  has no provider for it**: `com.webos.service.devmode` is a C1 gap in
+  had no provider for it** (P3 adds `services/devmode`; "P3 as built"): `com.webos.service.devmode` is a C1 gap in
   phoenix-ember-glass-ui `meta-phoenix/conf/image-contract.json`, and
   LuneOS's `org.webosports.service.devmode` comes with
   `packagegroup-luneos-extended` (meta-webos-ports `9abe603b`,
@@ -288,7 +290,8 @@ early: after `/var` is mounted and before the Luna hub, WebAppMgr and
 luna-surfacemanager start (`Before=` on their units, which local confirms
 on the image), and only when:
 
-1. Developer Mode is on (the provider's flag file, read directly: the bus
+1. Developer Mode is on (the provider's flag file,
+   `/var/luna/preferences/devmode_enabled`, OSE's: read directly, the bus
    is not up yet);
 2. `state.json`'s build equals `/etc/os-release` `BUILD_ID`;
 3. the overlay holds something.
@@ -961,7 +964,8 @@ deploys the server; the owner decides (section 13).
 | **P0** | The owner's answers to section 13 | — | owner | this plan |
 | **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests. **Done** 26 November 2026 (below) | M | cloud | P0 names |
 | **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs`. **Done** 26 November 2026 (below) | L | cloud | P1 |
-| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1); the Legacy novacom switch, section 9.6); kernel configuration for the USB gadget | M | cloud | P2 |
+| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1). **Built** ("P3 as built") | M | cloud | P2 |
+| **P3b** | The rest of P3: the USB NCM gadget (configfs, made while "USB debugging" is on) and its kernel configuration; the Legacy novacom switch (9.6); the `user` account's sudo and SSH in Developer Mode (TERMINAL.md); an app rescan on the device; the Luna role for `nova luna-send` | M | cloud | P3 |
 | **P3v** | Build the VM image with P3, verify the list in section 11, report unit names and anything that differs | M | local | P3 |
 | **P4** | Phoenix-Web-Services: grants, the `devpush` scope, the endpoints, storage and expiry, manifests per build; the device's polling and notification; `nova send` | M | cloud (code on a branch), codex or local (staging deploy after review) | P2, owner's yes to Q3 and Q9 |
 | **P4v** | End to end: a bundle from a second account to the owner's VM through staging, Apply, Revert | S | local | P3v, P4 deployed |
@@ -1106,10 +1110,11 @@ computer able to test only the code it committed to.
   WebAppMgr and luna-surfacemanager (it clears after Revert to Image,
   drops what reverts left, mounts with the image's copy bind-mounted at
   `/run/phoenix/overlay/lower/<mount>` and the refused paths bound back).
-- Phoenix's Developer Mode provider keeping `/var/luna/dev-mode-enabled`.
+- Phoenix's Developer Mode provider keeping its flag (built in P3 over
+  OSE's flag, `/var/luna/preferences/devmode_enabled`).
 - `/etc/phoenix/nova.json`: `usbAddress` (the CDC NCM gadget's address;
   172.16.42.1 assumed), `shellUnit` and `wamUnit` (the real unit names;
-  `luna-surfacemanager.service` and `webapp-mgr.service` assumed),
+  OSE's `surface-manager-daemon.service` and `webapp-mgr.service`),
   `authorizedKeys` (the `user` account's, for `nova term`).
 - The image's manifest (8.1), a pinned `"devpush": {"key"}` in
   servers.json, `ls-control` and `com.palm.configurator` on the image, a
@@ -1117,6 +1122,86 @@ computer able to test only the code it committed to.
   device), and a Luna role for `luna-send -a org.webosphoenix.nova.developer`
   (nova luna-send).
 - `com.palm.update` deleting overlays of other builds at mark-good (4.6).
+
+### P3 as built (27 November 2026)
+
+What OSE's own layers turned out to have, read from meta-webosose
+(`webosose/meta-webosose`) and `webosose/com.palm.service.devmode` at
+`94b6921`, changed three assumptions:
+
+- **OSE's Developer Mode service is `com.palm.service.devmode`**, not
+  `com.webos.service.devmode` (PRE-IMAGE-CHECKLIST C1 said so): `getDevMode`
+  answers `{enabled}`, `setDevMode {enabled}` writes or removes
+  `/var/luna/preferences/devmode_enabled` (and `dc0`...`dc9` beside it) and
+  runs `reboot` (`devmode_service.js:16-149`); its groups are
+  `devmode.query` (dev) and `devmode.management` (oem). **And OSE images
+  start in Developer Mode**: its recipe writes that flag into the image
+  (`com.palm.service.devmode.bb`, `do_install:append:webos`).
+- **There is no `BUILD_ID` in OSE's `/etc/os-release`** (nor LuneOS's),
+  which novad's build tie and the updates service's "no older build" read.
+- **The shell's unit on OSE is `surface-manager-daemon.service`**
+  (`luna-surfacemanager.bb:30`; `surface-manager.service` starts it), not
+  `luna-surfacemanager.service`; WebAppMgr's is `webapp-mgr.service`, the
+  hub's `ls-hubd.service`.
+
+So P3 is:
+
+- **`services/devmode`: `com.webos.service.devmode`**, Phoenix's provider
+  under the name Settings, the shell and Phoenix's services already call,
+  with Phoenix's API (`getDevMode {subscribe}` -> `{status}`, `setDevMode
+  {status}`; OSE's `{enabled}` is understood too) **over OSE's flag file**,
+  so OSE's service, OSE's boot script (`devmode.sh`), novad, the overlay's
+  boot step and WebAppMgr's start script (`phoenix-wam.sh`) all read one
+  file. As OSE's does, a change writes or removes the flag and the `dc`
+  markers, answers, then restarts the device (`systemctl reboot`). Its own
+  groups, `phoenix.devmode.query` / `phoenix.devmode.management`, beside
+  OSE's; the services and apps that read it have the query group. Tests:
+  `services/devmode/devmode.test.ts`.
+- **One flag everywhere**: novad (`DEVMODE_FLAG`), `sim.js`,
+  `phoenix-wam.sh` and the tests moved from LuneOS's
+  `/var/luna/dev-mode-enabled` to `/var/luna/preferences/devmode_enabled`.
+  On LuneOS builds, LuneOS's `org.webosports.service.devmode` keeps its own
+  flag, which Phoenix does not read.
+- **`meta-phoenix/recipes-phoenix/phoenix-devmode`**: `novad.service`
+  (`node .../org.webosphoenix.nova/service.js`, root, `Requires=` and
+  `After=ls-hubd.service`, restarted on failure), `phoenix-overlay.service`
+  (`node .../boot.js`, `Type=oneshot`, `DefaultDependencies=no`, after
+  `local-fs.target`, `Before=` the hub, WebAppMgr and the shell's units,
+  only when `/var/lib/phoenix/overlay/state.json` exists) and
+  `/etc/phoenix/nova.json` (OSE's unit names, `usbAddress` 172.16.42.1,
+  the `user` account's `authorized_keys`). novad's defaults are OSE's
+  names too.
+- **At image time, `phoenix-devpush.bbclass`** (a
+  `ROOTFS_POSTPROCESS_COMMAND` of `webos-phoenix-image`, with
+  `meta-phoenix/lib/phoenix/devpush.py`, which `install-rootfs.py --stamp`
+  now imports, so there is one copy): `BUILD_ID` written into the image's
+  os-release (the time the rootfs was put together, `${DATETIME}`, or
+  `PHOENIX_BUILD_ID`; a rootfs that is not rebuilt keeps its id), then
+  **Developer Mode off as built** (OSE's flag and markers removed;
+  `PHOENIX_DEVMODE_ON = "1"` keeps it, for a test image), then the manifest
+  stamped with that build. phoenix-apps runs `install-rootfs.py --manifest`
+  and packages `/usr/share/phoenix/manifest.json`.
+- **`PHOENIX_DEVPUSH_KEY`** (phoenix-apps) pins the platform's
+  dev-signing key: `servers.json` `"devpush": {"key"}` (`servers-json.py
+  --devpush-key`, the schema).
+- **`com.palm.update`** removes the overlays of other builds (and a
+  `state.json` made for one) once the running build is marked good, or at
+  start where there is no RAUC (no slot to fall back to)
+  (`services/updates/lib/node.js` `clearOtherOverlays`).
+- The device checks know `--manifest` writes the manifest; two allowlist
+  entries (`/etc/phoenix/nova.json`, the manifest) and the C1 entry for
+  `com.webos.service.devmode` are gone.
+
+**For P3v (local, on the VM image):** `ls /usr/lib/systemd/system/novad.service
+phoenix-overlay.service` and both enabled; `grep BUILD_ID /etc/os-release`;
+`/usr/share/phoenix/manifest.json` has that build and no "unstamped";
+`/var/luna/preferences/devmode_enabled` absent on a fresh image, and
+`curl 127.0.0.1:9998/json` refused (the inspector, #74); Settings >
+Developer Mode on (restart), then `luna-send -n 1
+luna://com.webos.service.devmode/getDevMode '{}'` says enabled, novad
+listens (`ss -ltn | grep 6965`), `nova pair` and a push from a Mac over the
+LAN; Revert to Image; the unit names on LuneOS's build if it is the one
+used. Anything that differs goes on the board.
 
 ## 13. Decisions (the owner, 26 November 2026)
 

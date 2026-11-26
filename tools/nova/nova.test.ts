@@ -127,7 +127,7 @@ describe("nova with a device", () => {
     it("restart, rescan, luna-send and log", async () => {
         await pairIt();
         expect((await run("restart", "shell")).out).toBe("restarted shell");
-        expect(sys.calls).toContain("systemctl restart luna-surfacemanager.service");
+        expect(sys.calls).toContain("systemctl restart surface-manager-daemon.service");
         expect((await run("restart", "app", "org.webosphoenix.settings")).out).toBe("restarted app:org.webosphoenix.settings");
         expect((await run("restart", "everything")).code).toBe(2);
         expect((await run("rescan")).out).toBe("Rescanned the apps");
@@ -192,8 +192,8 @@ describe("nova -d sim", () => {
         fs.cpSync(image, work, { recursive: true });
         fs.writeFileSync(path.join(work, "shell/qml/Phoenix/Shell/Card.qml"), "Item { id: pushed }\n");
         fs.writeFileSync(path.join(work, "apps/demo/app.js"), "// the app, changed\n");
-        fs.mkdirSync(path.join(data, "var/luna"), { recursive: true });
-        fs.writeFileSync(path.join(data, "var/luna/dev-mode-enabled"), "");
+        fs.mkdirSync(path.join(data, "var/luna/preferences"), { recursive: true });
+        fs.writeFileSync(path.join(data, "var/luna/preferences/devmode_enabled"), "");
         let s = await sim.start({ data, repo: image, log: () => {} });
         try {
             const { code } = s.core.pairStart();
