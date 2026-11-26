@@ -112,6 +112,9 @@ function failed(e) {
 //   notify?(text)     a notification ("Developer changes from ...")
 //   config?           {shellUnit, wamUnit, authorizedKeys (the `user`
 //                     account's ~/.ssh/authorized_keys, nova term)}
+//   The simulator's (sim.js): build, manifest() (the image's manifest),
+//   restart(what) -> Promise (in place of the device's restart map's
+//   commands), readFile(path) -> Buffer
 //   now?() -> Date; log?(text); random?(n) -> Buffer
 function createNova(deps) {
     var root = deps.root || "/";
@@ -154,7 +157,7 @@ function createNova(deps) {
         } catch (e) { /* none */ }
         return out;
     }
-    function imageManifest() { return readJson(MANIFEST, null); }
+    function imageManifest() { return deps.manifest ? deps.manifest() : readJson(MANIFEST, null); }
     // The running image: {build, product (line), compatible, id}.
     function image() {
         var m = imageManifest() || {};
@@ -416,6 +419,7 @@ function createNova(deps) {
         });
     }
     function restartOne(r) {
+        if (deps.restart) return deps.restart(r);       // the simulator's own
         var kind = r.split(":")[0], id = r.slice(kind.length + 1);
         switch (kind) {
         case "hub": return run("ls-control", ["scan-services"]);
@@ -808,6 +812,7 @@ function createNova(deps) {
             if (typeof p !== "string" || !devpush.wellFormed(p) || !devpush.mountOf(p)) {
                 throw fail("BAD_PARAMS", "Only files under " + devpush.RULES.mounts.join(", ") + " can be read");
             }
+            if (deps.readFile) return deps.readFile(p);
             try { return fs.readFileSync(P(p)); } catch (e) { throw fail("NOT_FOUND", "No file " + p); }
         },
         changed: changed

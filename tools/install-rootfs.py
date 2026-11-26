@@ -201,7 +201,9 @@ def shared_packages():
 
 def npm_package_dir(name, start):
     """Where Node would find npm package `name` from folder `start` (its
-    node_modules, then each folder up), or None."""
+    node_modules, then each folder up), or None. The system's own services
+    (services/*) are outside the apps' npm workspace: their packages are
+    apps/node_modules', as their tests find them (NODE_PATH)."""
     d = os.path.realpath(start)
     while True:
         cand = os.path.join(d, "node_modules", name)
@@ -209,8 +211,10 @@ def npm_package_dir(name, start):
             return os.path.realpath(cand)
         up = os.path.dirname(d)
         if up == d:
-            return None
+            break
         d = up
+    cand = os.path.join(REPO, "apps", "node_modules", name)
+    return os.path.realpath(cand) if os.path.isfile(os.path.join(cand, "package.json")) else None
 
 
 def plan_npm_package(name, start, dest, plan, seen):

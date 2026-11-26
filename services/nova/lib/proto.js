@@ -67,6 +67,16 @@ function frames(socket) {
             if (kind === "J") {
                 var msg;
                 try { msg = JSON.parse(body.toString("utf8")); } catch (e) { return shut(fail("PROTOCOL", "a message that is not JSON")); }
+                // A forward's answer: what follows it is the forwarded
+                // stream, not frames (the far end may speak at once, as SSH
+                // does, in the same packet).
+                if (msg && msg.stream === true) {
+                    detached = true;
+                    socket.removeListener("data", onData);
+                    socket.pause();     // until the stream is piped
+                    deliver({ json: msg });
+                    return;
+                }
                 deliver({ json: msg });
             } else deliver({ bytes: Buffer.from(body) });
         }
@@ -99,6 +109,7 @@ function frames(socket) {
         detach: function () {
             detached = true;
             socket.removeListener("data", onData);
+            socket.pause();
             var rest = buf;
             buf = Buffer.alloc(0);
             return rest;
@@ -239,7 +250,7 @@ function serve(nova, opts, socket, clientKey) {
                         var local = opts.connect(port);
                         local.once("error", function (e) { error(fail("NOT_LISTENING", "Nothing listens on port " + port + " on the device (" + e.message + ")")); resolve("done"); });
                         local.once("connect", function () {
-                            reply({});
+                            reply({ stream: true });
                             var rest = f.detach();
                             if (rest.length) local.write(rest);
                             socket.pipe(local);

@@ -20,9 +20,11 @@
 // image's copy.
 //
 // The simulator (createDirectOverlay): a folder laid out like the device's
-// root that phoenix-sim and tools/serve-rootfs.py read before the
-// checkout's files (--developer-overlay); a removed file is a ".wh.<name>"
-// file beside where it was (the AUFS convention), which they honour.
+// root, <data>/var/lib/phoenix/overlay/sim/upper, that phoenix-sim and
+// tools/serve-rootfs.py read before the checkout's files while the marker
+// beside it, "active", is there (sim.js keeps it as the boot script decides
+// mounts); a removed file is a ".wh.<name>" file beside where it was (the
+// AUFS convention), which they honour.
 //
 // Every path given to a backend is a device path the bundle rules allow
 // (devpush.js pathProblem is null); root is "/" on a device and a temporary
@@ -220,7 +222,11 @@ function createDirectOverlay(opts) {
         remove: function (p) { unlinkIfThere(F(p)); writeAtomic(WH(p), "", 0o644); return Promise.resolve(); },
         image: function (p) { return opts.image ? opts.image(p) : null; },
         revert: function (p) { unlinkIfThere(F(p)); unlinkIfThere(WH(p)); return Promise.resolve(); },
-        mount: function () { return Promise.resolve([]); }
+        // "Mounted": the marker the simulator reads the folder by (opts.active).
+        mount: function () {
+            if (opts.active && !exists(opts.active)) writeAtomic(opts.active, "", 0o644);
+            return Promise.resolve([]);
+        }
     };
 }
 
