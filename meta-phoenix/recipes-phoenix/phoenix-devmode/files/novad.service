@@ -14,6 +14,10 @@ After=ls-hubd.service phoenix-overlay.service
 
 [Service]
 Type=simple
+# webos-service (nodejs-module-webos-service) is in /usr/lib/node_modules, which Node
+# does not search; run-js-service sets this for the services it starts, but novad is
+# started here (Revision 7, N15: "Cannot find module 'webos-service'", a restart every 5 s).
+Environment=NODE_PATH=/usr/lib/node_modules
 ExecStart=/usr/bin/node /usr/palm/services/org.webosphoenix.nova/service.js
 Restart=on-failure
 RestartSec=5
