@@ -13,7 +13,7 @@
 //   verifyBundle(...)       the device's checks (devpush.js verify), here
 //
 // The format and its checks are @phoenix/platform's devpush.js, shared with
-// the device; the .ipk reader and writer the Marketplace's lib/ipk.js.
+// the device; the .ipk reader and writer @phoenix/platform's ipk.js.
 
 "use strict";
 
@@ -26,7 +26,7 @@ const { spawnSync } = require("child_process");
 
 const REPO = path.resolve(__dirname, "../../..");
 const devpush = require(path.join(REPO, "apps/shared/platform/src/devpush.js"));
-const ipkLib = require(path.join(REPO, "apps/marketplace/service/lib/ipk.js"));
+const ipkLib = require(path.join(REPO, "apps/shared/platform/src/ipk.js"));
 
 const RULES = devpush.RULES;
 

@@ -13,7 +13,9 @@
 // "Developer Mode Enabler"): the devModeUnlocked system preference. While
 // Developer Mode is off, Hide Developer Mode puts it out of sight again.
 // The developer apps (Notification Lab, the framework demos, Terminal)
-// show only while it is on (docs/APP-RUNTIME.md "Developer apps").
+// show only while it is on (docs/APP-RUNTIME.md "Developer apps"). While it
+// is on, dev push's groups follow (DevPush.tsx: Pushed Changes, Pair a
+// Computer, Paired Computers, Trusted Developers; docs/DEV-PUSH.md).
 // Services:
 //   com.webos.service.devmode getDevMode {subscribe} / setDevMode {status}
 //   com.webos.service.systemservice getPreferences / setPreferences {devModeUnlocked}
@@ -25,6 +27,7 @@ import { useEffect, useState } from "react";
 import { apps, call, deviceLock, devMode, LunaError, phoenixAccount, subscribe, type LockMode, type PlatformServers } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, TextField, ToggleButton } from "@phoenix/ui";
+import { DevPushGroups } from "./DevPush";
 
 export function DevModePage() {
     const on = useLuna<boolean>((cb, err) => devMode.watch(cb, err), []).value;
@@ -69,6 +72,7 @@ export function DevModePage() {
             </Note>
             {on && <DebugOverlays />}
             {on && <PlatformServersGroup />}
+            {on && <DevPushGroups />}
             {on === false && (
                 <>
                     <Button data-testid="devmode-hide" onClick={() => void hide()}>Hide Developer Mode</Button>

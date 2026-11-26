@@ -1713,7 +1713,7 @@ python3 tools/install-rootfs.py out/rootfs --list
 
 ## Developer tools for a device (nova)
 
-`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode: dev bundles of changed system files now, pairing and pushing next (docs/DEV-PUSH.md, P2). Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use.
+`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode (docs/DEV-PUSH.md): it pairs with a device, pushes changed system files into its developer overlay and restarts only what changed, and makes dev bundles. Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use; the devices it is paired with are in `~/.config/nova/devices.json`. Every device command takes `-d NAME|usb|sim[:INSTANCE]|ADDRESS` (without it: the only device paired, else the last used).
 
 ### Run nova
 
@@ -1737,11 +1737,145 @@ This computer's public key and fingerprint:
 ./phoenix nova key
 ```
 
+### Pair with a device
+
+On the device: Settings > Developer Mode > Pair a Computer shows a six-digit code and its key; type the code here, and check the key nova prints is the one shown. Five wrong codes end the pairing; start it again on the device.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:64-68 · tools/nova/lib/remote.cjs · docs/DEV-PUSH.md 6.4`
+
+A device on the network (Developer Mode > Push over network on):
+
+```sh
+./phoenix nova pair 192.168.1.23
+```
+
+Over the USB cable (USB debugging on):
+
+```sh
+./phoenix nova pair -d usb
+```
+
+The simulator (`./phoenix run`; its Settings shows the code):
+
+```sh
+./phoenix nova pair -d sim --code 123456
+```
+
+The paired devices, and whether they answer:
+
+```sh
+./phoenix nova devices
+```
+
+```sh
+./phoenix nova unpair sim
+```
+
+### Push changes to a device
+
+A dev bundle of what this checkout changes against the device's image (its manifest), applied at once; the device restarts only what changed (the shell, WebAppMgr, one app or service). Replaces what an earlier push put there; --add adds to it. Build the apps first.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:69-79 · docs/DEV-PUSH.md 4.4-4.6, 6.1`
+
+Everything that differs:
+
+```sh
+./phoenix nova push
+```
+
+Only those (repository or device paths):
+
+```sh
+./phoenix nova push shell/qml apps/settings
+```
+
+Say what it would send:
+
+```sh
+./phoenix nova push --dry-run
+```
+
+To the running simulator:
+
+```sh
+./phoenix nova push -d sim
+```
+
+One file (Palm's novacom put):
+
+```sh
+./phoenix nova put /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml CardView.qml
+```
+
+One file from the device:
+
+```sh
+./phoenix nova get /usr/palm/applications/org.webosphoenix.settings/appinfo.json
+```
+
+What the overlay holds, from whom:
+
+```sh
+./phoenix nova status
+```
+
+One file back to the image's:
+
+```sh
+./phoenix nova revert /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml
+```
+
+Revert to Image: the device restarts without any pushed change:
+
+```sh
+./phoenix nova revert
+```
+
+### Restart, log and look inside a device
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:77-85 · docs/DEV-HELPER.md 9.1`
+
+Or wam, app ID, service ID:
+
+```sh
+./phoenix nova restart shell
+```
+
+Palm's rescan: new or changed apps:
+
+```sh
+./phoenix nova rescan
+```
+
+The journal, followed:
+
+```sh
+./phoenix nova log -f org.webosphoenix.settings
+```
+
+One Luna call:
+
+```sh
+./phoenix nova luna-send luna://com.webos.service.systemservice/getSystemTime '{}'
+```
+
+The Web Inspector at 127.0.0.1:9998 (also 3768, the QML debugger; 22, SSH):
+
+```sh
+./phoenix nova forward 9998
+```
+
+SSH as `user` with the paired key (Developer Mode's SSH):
+
+```sh
+./phoenix nova term
+```
+
 ### Make a dev bundle
 
-The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.
+The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`, for the server channel. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:28-49 · docs/DEV-PUSH.md section 8`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:39-53 · docs/DEV-PUSH.md section 8`
 
 Devpush-<build>-<id>.ipk:
 
@@ -1771,7 +1905,7 @@ The device's checks, here:
 
 Palm's palm-package: `<id>_<version>_all.ipk`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:28-29`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:36-37`
 
 ```sh
 ./phoenix nova package apps/settings/dist -o out

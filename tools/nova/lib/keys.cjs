@@ -65,4 +65,37 @@ function signDetached(bytes, key) {
     return crypto.sign(null, bytes, key.privateKey).toString("base64") + "\n";
 }
 
-module.exports = { configDir, defaultKeyFile, load, signDetached, fingerprint };
+// The same key for TLS (lib/proto.js of org.webosphoenix.nova): with the
+// self-signed certificate that carries it there.
+function forTls(key) {
+    const tlsKeys = require("../../../services/nova/lib/keys.js");
+    return tlsKeys.fromPem(key.privateKey.export({ type: "pkcs8", format: "pem" }), "nova");
+}
+
+// The key in OpenSSH's own format ("openssh-key-v1", unencrypted), for
+// nova term's ssh: written beside the key as key.ssh, readable by its
+// owner only. -> its path
+function sshKeyFile(key) {
+    const out = key.file + ".ssh";
+    const der = key.privateKey.export({ type: "pkcs8", format: "der" });
+    const seed = der.subarray(der.length - 32);
+    const pub = Buffer.from(key.publicKey, "base64");
+    const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32BE(n); return b; };
+    const str = (b) => Buffer.concat([u32(b.length), Buffer.from(b)]);
+    const type = Buffer.from("ssh-ed25519");
+    const pubBlob = Buffer.concat([str(type), str(pub)]);
+    const check = crypto.randomBytes(4);
+    let priv = Buffer.concat([check, check, str(type), str(pub), str(Buffer.concat([seed, pub])), str(Buffer.from("nova"))]);
+    const pad = [];
+    for (let i = 1; (priv.length + pad.length) % 8 !== 0; i++) pad.push(i);
+    priv = Buffer.concat([priv, Buffer.from(pad)]);
+    const body = Buffer.concat([Buffer.from("openssh-key-v1\0"), str(Buffer.from("none")), str(Buffer.from("none")), str(Buffer.alloc(0)),
+                                u32(1), str(pubBlob), str(priv)]);
+    const pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n" + body.toString("base64").replace(/(.{70})/g, "$1\n").replace(/\n?$/, "\n") +
+                "-----END OPENSSH PRIVATE KEY-----\n";
+    fs.writeFileSync(out, pem, { mode: 0o600 });
+    fs.chmodSync(out, 0o600);
+    return out;
+}
+
+module.exports = { configDir, defaultKeyFile, load, signDetached, fingerprint, forTls, sshKeyFile };

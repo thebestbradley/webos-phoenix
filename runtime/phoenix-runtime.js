@@ -8150,6 +8150,7 @@
                 if (p.status !== "enabled" && p.status !== "disabled")
                     return reply(fail(-1, "status: \"enabled\" or \"disabled\""));
                 store.set("devMode", p.status === "enabled");
+                if (runtime.novaDevModeChanged) runtime.novaDevModeChanged();
                 reply(ok({ status: devMode() }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
                 devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
@@ -16994,6 +16995,105 @@
                 else host.postToHost("reboot", { reason: p.reason || "" });
             }, 0);
         };
+    })();
+
+    // ================================================================================
+    // Dev push (org.webosphoenix.nova; services/nova, docs/DEV-PUSH.md)
+    // ================================================================================
+    //
+    // The simulator runs the device's novad over its own data folder
+    // (services/nova/sim.js: phoenix-sim starts it; the tests start it for
+    // tools/serve-rootfs.py), so `nova pair -d sim` and `nova push -d sim`
+    // work as with a device. This is its Luna side for the pages (Settings >
+    // Developer Mode: Pushed Changes, Pair a Computer, Trusted Developers):
+    // each call goes to sim.js's HTTP server on 127.0.0.1, whose port and
+    // token it writes to /var/luna/nova/sim.json, through the host's proxy
+    // (proxiedRequest). Developer Mode is the simulator's (the store's
+    // "devMode"): sim.js is told it when it changes and before each call,
+    // as a device's novad reads the provider's flag file. getStatus {subscribe} is polled
+    // while subscribed. Apply asks the simulated passcode here, as novad
+    // asks com.palm.systemmanager on a device. Without sim.js (no Node.js),
+    // getStatus says {available: false} and the rest fail NOT_RUNNING.
+    (function developerPush() {
+        var METHODS = ["getStatus", "listWaiting", "apply", "decline", "revert", "restartNow", "pairStart", "pairCancel", "listKeys",
+                       "removeKey", "addGrant", "setRevocations", "setOptions", "restart", "rescan"];
+        var bridge = null, synced = null;
+        function readBridge() {
+            var text = null;
+            try { text = PalmSystem.getResource("/var/luna/nova/sim.json"); } catch (e) { text = null; }
+            try { bridge = text ? JSON.parse(text) : null; } catch (e) { bridge = null; }
+            return bridge;
+        }
+        function post(path, body) {
+            return proxiedRequest({ method: "POST", url: "http://127.0.0.1:" + bridge.lunaPort + path,
+                                    headers: { "Content-Type": "application/json", "X-Nova-Token": bridge.token }, body: toJson(body || {}) })
+                .then(function (r) {
+                    if (r.status !== 200) throw new Error("novad answered " + r.status);
+                    return JSON.parse(r.body);
+                });
+        }
+        function call(method, params) {
+            if (!(bridge || readBridge())) return Promise.resolve(null);
+            var on = !!store.get("devMode", false);
+            var sync = synced === on ? Promise.resolve() : post("/sim/devmode", { on: on }).then(function () { synced = on; });
+            return sync.then(function () { return post("/luna/" + method, params); }).then(null, function () {
+                // sim.js restarted (a new port): read where it is now, once.
+                synced = null;
+                if (!readBridge()) return null;
+                return post("/sim/devmode", { on: on }).then(function () { synced = on; return post("/luna/" + method, params); })
+                    .then(null, function () { return null; });
+            });
+        }
+        // Told at once (setDevMode), not at the next call: Settings stops
+        // asking once Developer Mode is off, and a paired computer must not
+        // go on pushing, nor the overlay load at the next start.
+        runtime.novaDevModeChanged = function () {
+            synced = null;
+            if (!(bridge || readBridge())) return;
+            var on = !!store.get("devMode", false);
+            post("/sim/devmode", { on: on }).then(null, function () {
+                // sim.js restarted (a new port): read where it is now, once.
+                if (!readBridge()) throw new Error("gone");
+                return post("/sim/devmode", { on: on });
+            }).then(function () { if (!!store.get("devMode", false) === on) synced = on; }, function () { /* told at the next call */ });
+        };
+        var NOT_RUNNING = "The simulator's developer tools are not running (services/nova/sim.js needs Node.js)";
+        var methods = {};
+        METHODS.forEach(function (name) {
+            methods["/" + name] = function (p, reply, ctx) {
+                var params = clone(p || {});
+                var subscribe = name === "getStatus" && params.subscribe;
+                delete params.subscribe;
+                var check = name === "apply"
+                    ? new Promise(function (resolve) {
+                        dispatch("luna://com.palm.systemmanager/matchDevicePasscode", { passCode: String(params.passCode || "") },
+                                 function (r) { resolve(!!(r && r.succeeded)); }, { cancelled: function () { return false; } });
+                    }) : Promise.resolve(true);
+                check.then(function (good) {
+                    if (!good) return fail("BAD_PASSCODE", "That passcode is not correct");
+                    return call(name, params).then(function (r) {
+                        if (r) return r;
+                        return name === "getStatus" ? ok({ available: false, devMode: !!store.get("devMode", false), files: [], removed: [],
+                                                           bundles: [], waiting: 0, paired: 0, pairing: null, options: {} })
+                                                    : fail("NOT_RUNNING", NOT_RUNNING);
+                    });
+                }).then(function (r) {
+                    if (r.returnValue && subscribe) r.subscribed = true;
+                    reply(r);
+                    if (!subscribe || !r.returnValue) return;
+                    var last = toJson(r);
+                    var timer = setInterval(function () {
+                        if (ctx.cancelled()) { clearInterval(timer); return; }
+                        call("getStatus", {}).then(function (x) {
+                            if (!x || ctx.cancelled()) return;
+                            var t = toJson(x);
+                            if (t !== last) { last = t; reply(x); }
+                        });
+                    }, 1500);
+                });
+            };
+        });
+        register(["org.webosphoenix.nova"], methods);
     })();
 
     // ================================================================================

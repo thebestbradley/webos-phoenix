@@ -342,6 +342,10 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-method:com.palm.applicationManager/rescan": {
+  "owner": "dev push P3: Palm's rescan (docs/DEV-PUSH.md 4.5) has no provider on the image yet (Phoenix's com.palm.applicationManager lacks it on a device; OSE's SAM reads the apps at start); novad then says \"Restart the device to finish\"",
+  "row": "DEV-PUSH P3"
+ },
  "luna:unknown-method:com.palm.systemmanager/enableFpsCounter": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
@@ -733,5 +737,21 @@
  "simrefs:loopback:services/account:127.0.0.1": {
   "owner": "intended: the simulator's servers.json (this computer's servers); meta-phoenix writes an image's own over it (tools/servers-json.py, docs/PLATFORM-CLIENT.md)",
   "row": "Q1"
+ },
+ "simrefs:loopback:services/nova:0.0.0.0": {
+  "owner": "intended: novad's network listener binds every address, 0.0.0.0 where the kernel has no IPv6 for \"::\" (services/nova/lib/listeners.js, docs/DEV-PUSH.md 6.2)",
+  "row": "G5"
+ },
+ "simrefs:loopback:services/nova:127.0.0.1": {
+  "owner": "intended: the simulator's novad (sim.js) is this computer's, and nova forward reaches ports on the device's own loopback (docs/DEV-PUSH.md, DEV-HELPER.md 8)",
+  "row": "G5"
+ },
+ "image:missing-path:/etc/phoenix/nova.json": {
+  "owner": "meta-phoenix, dev push P3 (docs/DEV-PUSH.md 12)",
+  "row": "G5"
+ },
+ "image:missing-path:/usr/share/phoenix/manifest.json": {
+  "owner": "meta-phoenix, dev push P3: tools/install-rootfs.py --manifest / --stamp at image time (docs/DEV-PUSH.md 8, 12)",
+  "row": "G5"
  }
 }

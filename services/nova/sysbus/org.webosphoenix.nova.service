@@ -1,0 +1,11 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# novad is long-running (it listens for nova on port 6965 while Developer
+# Mode is on), started by its own unit, novad.service (P3: docs/DEV-PUSH.md
+# 12), as root; the hub knows it as a static service.
+
+[D-BUS Service]
+Name=org.webosphoenix.nova
+Exec=/usr/bin/node /usr/palm/services/org.webosphoenix.nova/service.js
+Type=static

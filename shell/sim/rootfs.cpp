@@ -713,11 +713,32 @@ QString Rootfs::urlFor(const QString &devicePath)
     return scheme() + QStringLiteral("://rootfs") + devicePath;
 }
 
+QString Rootfs::developerOverlayDir() const
+{
+    return m_dataDir.isEmpty() ? QString() : QDir::cleanPath(m_dataDir + QStringLiteral("/var/lib/phoenix/overlay/sim"));
+}
+
+QString Rootfs::developerOverlayFile(const QString &devicePath) const
+{
+    const QString base = developerOverlayDir();
+    if (base.isEmpty() || !QFileInfo::exists(base + QStringLiteral("/active")))
+        return {};
+    const QString f = base + QStringLiteral("/upper") + devicePath;
+    const QFileInfo fi(f);
+    if (QFileInfo::exists(fi.absolutePath() + QStringLiteral("/.wh.") + fi.fileName()))
+        return QStringLiteral("");
+    return fi.isFile() ? f : QString();
+}
+
 QString Rootfs::resolve(const QString &devicePath) const
 {
     const QString path = QDir::cleanPath(devicePath);
     if (path.split(QLatin1Char('/')).contains(QStringLiteral("..")) || m_excluded.contains(path))
         return {};
+    // What a bundle pushed to the simulator wins (developerOverlayFile).
+    const QString pushed = developerOverlayFile(path);
+    if (!pushed.isNull())
+        return pushed.isEmpty() ? QString() : pushed;
     const QString appsPrefix = QString::fromLatin1(kAppsPrefix);
     // An installed app is served from its own folder alone, as on a device
     // (/media/cryptofs/apps): an update of a built-in app gets neither the
