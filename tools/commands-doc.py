@@ -210,6 +210,7 @@ it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:1
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
     ("python3 tools/test-serve-rootfs.py", "a browser's burst of connections while tools/serve-rootfs.py is busy"),
     "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
+    ("node tools/test-nova-bundle.cjs", "dev bundles: the image's manifest, the bundle maker, the device's checks"),
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
 it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144",
    [("python3 tools/hidpi-art.py --check", "whenever art or stylesheets change"), "python3 tools/keyboard-charcoal.py --check", "node tools/render-app-icons.cjs --check",
@@ -263,6 +264,23 @@ it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix
     "npx phoenix-connector validate <folder or .ipk>", ("npx phoenix-connector pack <folder>", "--out DIR"), "npx phoenix-connector publish <folder or .ipk> --local", "npx phoenix-connector test <folder>"])
 it("Pack the built apps for an image", "Then set `PHOENIX_APPS_DIST = \"/path/to/apps-dist.tar.gz\"` in local.conf.", B, WP, "webos-phoenix/tools/pack-apps-dist.sh:7-17 · tools/install-rootfs.py:28",
    ["tools/pack-apps-dist.sh apps-dist.tar.gz", ("python3 tools/install-rootfs.py out/rootfs --list", "show the image's layout")])
+
+sec("Developer tools for a device (nova)", "`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode: dev bundles of changed system files now, pairing and pushing next (docs/DEV-PUSH.md, P2). Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use.")
+it("Run nova", "From a checkout, or put it on the PATH.", B, WP, "webos-phoenix/phoenix:39-42,98-101 · tools/nova/nova.cjs:8-9",
+   [("./phoenix nova --help", ""), ("ln -s \"$PWD/tools/nova/nova.cjs\" /usr/local/bin/nova", "then `nova` anywhere"),
+    ("./phoenix nova key", "this computer's public key and fingerprint")])
+it("Make a dev bundle", "The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:28-49 · docs/DEV-PUSH.md section 8",
+   [("./phoenix nova package --system --manifest manifest.json", "devpush-<build>-<id>.ipk"),
+    ("./phoenix nova package --system --manifest manifest.json --only /usr/share/phoenix/qml --note \"Card view fix\" -o fix.ipk", "only the shell's QML"),
+    ("./phoenix nova package --system --manifest manifest.json --dry-run", "say what it would hold"),
+    ("./phoenix nova verify fix.ipk --build 20261124093012 --product 1.0", "the device's checks, here")])
+it("Package an app", "Palm's palm-package: `<id>_<version>_all.ipk`.", B, WP, "webos-phoenix/tools/nova/nova.cjs:28-29",
+   ["./phoenix nova package apps/settings/dist -o out"])
+it("The image's manifest", "What a dev bundle is compared against: every file Phoenix ships that a bundle may change.", B, WP, "webos-phoenix/tools/install-rootfs.py:39-48",
+   [("python3 tools/install-rootfs.py --print-manifest > manifest.json", "this checkout's"),
+    ("python3 tools/install-rootfs.py out/rootfs --manifest", "install, and write out/rootfs/usr/share/phoenix/manifest.json"),
+    ("python3 tools/install-rootfs.py --stamp out/rootfs", "at image time: the image's own hashes and BUILD_ID")])
 
 sec("Default apps (phoenix-default-apps)")
 it("Install and build", "", B, PDA, "phoenix-default-apps/README.md:38-41 · tools/fetch-phoenix.mjs:11",

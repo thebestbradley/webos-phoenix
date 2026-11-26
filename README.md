@@ -554,7 +554,8 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
 | `python3 tools/test-serve-rootfs.py` | `tools/serve-rootfs.py` answers every connection a browser makes while it is busy (its listen queue: on a Mac, one too many is reset and a page's script never runs) |
-| `python3 tools/test-install-rootfs.py` | What `tools/install-rootfs.py` puts in a device image (its `--list`; the apps built first): each bus service's luna-service2 files and the code it runs, Open webOS's app services with OSE's bus files, db8 kinds and activities, the wallpapers, `servers.json` |
+| `python3 tools/test-install-rootfs.py` | What `tools/install-rootfs.py` puts in a device image (its `--list`; the apps built first): each bus service's luna-service2 files and the code it runs, Open webOS's app services with OSE's bus files, db8 kinds and activities, the wallpapers, `servers.json`, the image's manifest for dev push |
+| `node tools/test-nova-bundle.cjs` | Dev bundles ([DEV-PUSH.md](docs/DEV-PUSH.md)): the image's manifest (`install-rootfs.py --manifest`, `--stamp`), the bundle maker (`nova package --system`: only what changed, the restart map, refused paths, the same bytes from the same input) and the device's checks (signatures, build, product, device, replay, paths, the 64 MB cap, grants) |
 | `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
 | `build/siminstances-test` | The simulators' registry behind Window > Simulators: two find each other (in one process and in two), one brings the other forward, a crashed one's entry is dropped |
 | `build/useragent-test` | The user agent every page is told (docs/APP-RUNTIME.md, "The web engine and the user agent"): Chrome's current version on its four-week cadence, the override, the strings and client hints per form factor |
@@ -592,7 +593,7 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 - [Status](docs/STATUS.md): where the project stands, open decisions and next work
 - [Web app runtime](docs/APP-RUNTIME.md): how the original webOS apps run
 - [Hardware](docs/HARDWARE.md): target devices, drivers, installer and updates
-- [Dev push](docs/DEV-PUSH.md): the plan for sending changed files to a test device in Developer Mode without a new image (`nova`)
+- [Dev push](docs/DEV-PUSH.md): the plan for sending changed files to a test device in Developer Mode without a new image (`nova`); built so far: dev bundles, the image's manifest and `nova package`
 - [Nova Helper](docs/DEV-HELPER.md): the plan for a desktop app that runs Phoenix in UTM on an iPad or Mac with one click (JIT through a debugger) and gathers the developer tools: inspector, logs, QML debugger, push, terminal, for devices and the simulator
 - [App gaps](docs/APP-GAPS.md): the apps a modern phone needs, and which Phoenix still lacks
 - [App store](docs/APP-STORE.md): PWAs as webOS apps, legacy `.ipk` apps, and the catalog
