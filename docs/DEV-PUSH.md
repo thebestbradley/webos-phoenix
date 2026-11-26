@@ -567,7 +567,11 @@ As adb does, never as novacom did:
    fingerprints) would let anyone on the network who poses as the device
    during pairing take that proof away and try all million codes offline,
    whatever the attempt limit. With a PAKE, a guess is possible only by
-   talking to the real device, one guess per run. Five failed runs end
+   talking to the real device, one guess per run. A run is good only in
+   the window it began in: once the owner cancels, the two minutes run
+   out, a new Pair a Computer starts or another computer completes
+   pairing, a run still waiting for the computer's confirmation is refused
+   (`NOT_PAIRING`). Five failed runs end
    the window, so a guess succeeds at most 5 times in a million. **The code is asked over USB too** (the owner, 26 November
    2026): a cable is no proof of who holds it, so there is no Allow-only
    shortcut as adb's RSA prompt has.
@@ -575,7 +579,10 @@ As adb does, never as novacom did:
    only from keys in its paired list, the computer only from the device key
    it paired with. No passwords; nothing on the wire a listener can reuse.
 4. Settings lists the paired computers with their names, fingerprints and
-   last use, and removes them. Turning Developer Mode off stops `novad`
+   last use, and removes them. A key the signed revocation list names
+   (9.1) leaves the list and the `user` account's authorized_keys when the
+   list arrives; its open connections are closed, and new ones are refused
+   at the TLS handshake, as is pairing it again. Turning Developer Mode off stops `novad`
    listening; Full Erase forgets everything.
 
 A paired computer's key is also a trusted bundle key (section 9.1), so a
@@ -763,13 +770,18 @@ make it harder to abuse"):
      `shell` (the shell's QML and the runtime), `services` (JS services),
      and `roles` (Luna role and permission files, off unless named).
    - **Short-lived:** 14 days by default, 90 at most; renewing is a new
-     signed grant.
+     signed grant. A key may hold several grants (a renewal, or grants
+     with different scopes): a bundle is accepted if any live grant of the
+     key allows it, and the counter and the daily rate are that grant's.
+     Adding a grant drops the key's expired, older ones.
    - **Revocable:** a signed revocation list rides the update feed (as
      revoked builds do); the device checks it before every Apply and refuses
-     bundles from a revoked key or grant.
+     bundles from a revoked key or grant. A revoked key is trusted for
+     nothing, a paired computer's included (6.4).
    - **No replay:** each bundle names the device and a counter the device
-     keeps per grant; a bundle with a counter at or below the last one
-     applied is refused.
+     keeps per grant (and per key); a bundle with a counter at or below the
+     last one applied under its key or any of the key's grants is refused,
+     so a bundle one grant took never comes again under another.
    - **Rate-limited on the device:** 10 bundles a day per grant.
    - **Strong sign-in to upload:** Phoenix-Web-Services takes a bundle for
      a device only from the grant's account with a passkey or TOTP
@@ -1019,7 +1031,12 @@ computer able to test only the code it committed to.
   both; `addGrant`, `setRevocations`); the platform's key is pinned in
   `/etc/palm/phoenix/servers.json` `"devpush": {"key"}`. Counters per grant
   or key and the daily rate are kept in `/var/lib/phoenix/nova/` and
-  outlive Revert to Image.
+  outlive Revert to Image. `verify()` weighs every trust entry of the
+  signing key (any live grant that allows the bundle authorizes it; the
+  reason given otherwise is the newest grant's). A revocation list removes
+  the revoked paired keys and their SSH lines, and `lib/proto.js` closes
+  their connections and refuses them at the handshake. A pairing run's
+  confirmation is taken only in the window it began in.
 - **The Luna methods** are 7.4's plus `restartNow`, `addGrant`,
   `setRevocations`, `restart` and `rescan` (what `nova` needs); every one
   but `getStatus` answers `NEEDS_DEVMODE` with Developer Mode off.

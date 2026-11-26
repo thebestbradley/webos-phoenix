@@ -26,8 +26,11 @@
 //    "keys": ["ed25519:<key>", ...]}
 //
 // never older (a lower sequence) than one taken. A revoked key is trusted
-// for nothing; a revoked grant stays listed, marked revoked, so a bundle
-// under it is refused with that reason. The no-replay counters and the
+// for nothing (novaservice.js also unpairs it, and lib/proto.js refuses
+// and closes its connections); a revoked grant stays listed, marked
+// revoked, so a bundle under it is refused with that reason. A key can
+// have several entries (a renewed grant, grants with other scopes):
+// verify() accepts a bundle if any of them authorizes it. The no-replay counters and the
 // daily rate are novaservice.js's (they live beside the bundles applied).
 
 "use strict";

@@ -149,12 +149,20 @@ function createServer(nova, opts) {
         if (opts.allow && !opts.allow(socket.remoteAddress)) return socket.destroy();
         var clientKey = keys.peerKey(socket.getPeerX509Certificate());
         if (!clientKey) return socket.destroy();
+        // A revoked key (9.1) is trusted for nothing, hello included.
+        if (nova.isRevoked(clientKey)) return socket.destroy();
+        socket.novaKey = clientKey;
         serve(nova, opts, socket, clientKey).then(null, function (e) {
             if (e.code !== "CLOSED" && opts.onError) opts.onError(e.message);
             socket.destroy();
         });
     });
     server.on("tlsClientError", function () { /* a client that is not nova */ });
+    // A revocation list that names a connected computer's key ends its
+    // connections, a forward or a log follow among them.
+    var unwatch = nova.watch(function () {
+        conns.forEach(function (s) { if (s.novaKey && nova.isRevoked(s.novaKey)) s.destroy(); });
+    });
     var listening = new Promise(function (resolve, reject) {
         server.once("error", reject);
         server.listen(opts.port === undefined ? PORT : opts.port, opts.host || "127.0.0.1", function () { resolve(server.address().port); });
@@ -163,6 +171,7 @@ function createServer(nova, opts) {
         server: server,
         listening: listening,
         close: function () {
+            unwatch();
             conns.forEach(function (s) { s.destroy(); });
             return new Promise(function (resolve) { server.close(function () { resolve(); }); });
         }

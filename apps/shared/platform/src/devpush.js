@@ -217,21 +217,26 @@ function fromUtf8(bytes) {
 
 // bytes (the .ipk), signature (the .sig's text), opts -> Promise<{manifest,
 // files: [{path (device path), mode, data}], trust (the entry of opts.trust
-// that signed it), restart (restartsFor its paths)}>, or rejects with an
+// that authorizes it: of the signing key's entries, the first, in
+// opts.trust's order, whose grant (if any) is live and allows the bundle),
+// restart (restartsFor its paths)}>, or rejects with an
 // Error whose code says why, in the order the device checks them:
 //
 //   TOO_BIG        over 64 MB (maxBundleBytes)
 //   NEEDS_DEVMODE  opts.devMode is false
-//   UNTRUSTED      no key in opts.trust signed these bytes, its grant
-//                  expired or was revoked, or "by" is not the key that signed
+//   UNTRUSTED      no key in opts.trust signed these bytes, every grant
+//                  of the key expired or was revoked, or "by" is not the
+//                  key that signed
 //   NOT_A_BUNDLE   not an .ipk, or no devpush.json
 //   BAD_BUNDLE     devpush.json is not valid; a file's size, SHA-256 or
 //                  mode differs from it; a file it does not list, a link or
 //                  a special file; unpacks to more than maxUnpackedBytes
 //   WRONG_BUILD, WRONG_PRODUCT, WRONG_DEVICE   not for this device's image
-//   REPLAY         counter at or below the last one applied (9.1)
+//   REPLAY         counter at or below the last one applied under the key
+//                  or any of its grants (9.1)
 //   REFUSED_PATH   a path outside the overlay or never overlayable (9.4)
-//   OUT_OF_SCOPE   a part the key's grant does not allow (9.1)
+//   OUT_OF_SCOPE   a device, product line or part none of the key's live
+//                  grants allows (9.1)
 //   NO_SPACE       opts.spaceLeft is given and the files do not fit
 //
 // The signature is checked before anything in the bundle is unpacked.
@@ -245,6 +250,22 @@ function fromUtf8(bytes) {
 //   sha256(bytes) -> Promise<hex> | hex;  sha512(bytes) -> Promise<Uint8Array>
 //   devMode?: bool;  now?: Date
 //   spaceLeft?: bytes, or (manifest) -> bytes (what is left depends on whether it replaces)
+// A grant entry that authorizes nothing (revoked, expired), or null.
+function grantProblem(t, now) {
+    if (t.kind !== "grant") return null;
+    var g = t.grant;
+    if (!g) return fail("UNTRUSTED", "The key's grant is missing");
+    if (g.revoked) return fail("UNTRUSTED", "The grant " + g.id + " was revoked");
+    if (!(Date.parse(g.expires) > now)) return fail("UNTRUSTED", "The grant " + g.id + " expired on " + g.expires);
+    return null;
+}
+// Of the entries that could not authorize a bundle, the reason to give:
+// the newest grant's (the one the developer is most likely using).
+function newest(failures) {
+    var rank = function (f) { return f.entry.kind === "grant" && f.entry.grant ? Date.parse(f.entry.grant.expires) || 0 : Infinity; };
+    return failures.reduce(function (best, f) { return rank(f) >= rank(best) ? f : best; }).error;
+}
+
 function verify(bytes, signatureB64, opts) {
     var trust = (opts && opts.trust) || [];
     var now = (opts.now || new Date()).getTime();
@@ -253,15 +274,19 @@ function verify(bytes, signatureB64, opts) {
     }
     if (opts.devMode === false) return Promise.reject(fail("NEEDS_DEVMODE", "Developer Mode is off"));
     var keys = trust.map(function (t) { return t.key; });
-    var found, manifest, pkg;
+    // A key can have several entries (paired and granted; a renewed grant
+    // beside the old one; grants with different scopes): every one is
+    // considered, and the bundle is accepted if any of them authorizes it.
+    var all, candidates, found, manifest, pkg;
     return signed.verifyWithAny(bytes, signatureB64, keys, opts.sha512, "dev bundle").then(function (key) {
-        found = trust.filter(function (t) { return t.key === key; })[0];
-        var g = found.grant;
-        if (found.kind === "grant") {
-            if (!g) throw fail("UNTRUSTED", "The key's grant is missing");
-            if (g.revoked) throw fail("UNTRUSTED", "The grant " + g.id + " was revoked");
-            if (!(Date.parse(g.expires) > now)) throw fail("UNTRUSTED", "The grant " + g.id + " expired on " + g.expires);
-        }
+        all = trust.filter(function (t) { return t.key === key; });
+        var failures = [];
+        candidates = all.filter(function (t) {
+            var e = grantProblem(t, now);
+            if (e) failures.push({ entry: t, error: e });
+            return !e;
+        });
+        if (!candidates.length) throw newest(failures);
     }, function (e) {
         throw fail("UNTRUSTED", keys.length ? "The bundle is not signed by a key this device trusts for bundles" : "This device trusts no key for bundles", { cause: e.code });
     }).then(function () {
@@ -275,28 +300,43 @@ function verify(bytes, signatureB64, opts) {
         try { manifest = JSON.parse(fromUtf8(mf.data)); } catch (e) { throw fail("BAD_BUNDLE", "devpush.json is not JSON"); }
         var shape = checkManifest(manifest).filter(function (p) { return !/^files\[|^removed\[|^parts:|changes nothing/.test(p); });
         if (shape.length) throw manifestError(shape);
-        if (manifest.by !== "ed25519:" + b64.toBase64(b64.fromBase64(found.key))) {
+        var key = all[0].key;
+        if (manifest.by !== "ed25519:" + b64.toBase64(b64.fromBase64(key))) {
             throw fail("UNTRUSTED", "The bundle names a key (\"by\") other than the one that signed it");
         }
         var dev = opts.device || {};
         if (manifest.build !== dev.build) throw fail("WRONG_BUILD", "The bundle is for build " + manifest.build + "; this device runs " + dev.build);
         if (manifest.product !== dev.product) throw fail("WRONG_PRODUCT", "The bundle is for webOS Phoenix " + manifest.product + "; this device runs " + dev.product);
         if (manifest.compatible !== null && manifest.compatible !== dev.compatible) throw fail("WRONG_DEVICE", "The bundle is for " + manifest.compatible + " devices");
-        var g = found.kind === "grant" ? found.grant : null;
-        if (manifest.device !== "any" ? manifest.device !== dev.id : !!g) {
-            throw fail("WRONG_DEVICE", g && manifest.device === "any" ? "A bundle from a granted key must name the device" : "The bundle is for another device");
-        }
-        if (g && (g.devices || []).indexOf(dev.id) < 0) throw fail("OUT_OF_SCOPE", "The grant " + g.id + " does not cover this device");
-        if (g && g.product !== dev.product) throw fail("OUT_OF_SCOPE", "The grant " + g.id + " is for webOS Phoenix " + g.product);
-        var scope = g ? "grant:" + g.id : "key:" + found.key;
-        return Promise.resolve(opts.lastCounter ? opts.lastCounter(scope) : 0).then(function (last) {
-            if (manifest.counter <= (last || 0)) throw fail("REPLAY", "The bundle's counter " + manifest.counter + " is not above the last one applied (" + last + ")");
-            var all = checkManifest(manifest);
-            if (all.length) throw manifestError(all);
-            if (g) {
-                var outside = manifest.parts.filter(function (p) { return (g.parts || []).indexOf(p) < 0; });
-                if (outside.length) throw fail("OUT_OF_SCOPE", "The grant " + g.id + " does not allow changes to " + outside.join(", "));
-            }
+        var failures = [];
+        candidates = candidates.filter(function (t) {
+            var g = t.kind === "grant" ? t.grant : null, e = null;
+            if (manifest.device !== "any" ? manifest.device !== dev.id : !!g) {
+                e = fail("WRONG_DEVICE", g && manifest.device === "any" ? "A bundle from a granted key must name the device" : "The bundle is for another device");
+            } else if (g && (g.devices || []).indexOf(dev.id) < 0) e = fail("OUT_OF_SCOPE", "The grant " + g.id + " does not cover this device");
+            else if (g && g.product !== dev.product) e = fail("OUT_OF_SCOPE", "The grant " + g.id + " is for webOS Phoenix " + g.product);
+            if (e) failures.push({ entry: t, error: e });
+            return !e;
+        });
+        if (!candidates.length) throw newest(failures);
+        // No replay (9.1): the counter must be above the last one applied
+        // under the key itself and under each of its grants (a bundle one
+        // grant took cannot come again under another).
+        var scopes = ["key:" + key];
+        all.forEach(function (t) { if (t.kind === "grant" && t.grant && scopes.indexOf("grant:" + t.grant.id) < 0) scopes.push("grant:" + t.grant.id); });
+        return Promise.all(scopes.map(function (sc) { return opts.lastCounter ? opts.lastCounter(sc) : 0; })).then(function (lasts) {
+            var last = lasts.reduce(function (m, n) { return Math.max(m, n || 0); }, 0);
+            if (manifest.counter <= last) throw fail("REPLAY", "The bundle's counter " + manifest.counter + " is not above the last one applied (" + last + ")");
+            var problems = checkManifest(manifest);
+            if (problems.length) throw manifestError(problems);
+            var failures2 = [];
+            found = candidates.filter(function (t) {
+                var g = t.kind === "grant" ? t.grant : null;
+                var outside = g ? manifest.parts.filter(function (p) { return (g.parts || []).indexOf(p) < 0; }) : [];
+                if (outside.length) failures2.push({ entry: t, error: fail("OUT_OF_SCOPE", "The grant " + g.id + " does not allow changes to " + outside.join(", ")) });
+                return !outside.length;
+            })[0];
+            if (!found) throw newest(failures2);
             return checkFiles(manifest, pkg, opts);
         });
     }).then(function (files) {

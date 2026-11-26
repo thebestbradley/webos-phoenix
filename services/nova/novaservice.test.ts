@@ -395,6 +395,57 @@ describe("Trusted Developers: the extra layer on granted keys (9.1)", () => {
         expect((await core.methods.listWaiting({})).bundles.map((x: Any) => x.kind).sort()).toEqual(["master", "paired"]);
     });
 
+    // Every grant for a key counts, not only the first on file: a renewed
+    // grant (a new id) beside a revoked one, and a second grant with
+    // another scope, each authorize what they allow.
+    it("a key with several grants: any valid one authorizes, the counter is the grant's that did, never a replay across grants", async () => {
+        await addGrant();
+        await core.methods.setRevocations(h.revocations(dev.master, 1, { grants: ["grant-1"] }));
+        expect((await addGrant({ id: "grant-2" })).returnValue).toBe(true);
+        const one = await send([{ path: QML, data: "renewed" }], { counter: 1795615600000 });
+        expect(one.waiting).toBe(true);
+        expect((await core.methods.listWaiting({})).bundles[0].grant).toBe("grant-2");
+        expect((await core.methods.apply({ id: one.id, passCode: "1234" })).returnValue).toBe(true);
+        expect(JSON.parse(dev.read("/var/lib/phoenix/nova/counters.json"))["grant:grant-2"]).toBe(1795615600000);
+        // Services only under a third grant: it applies under that one.
+        expect((await addGrant({ id: "grant-3", parts: ["services"] })).returnValue).toBe(true);
+        const svc = await send([{ path: "/usr/palm/services/org.example.svc/service.js", data: "x" }], { counter: 1795615600001 });
+        expect((await core.methods.listWaiting({})).bundles.find((b: Any) => b.id === svc.id).grant).toBe("grant-3");
+        // The bundle grant-2 took cannot come again under grant-3 (it allows
+        // its parts too, but the key's bundles count up across its grants).
+        await addGrant({ id: "grant-4", parts: ["shell"] });
+        await expect(send([{ path: QML, data: "renewed" }], { counter: 1795615600000 })).rejects.toMatchObject({ code: "REPLAY" });
+    });
+
+    it("a renewed grant replaces the expired one for its key; an expired grant alone still says it expired", async () => {
+        await addGrant();
+        clock = new Date("2026-12-10T00:00:00Z");
+        await expect(send([{ path: QML, data: "x" }])).rejects.toMatchObject({ code: "UNTRUSTED", message: expect.stringMatching(/expired/) });
+        expect((await addGrant({ id: "grant-2", issued: "2026-12-09T00:00:00Z", expires: "2026-12-23T00:00:00Z" })).returnValue).toBe(true);
+        expect((await core.methods.listKeys({})).grants.map((g: Any) => g.id)).toEqual(["grant-2"]);
+        expect((await send([{ path: QML, data: "x" }])).waiting).toBe(true);
+    });
+
+    it("a revoked paired computer is trusted for nothing: unpaired, its SSH key taken out, and it cannot pair again", async () => {
+        dev.write("/home/user/.ssh/authorized_keys", "ssh-ed25519 AAAAmine me@laptop\n");
+        const desk = keys.generate("desk");
+        expect(await pairWith(desk, "Desk top")).toBe(true);
+        expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("nova:Desk_top");
+        expect(core.isPaired(desk.publicKey)).toBe(true);
+        expect((await core.methods.setRevocations(h.revocations(dev.master, 1, { keys: [desk.id] }))).returnValue).toBe(true);
+        expect(core.isPaired(desk.publicKey)).toBe(false);
+        expect(core.paired().map((p: Any) => p.key)).toEqual([computer.publicKey]);
+        expect(dev.read("/home/user/.ssh/authorized_keys")).not.toContain("nova:Desk_top");
+        expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("me@laptop");
+        expect(core.isRevoked(desk.publicKey)).toBe(true);
+        await expect(pairWith(desk, "Desk top")).rejects.toMatchObject({ code: "UNTRUSTED" });
+        expect(core.isPaired(desk.publicKey)).toBe(false);
+        // A paired.json from before the list (written behind novad's back)
+        // still gives the revoked key nothing.
+        pairComputer(desk, "Desk top");
+        expect(core.isPaired(desk.publicKey)).toBe(false);
+    });
+
     it("Remove takes a paired computer or a grant away, and its bundles with it", async () => {
         await addGrant();
         expect((await core.methods.removeKey({ key: "grant-1" })).removed).toBe("grant");
@@ -443,6 +494,59 @@ describe("Pair a Computer and the status", () => {
         await core.methods.removeKey({ key: other.id });
         expect(dev.read("/home/user/.ssh/authorized_keys")).not.toContain("nova:Desk_top");
         expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("me@laptop");
+    });
+});
+
+describe("a pairing run belongs to its window (6.4)", () => {
+    // The device's side of a run, up to the computer's confirmation.
+    function startRun(key: Any, code: string) {
+        const pake = require("./lib/pake.js");
+        const crypto = require("node:crypto");
+        const aad = Buffer.alloc(32, 9);
+        const ids = nova.pairIdentities(key.publicKey, core.deviceKey().publicKey);
+        const a = pake.party("A", { code, salt: ids.salt, A: ids.A, B: ids.B, aad });
+        const run = core.pairRun(key.publicKey, aad, a.start().toString("base64"));
+        const res = a.finish(Buffer.from(run.reply.pB, "base64"));
+        expect(a.verify(Buffer.from(run.reply.confirm, "base64"))).toBe(true);
+        const proof = crypto.sign(null, Buffer.from(nova.proofText("A", res.TT)), key.privateKey).toString("base64");
+        return () => run.finish(res.confirm.toString("base64"), proof, "Late");
+    }
+    const late = () => keys.generate("late");
+
+    it("is refused once the owner cancels", () => {
+        const k = late();
+        const confirm = startRun(k, core.pairStart().code);
+        core.pairCancel();
+        expect(confirm).toThrow(expect.objectContaining({ code: "NOT_PAIRING" }));
+        expect(core.isPaired(k.publicKey)).toBe(false);
+    });
+    it("is refused once the two minutes are up", () => {
+        const k = late();
+        const confirm = startRun(k, core.pairStart().code);
+        clock = new Date(clock.getTime() + 121000);
+        expect(confirm).toThrow(expect.objectContaining({ code: "NOT_PAIRING" }));
+        expect(core.isPaired(k.publicKey)).toBe(false);
+    });
+    it("is refused once a new window starts", () => {
+        const k = late();
+        const confirm = startRun(k, core.pairStart().code);
+        core.pairStart();
+        expect(confirm).toThrow(expect.objectContaining({ code: "NOT_PAIRING" }));
+        expect(core.isPaired(k.publicKey)).toBe(false);
+    });
+    it("is refused once another computer pairs in the same window", () => {
+        const k = late(), other = keys.generate("other");
+        const { code } = core.pairStart();
+        const confirm = startRun(k, code);
+        startRun(other, code)();
+        expect(core.isPaired(other.publicKey)).toBe(true);
+        expect(confirm).toThrow(expect.objectContaining({ code: "NOT_PAIRING" }));
+        expect(core.isPaired(k.publicKey)).toBe(false);
+    });
+    it("still pairs within its own window", () => {
+        const k = late();
+        startRun(k, core.pairStart().code)();
+        expect(core.isPaired(k.publicKey)).toBe(true);
     });
 });
 

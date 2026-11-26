@@ -254,6 +254,21 @@ describe("pairing and pinned keys over TLS 1.3", () => {
         c.close();
     });
 
+    it("a computer whose key a signed revocation list names loses its open connections and is refused at the next", async () => {
+        const { code } = core.pairStart();
+        const { deviceKey } = await pairOnce(code);
+        const c = await connect(deviceKey);
+        expect((await c.request({ op: "status" })).status.paired).toBe(1);
+        const closed = new Promise<void>((r) => c.socket.once("close", () => r()));
+        const list = h.revocations(dev.master, 1, { keys: [computer.id] });
+        expect((await core.methods.setRevocations(list)).returnValue).toBe(true);
+        await closed;
+        const c2 = await connect(deviceKey);
+        await expect(c2.request({ op: "luna", uri: "luna://com.example/x" })).rejects.toBeTruthy();
+        c2.close();
+        expect(core.paired()).toEqual([]);
+    });
+
     it("answers only hello with Developer Mode off", async () => {
         const { code } = core.pairStart();
         const { deviceKey } = await pairOnce(code);

@@ -196,6 +196,13 @@ function createNova(deps) {
     function paired() { return readJson(NOVA + "/paired.json", []); }
     function grants() { return readJson(NOVA + "/grants.json", []); }
     function revocations() { return readJson(NOVA + "/revocations.json", null); }
+    // A key the signed revocation list names is trusted for nothing (9.1):
+    // no bundles, no paired connection, no SSH login, no pairing again.
+    function isRevoked(key) {
+        var rv = revocations();
+        var k = String(key || "").replace(/^ed25519:/, "");
+        return !!(rv && rv.list && (rv.list.keys || []).some(function (x) { return String(x).replace(/^ed25519:/, "") === k; }));
+    }
     function trustList() {
         return trust.trustList({ master: master(), paired: paired(), grants: grants(), revocations: revocations() && revocations().list });
     }
@@ -289,6 +296,10 @@ function createNova(deps) {
         var scope = entry.kind === "grant" ? "grant:" + entry.grant.id : "key:" + entry.key;
         var c = counters();
         c[scope] = Math.max(c[scope] || 0, counter);
+        // And the key's own: verify() checks a bundle against the key and
+        // all its grants, so one a grant took never comes again under
+        // another (a renewal), even once that grant is gone.
+        if (entry.kind === "grant") c["key:" + entry.key] = Math.max(c["key:" + entry.key] || 0, counter);
         writeJson(NOVA + "/counters.json", c);
         if (entry.kind === "grant") {
             var r = readJson(NOVA + "/rate.json", {});
@@ -597,6 +608,7 @@ function createNova(deps) {
     // {proof}}
     function pairRun(clientKey, aad, pA) {
         if (!devMode()) throw fail("NEEDS_DEVMODE", "Developer Mode is off");
+        if (isRevoked(clientKey)) throw fail("UNTRUSTED", "This computer's key is revoked");
         if (!pairing || now().getTime() > pairing.expires) throw fail("NOT_PAIRING", "The device is not showing a pairing code: open Settings > Developer Mode > Pair a Computer");
         if (pairing.runs >= PAIR_RUNS) { pairCancel(); throw fail("PAIRING_CLOSED", "Too many wrong codes: start Pair a Computer again"); }
         pairing.runs++;
@@ -608,6 +620,13 @@ function createNova(deps) {
         return {
             reply: { pB: party.start().toString("base64"), confirm: res.confirm.toString("base64") },
             finish: function (cA, proof, name) {
+                // Only within the window the run began in: one the owner
+                // cancelled, that ran out, that a new Pair a Computer
+                // replaced, or that another computer's pairing closed takes
+                // no confirmation, however good.
+                if (pairing !== mine || now().getTime() > mine.expires) {
+                    throw fail("NOT_PAIRING", "The pairing code this run used is no longer shown: start Pair a Computer again");
+                }
                 if (!party.verify(Buffer.from(String(cA), "base64"))) {
                     if (mine.runs >= PAIR_RUNS && pairing === mine) pairCancel();
                     throw fail("PAIRING_FAILED", "Wrong code");
@@ -620,6 +639,7 @@ function createNova(deps) {
         };
     }
     function addPaired(key, name) {
+        if (isRevoked(key)) throw fail("UNTRUSTED", "This computer's key is revoked");
         var list = paired().filter(function (p) { return p.key !== key; });
         list.push({ key: key, fingerprint: keys.fingerprint(key), name: String(name || "Computer").slice(0, 64), paired: now().toISOString(), lastUsed: null });
         writeJson(NOVA + "/paired.json", list);
@@ -637,12 +657,23 @@ function createNova(deps) {
         var begin = "# nova: paired computers (org.webosphoenix.nova)", end = "# nova: end";
         var re = new RegExp("\\n?" + begin.replace(/[()]/g, "\\$&") + "[\\s\\S]*?" + end + "\\n?");
         text = text.replace(re, "\n").replace(/^\n+/, "");
-        var lines = paired().map(function (p) { return keys.sshPublic(p.key, "nova:" + p.name.replace(/\s+/g, "_")); });
+        var lines = paired().filter(function (p) { return !isRevoked(p.key); }).map(function (p) { return keys.sshPublic(p.key, "nova:" + p.name.replace(/\s+/g, "_")); });
         if (lines.length) text = (text ? text.replace(/\n?$/, "\n") : "") + begin + "\n" + lines.join("\n") + "\n" + end + "\n";
         fs.writeFileSync(f, text, { mode: 0o600 });
     }
 
-    function isPaired(key) { return paired().some(function (p) { return p.key === key; }); }
+    function isPaired(key) { return !isRevoked(key) && paired().some(function (p) { return p.key === key; }); }
+    // After a new revocation list: a revoked key leaves the paired list and
+    // authorized_keys (lib/proto.js closes its open connections).
+    function dropRevoked() {
+        var list = paired();
+        var left = list.filter(function (p) { return !isRevoked(p.key); });
+        if (left.length !== list.length) {
+            writeJson(NOVA + "/paired.json", left);
+            list.filter(function (p) { return isRevoked(p.key); }).forEach(function (p) { addLog({ event: "unpaired", key: p.key, reason: "revoked" }); });
+        }
+        authorizedKeys();
+    }
 
     // ---- Luna methods ----------------------------------------------------------------------------
 
@@ -742,7 +773,12 @@ function createNova(deps) {
             var g = trust.checkGrant(text, p.signature, master(), now());
             if (!(Date.parse(g.expires) > now().getTime())) throw fail("BAD_GRANT", "The grant expired on " + g.expires);
             if (g.devices.indexOf(image().id) < 0) throw fail("BAD_GRANT", "The grant does not cover this device (" + image().id + ")");
-            var list = grants().filter(function (e) { return e.grant.id !== g.id; });
+            // A renewal: the key's expired grants go (revoked ones stay, so
+            // their bundles are refused with that reason).
+            var list = grants().filter(function (e) {
+                return e.grant.id !== g.id &&
+                    !(e.grant.key === g.key && !(Date.parse(e.grant.expires) > now().getTime()) && Date.parse(e.grant.expires) < Date.parse(g.expires));
+            });
             list.push({ grant: g, text: text, signature: String(p.signature).trim(), added: now().toISOString() });
             writeJson(NOVA + "/grants.json", list);
             addLog({ event: "grant added", grant: g.id, name: g.name });
@@ -756,6 +792,7 @@ function createNova(deps) {
             var had = revocations();
             if (had && had.list.sequence > r.sequence) throw fail("BAD_REVOCATIONS", "The revocation list is older than the one this device has");
             writeJson(NOVA + "/revocations.json", { list: r, text: text, signature: String(p.signature).trim() });
+            dropRevoked();
             changed();
             return { sequence: r.sequence };
         }),
@@ -795,6 +832,7 @@ function createNova(deps) {
         options: options,
         deviceKey: deviceKey,
         isPaired: isPaired,
+        isRevoked: isRevoked,
         paired: paired,
         receive: receive,
         verifyBundle: verifyBundle,
