@@ -494,9 +494,9 @@ As adb does, never as novacom did:
    both sides prove they know it over a channel bound to both keys (an
    HMAC of both fingerprints keyed with the code, after TLS with both
    keys), and each stores the other's key. Five wrong codes end the
-   window. Over USB, a "Allow pushes from <computer>? Fingerprint ..."
-   popup alert on the unlocked device can stand in for the code, as adb's
-   RSA prompt does.
+   window. **The code is asked over USB too** (the owner, 26 November
+   2026): a cable is no proof of who holds it, so there is no Allow-only
+   shortcut as adb's RSA prompt has.
 3. After pairing, TLS with both keys pinned: the device takes connections
    only from keys in its paired list, the computer only from the device key
    it paired with. No passwords; nothing on the wire a listener can reuse.
@@ -521,9 +521,14 @@ production application must never hold ... private keys").
 On the website, the device's owner opens Account > Devices > the device >
 **Developer Access** and grants it to a Phoenix account by name (one with
 the developer role), with the developer's key fingerprint, which the
-developer gives them out of band. The device, signed in to the owner's
-account, then trusts that key for bundles ("Trusted Developers" in
-Developer Mode, section 9.1). Either side can withdraw.
+developer gives them out of band, choosing the parts it may change and how
+long it lasts. That approval only prepares the grant: it takes effect once
+the owner signs it with the platform's dev-signing key, and the device,
+signed in to the owner's account, then trusts that key for bundles within
+the grant ("Trusted Developers" in Developer Mode). The extra layer on
+granted keys (scope, expiry, revocation, no replay, rate limit, strong
+sign-in, the owner seeing every bundle) is in section 9.1. Either side can
+withdraw.
 
 ### 7.2 Phoenix-Web-Services endpoints
 
@@ -612,12 +617,50 @@ rootfs additions and QML come through the same plan, so its bundles hold
 
 ### 9.1 Who the device trusts for bundles
 
-One list, `/var/lib/phoenix/nova/keys.json`: the paired computers' keys
-(section 6.4) and the Trusted Developers' keys (granted through the
-account, section 7.1, or added in Settings by fingerprint). Nothing is
-trusted on first use, no key is built into the image, and the platform's
-keys (catalog, updates, notices) are never accepted for bundles. A bundle
-signed by any other key is refused even if it came over a paired link.
+Two kinds of key (the owner, 26 November 2026: "both, master platform, and
+granted developer keys, but we need an additional layer on granted keys to
+make it harder to abuse"):
+
+1. **The platform's dev-signing key** ("master"). Its own key in the
+   owner's root chain, offline, beside the update and catalog keys but not
+   one of them (a leak of one must not sign the others' content). The image
+   pins its public half, as it pins the update root (PLATFORM-CLIENT.md).
+   A bundle it signs needs no grant; it is still subject to section 9.2
+   (Developer Mode) and section 7.4 (the passcode on Apply).
+2. **Paired computers' keys** (section 6.4): only for the direct push,
+   and for bundles a paired computer sends by the server channel.
+3. **Granted developer keys**, with the extra layer:
+   - **A grant is a certificate, not a server record.** The owner's
+     approval in Account > Devices > Developer Access makes the server
+     prepare it, but it takes effect only when the owner signs it with the
+     platform's dev-signing key (an offline step, as releases are signed).
+     The server cannot mint trust, so a compromised server or account can
+     grant nothing.
+   - **Scoped:** the device ids it covers, the product and build line
+     (1.0 or 2.0), and which parts it may change: `apps` (web apps only),
+     `shell` (the shell's QML and the runtime), `services` (JS services),
+     and `roles` (Luna role and permission files, off unless named).
+   - **Short-lived:** 14 days by default, 90 at most; renewing is a new
+     signed grant.
+   - **Revocable:** a signed revocation list rides the update feed (as
+     revoked builds do); the device checks it before every Apply and refuses
+     bundles from a revoked key or grant.
+   - **No replay:** each bundle names the device and a counter the device
+     keeps per grant; a bundle with a counter at or below the last one
+     applied is refused.
+   - **Rate-limited on the device:** 10 bundles a day per grant.
+   - **Strong sign-in to upload:** Phoenix-Web-Services takes a bundle for
+     a device only from the grant's account with a passkey or TOTP
+     confirmed in the last 10 minutes (its existing recent-confirmation
+     rule).
+   - **Seen by the owner:** every bundle from a granted key is a
+     notification on the device (who, what parts, how big), Apply asks the
+     passcode (decision 8), and both the device and the server keep a log
+     the owner can read in Settings and on the website.
+
+Nothing is trusted on first use, and the catalog, update and notice keys
+are never accepted for bundles. A bundle signed by any other key is refused
+even if it came over a paired link.
 
 ### 9.2 Developer Mode is the gate
 
@@ -660,6 +703,23 @@ When the root becomes dm-verity (HARDWARE.md plan), the overlay sits above
 the verified image: the image stays verifiable, and the device knows and
 says it is modified (section 4.7). Measured boot or attestation, if Phoenix
 ever has them, report the overlay as a modification.
+
+### 9.6 Legacy novacom, for vintage tools
+
+The owner chose to keep LG's `novacomd` (26 November 2026) so the real
+`novacom` from webos-sdk-redux works with Phoenix too. Started as it ships,
+it gives an unauthenticated root shell, so Phoenix keeps it behind its own
+switch:
+- Settings > Developer Mode > **Legacy novacom (USB)**, off by default,
+  shown only with Developer Mode on, with a plain warning ("Anyone with a
+  cable gets full control of this device").
+- **USB only:** never bound to a network interface.
+- **A password:** turning it on asks for one and writes
+  `/var/novacom/passwd`, the file novacomd's own authentication reads
+  (`src/device/auth.c`), so the switch never runs it open.
+- **It turns itself off** after an hour and at every restart; nothing
+  starts it at boot.
+- `novad` and the developer overlay don't depend on it.
 
 ## 10. Out of scope
 
@@ -728,7 +788,7 @@ deploys the server; the owner decides (section 13).
 | **P0** | The owner's answers to section 13 | — | owner | this plan |
 | **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests | M | cloud | P0 names |
 | **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs` | L | cloud | P1 |
-| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image); kernel configuration for the USB gadget | M | cloud | P2 |
+| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image; the Legacy novacom switch, section 9.6); kernel configuration for the USB gadget | M | cloud | P2 |
 | **P3v** | Build the VM image with P3, verify the list in section 11, report unit names and anything that differs | M | local | P3 |
 | **P4** | Phoenix-Web-Services: grants, the `devpush` scope, the endpoints, storage and expiry, manifests per build; the device's polling and notification; `nova send` | M | cloud (code on a branch), codex or local (staging deploy after review) | P2, owner's yes to Q3 and Q9 |
 | **P4v** | End to end: a bundle from a second account to the owner's VM through staging, Apply, Revert | S | local | P3v, P4 deployed |
@@ -740,22 +800,25 @@ start at once. The read-only root and RAUC (S3, U1) are not needed: the
 overlay works on today's writable root, and the build tie stands in for the
 update clearing it until RAUC is there.
 
-## 13. Open questions for the owner
+## 13. Decisions (the owner, 26 November 2026)
 
-| # | Question | Recommendation |
-| --- | --- | --- |
-| 1 | Names: host command `nova`, device `novad` / `org.webosphoenix.nova`, "developer overlay", "dev bundle", "Pushed Changes", "Revert to Image" | **Yes.** `novacom` would clash with webos-sdk-redux's real one on the same computer; `palm-*` uses Palm's mark (LEGAL.md). `nova` is Palm's codename, the root of novacom and novaterm |
-| 2 | Dev bundles as `.ipk` files with a signed manifest | **Yes**: Palm's format, code Phoenix already has, and the later compiled-parts path is `.ipk` too |
-| 3 | Server channel trust: developer keys the owner grants (end to end) or the platform signing bundles | **Developer keys.** The server stays a mailbox and holds no key a device trusts, as KEYS.md requires |
-| 4 | LAN pairing with a six-digit code at the unlocked device; USB by an on-screen Allow | **Yes**, adb's model; never novacom's open port |
-| 5 | LG's `novacomd` is in the image: leave it off, remove it, or offer "Legacy novacom (USB)" for webos-sdk-redux | **Leave it off** (no unit starts it); remove it from the image when Phoenix's `packagegroup-webos-extended` handling is next touched (it gives an unauthenticated root shell when started) |
-| 6 | Developer Mode off: keep the overlay inactive on disk, or delete it | **Keep it inactive** until Revert to Image or the next update |
-| 7 | May bundles carry Luna role and permission files | **Yes, listed separately** on the Apply screen; services need them, and Developer Mode already means root-level trust |
-| 8 | Apply from the server channel: passcode each time, or once per developer | **Each time**; dev bundles are rare and a passcode is a second |
-| 9 | Server limits: 64 MB per bundle, 14 days, grants per device | **Yes**; storage stays small on the shared host |
-| 10 | Overlay cap on the device | **256 MB**, a Developer Mode setting |
-| 11 | Port 6965 for `novad` | **Yes**, after checking IANA's registry; it sits beside novacom's 6968-6971 |
-| 12 | Should 2.0 test devices take 1.0 bundles | **No**: a bundle is for one build and one product; 2.0 gets the tool by merging |
+The owner answered questions 1, 3, 4 and 5; the rest take the
+recommendation they had, and the owner can change any of them.
+
+| # | Decision |
+| --- | --- |
+| 1 | **`nova` / `novad`** (`org.webosphoenix.nova`), "developer overlay", "dev bundle", "Pushed Changes", "Revert to Image" |
+| 2 | Dev bundles are `.ipk` files with a signed manifest |
+| 3 | **Both:** the platform's dev-signing key ("master"), and developer keys the owner grants, **with an extra layer on granted keys** to make abuse harder (section 9.1) |
+| 4 | **A six-digit code for both** the LAN and USB; no Allow-only shortcut on USB (section 6.4) |
+| 5 | **Keep LG's `novacomd` for vintage tools**, behind its own switch (section 9.6) |
+| 6 | Developer Mode off: the overlay stays inactive on disk until Revert to Image or the next update |
+| 7 | Bundles may carry Luna role and permission files, listed separately on the Apply screen; for granted keys only when their grant allows it (section 9.1) |
+| 8 | Apply from the server channel asks the device passcode every time |
+| 9 | Server limits: 64 MB per bundle, kept 14 days |
+| 10 | Overlay cap on the device: 256 MB, a Developer Mode setting |
+| 11 | Port 6965 for `novad`, after checking IANA's registry |
+| 12 | 2.0 devices take no 1.0 bundles |
 
 ## 14. Docs to update when it is built
 
