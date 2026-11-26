@@ -9,7 +9,7 @@
 // devpush.schema.json). Plain CommonJS without dependencies.
 //
 // A dev bundle is an .ipk (an ar archive of debian-binary, control.tar.gz
-// and data.tar.gz, apps/marketplace/service/lib/ipk.js):
+// and data.tar.gz, ipk.js beside this file):
 //
 //   control.tar.gz   ./control (Package: phoenix-devpush, ...) and
 //                    ./devpush.json, the manifest of the changes (below)
@@ -243,7 +243,8 @@ function fromUtf8(bytes) {
 //   lastCounter(scope) -> number | Promise   scope: "grant:<id>" or "key:<base64>"
 //   readIpk(bytes) -> Promise<ipk.read()'s result>   (createIpk(...).read)
 //   sha256(bytes) -> Promise<hex> | hex;  sha512(bytes) -> Promise<Uint8Array>
-//   devMode?: bool;  spaceLeft?: bytes;  now?: Date
+//   devMode?: bool;  now?: Date
+//   spaceLeft?: bytes, or (manifest) -> bytes (what is left depends on whether it replaces)
 function verify(bytes, signatureB64, opts) {
     var trust = (opts && opts.trust) || [];
     var now = (opts.now || new Date()).getTime();
@@ -300,7 +301,8 @@ function verify(bytes, signatureB64, opts) {
         });
     }).then(function (files) {
         var size = files.reduce(function (n, f) { return n + f.data.length; }, 0);
-        if (typeof opts.spaceLeft === "number" && size > opts.spaceLeft) throw fail("NO_SPACE", "The bundle's files need " + size + " bytes; the overlay has " + opts.spaceLeft + " left");
+        var left = typeof opts.spaceLeft === "function" ? opts.spaceLeft(manifest) : opts.spaceLeft;
+        if (typeof left === "number" && size > left) throw fail("NO_SPACE", "The bundle's files need " + size + " bytes; the overlay has " + Math.max(0, left) + " left");
         return { manifest: manifest, files: files, trust: found,
                  restart: restartsFor(manifest.files.map(function (f) { return f.path; }).concat(manifest.removed)) };
     });

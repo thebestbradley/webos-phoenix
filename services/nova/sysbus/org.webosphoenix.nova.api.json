@@ -1,0 +1,19 @@
+{
+    "developer.management": [
+        "org.webosphoenix.nova/getStatus",
+        "org.webosphoenix.nova/listWaiting",
+        "org.webosphoenix.nova/apply",
+        "org.webosphoenix.nova/decline",
+        "org.webosphoenix.nova/revert",
+        "org.webosphoenix.nova/restartNow",
+        "org.webosphoenix.nova/pairStart",
+        "org.webosphoenix.nova/pairCancel",
+        "org.webosphoenix.nova/listKeys",
+        "org.webosphoenix.nova/removeKey",
+        "org.webosphoenix.nova/addGrant",
+        "org.webosphoenix.nova/setRevocations",
+        "org.webosphoenix.nova/setOptions",
+        "org.webosphoenix.nova/restart",
+        "org.webosphoenix.nova/rescan"
+    ]
+}
