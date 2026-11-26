@@ -3039,6 +3039,39 @@ device turns it off. While it is on, its Debugging switches show the
 shell's frame rate counter and touch plot (`enableFpsCounter`,
 `enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
 
+#### Dev push: Pushed Changes and pairing
+
+With Developer Mode on, a test device takes changed system files without a
+new image ([DEV-PUSH.md](DEV-PUSH.md)): the shell's QML, the runtime, web
+apps, JavaScript services, Luna role files and `/etc/palm` configuration,
+in a writable overlay over the image's folders, restarting only what
+changed. The device's end is `novad` (Luna `org.webosphoenix.nova`,
+`services/nova`); the computer's is `nova` (`tools/nova`, `./phoenix
+nova`). Settings > Developer Mode shows, while Developer Mode is on
+(`DevPush.tsx`):
+
+- **Pushed Changes**: bundles waiting for the owner (from the platform's
+  dev-signing key or a granted developer: **Apply** asks the device
+  passcode every time, **Decline** drops one; a bundle that changes Luna
+  role files says "Changes what services may do"); what the overlay holds
+  on this device (the build, each file, from whom and when, the bundles);
+  **Restart Now** when a change needs a restart; **Revert to Image**, after
+  a confirmation, which restarts the device without any pushed change.
+- **Pair a Computer**: a six-digit code and the device's key fingerprint
+  for two minutes, which `nova pair` asks for (a PAKE, so the code cannot
+  be guessed offline; five wrong codes end it). **Paired Computers** and
+  **Trusted Developers** (developers the owner granted access with a grant
+  the platform signed: which parts, until when) list the keys, with Remove.
+- **Developer Connections**: USB debugging (on) and Push over network
+  (off; private networks only).
+
+Turning Developer Mode off stops `novad` listening and leaves the overlay
+unmounted from the next start, on disk until Revert to Image or the next
+system update. In the simulator `phoenix-sim` runs the same `novad`
+(`services/nova/sim.js`) over its data, so `nova pair -d sim` and `nova
+push -d sim` work as with a device: it serves the pushed files first and
+restarts itself for the restarts a push needs.
+
 #### Developer apps
 
 An app whose `appinfo.json` says `"phoenix": {"developer": true}` is for

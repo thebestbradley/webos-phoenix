@@ -265,17 +265,37 @@ it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix
 it("Pack the built apps for an image", "Then set `PHOENIX_APPS_DIST = \"/path/to/apps-dist.tar.gz\"` in local.conf.", B, WP, "webos-phoenix/tools/pack-apps-dist.sh:7-17 · tools/install-rootfs.py:28",
    ["tools/pack-apps-dist.sh apps-dist.tar.gz", ("python3 tools/install-rootfs.py out/rootfs --list", "show the image's layout")])
 
-sec("Developer tools for a device (nova)", "`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode: dev bundles of changed system files now, pairing and pushing next (docs/DEV-PUSH.md, P2). Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use.")
+sec("Developer tools for a device (nova)", "`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode (docs/DEV-PUSH.md): it pairs with a device, pushes changed system files into its developer overlay and restarts only what changed, and makes dev bundles. Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use; the devices it is paired with are in `~/.config/nova/devices.json`. Every device command takes `-d NAME|usb|sim[:INSTANCE]|ADDRESS` (without it: the only device paired, else the last used).")
 it("Run nova", "From a checkout, or put it on the PATH.", B, WP, "webos-phoenix/phoenix:39-42,98-101 · tools/nova/nova.cjs:8-9",
    [("./phoenix nova --help", ""), ("ln -s \"$PWD/tools/nova/nova.cjs\" /usr/local/bin/nova", "then `nova` anywhere"),
     ("./phoenix nova key", "this computer's public key and fingerprint")])
-it("Make a dev bundle", "The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.", B, WP,
-   "webos-phoenix/tools/nova/nova.cjs:28-49 · docs/DEV-PUSH.md section 8",
+it("Pair with a device", "On the device: Settings > Developer Mode > Pair a Computer shows a six-digit code and its key; type the code here, and check the key nova prints is the one shown. Five wrong codes end the pairing; start it again on the device.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:64-68 · tools/nova/lib/remote.cjs · docs/DEV-PUSH.md 6.4",
+   [("./phoenix nova pair 192.168.1.23", "a device on the network (Developer Mode > Push over network on)"),
+    ("./phoenix nova pair -d usb", "over the USB cable (USB debugging on)"),
+    ("./phoenix nova pair -d sim --code 123456", "the simulator (`./phoenix run`; its Settings shows the code)"),
+    ("./phoenix nova devices", "the paired devices, and whether they answer"), "./phoenix nova unpair sim"])
+it("Push changes to a device", "A dev bundle of what this checkout changes against the device's image (its manifest), applied at once; the device restarts only what changed (the shell, WebAppMgr, one app or service). Replaces what an earlier push put there; --add adds to it. Build the apps first.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:69-79 · docs/DEV-PUSH.md 4.4-4.6, 6.1",
+   [("./phoenix nova push", "everything that differs"), ("./phoenix nova push shell/qml apps/settings", "only those (repository or device paths)"),
+    ("./phoenix nova push --dry-run", "say what it would send"), ("./phoenix nova push -d sim", "to the running simulator"),
+    ("./phoenix nova put /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml CardView.qml", "one file (Palm's novacom put)"),
+    ("./phoenix nova get /usr/palm/applications/org.webosphoenix.settings/appinfo.json", "one file from the device"),
+    ("./phoenix nova status", "what the overlay holds, from whom"), ("./phoenix nova revert /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml", "one file back to the image's"),
+    ("./phoenix nova revert", "Revert to Image: the device restarts without any pushed change")])
+it("Restart, log and look inside a device", "", B, WP, "webos-phoenix/tools/nova/nova.cjs:77-85 · docs/DEV-HELPER.md 9.1",
+   [("./phoenix nova restart shell", "or wam, app ID, service ID"), ("./phoenix nova rescan", "Palm's rescan: new or changed apps"),
+    ("./phoenix nova log -f org.webosphoenix.settings", "the journal, followed"),
+    ("./phoenix nova luna-send luna://com.webos.service.systemservice/getSystemTime '{}'", "one Luna call"),
+    ("./phoenix nova forward 9998", "the Web Inspector at 127.0.0.1:9998 (also 3768, the QML debugger; 22, SSH)"),
+    ("./phoenix nova term", "SSH as `user` with the paired key (Developer Mode's SSH)")])
+it("Make a dev bundle", "The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`, for the server channel. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:39-53 · docs/DEV-PUSH.md section 8",
    [("./phoenix nova package --system --manifest manifest.json", "devpush-<build>-<id>.ipk"),
     ("./phoenix nova package --system --manifest manifest.json --only /usr/share/phoenix/qml --note \"Card view fix\" -o fix.ipk", "only the shell's QML"),
     ("./phoenix nova package --system --manifest manifest.json --dry-run", "say what it would hold"),
     ("./phoenix nova verify fix.ipk --build 20261124093012 --product 1.0", "the device's checks, here")])
-it("Package an app", "Palm's palm-package: `<id>_<version>_all.ipk`.", B, WP, "webos-phoenix/tools/nova/nova.cjs:28-29",
+it("Package an app", "Palm's palm-package: `<id>_<version>_all.ipk`.", B, WP, "webos-phoenix/tools/nova/nova.cjs:36-37",
    ["./phoenix nova package apps/settings/dist -o out"])
 it("The image's manifest", "What a dev bundle is compared against: every file Phoenix ships that a bundle may change.", B, WP, "webos-phoenix/tools/install-rootfs.py:39-48",
    [("python3 tools/install-rootfs.py --print-manifest > manifest.json", "this checkout's"),
