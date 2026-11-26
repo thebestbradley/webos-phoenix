@@ -53,9 +53,13 @@ function createDevMode(deps) {
         }
     }
 
+    // Both forms in every answer: Phoenix's {status} and OSE's {enabled}, which
+    // callers read (the hardware service, the apps' devMode.watch; strict mode S1:
+    // a reader of `enabled` saw Developer Mode off on a device while it was on).
+    function answer(r) { r.status = status(); r.enabled = on(); return r; }
     var methods = {
         getDevMode: function () {
-            return Promise.resolve({ returnValue: true, status: status() });
+            return Promise.resolve(answer({ returnValue: true }));
         },
         // {status: "enabled" | "disabled"} (Phoenix's), or OSE's {enabled}.
         setDevMode: function (p) {
@@ -64,15 +68,14 @@ function createDevMode(deps) {
             if (p.status === "enabled" || p.status === "disabled") want = p.status === "enabled";
             else if (typeof p.enabled === "boolean") want = p.enabled;
             else return Promise.resolve(fail("BAD_PARAMS", "status: \"enabled\" or \"disabled\""));
-            if (want === on()) return Promise.resolve({ returnValue: true, status: status(), restarting: false });
+            if (want === on()) return Promise.resolve(answer({ returnValue: true, restarting: false }));
             try { set(want); } catch (e) {
                 log("setDevMode: " + e.message);
                 return Promise.resolve(fail("WRITE_FAILED", "Could not change Developer Mode: " + e.message));
             }
             log("Developer Mode " + status() + "; restarting");
-            var st = status();
-            watchers.slice().forEach(function (w) { try { w({ returnValue: true, status: st }); } catch (e) { /* its own */ } });
-            return Promise.resolve({ returnValue: true, status: st, restarting: true });
+            watchers.slice().forEach(function (w) { try { w(answer({ returnValue: true })); } catch (e) { /* its own */ } });
+            return Promise.resolve(answer({ returnValue: true, restarting: true }));
         }
     };
     return {
