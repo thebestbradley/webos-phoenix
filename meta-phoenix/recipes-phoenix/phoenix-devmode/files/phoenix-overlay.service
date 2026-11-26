@@ -1,0 +1,23 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The developer overlay at boot (docs/DEV-PUSH.md 4.2, 4.6;
+# services/nova/boot.js): after Revert to Image the overlay is deleted;
+# with Developer Mode on (its flag file, read directly: the bus is not up)
+# and an overlay made for this BUILD_ID, its mount points are mounted.
+# Before the hub, WebAppMgr and the shell read anything under them.
+
+[Unit]
+Description=webOS Phoenix: the developer overlay
+DefaultDependencies=no
+After=local-fs.target
+Before=ls-hubd.service webapp-mgr.service surface-manager-daemon.service surface-manager.service sysinit.target
+ConditionPathExists=/var/lib/phoenix/overlay/state.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/node /usr/palm/services/org.webosphoenix.nova/boot.js
+
+[Install]
+WantedBy=sysinit.target

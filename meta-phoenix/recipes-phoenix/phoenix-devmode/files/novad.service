@@ -1,0 +1,22 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# novad (org.webosphoenix.nova, docs/DEV-PUSH.md): long-running, as root.
+# It always answers Settings' Developer Mode panes on the bus, and listens
+# for nova on port 6965 only while Developer Mode is on (and its switches
+# say so). The hub knows it as a static service
+# (services/nova/sysbus/org.webosphoenix.nova.service).
+
+[Unit]
+Description=webOS Phoenix: novad, dev push's device service
+Requires=ls-hubd.service
+After=ls-hubd.service phoenix-overlay.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /usr/palm/services/org.webosphoenix.nova/service.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -594,10 +594,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
  },
- "luna:unknown-service:com.webos.service.devmode": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C1"
- },
  "luna:unknown-service:com.webos.service.tv.systemproperty": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
@@ -744,14 +740,6 @@
  },
  "simrefs:loopback:services/nova:127.0.0.1": {
   "owner": "intended: the simulator's novad (sim.js) is this computer's, and nova forward reaches ports on the device's own loopback (docs/DEV-PUSH.md, DEV-HELPER.md 8)",
-  "row": "G5"
- },
- "image:missing-path:/etc/phoenix/nova.json": {
-  "owner": "meta-phoenix, dev push P3 (docs/DEV-PUSH.md 12)",
-  "row": "G5"
- },
- "image:missing-path:/usr/share/phoenix/manifest.json": {
-  "owner": "meta-phoenix, dev push P3: tools/install-rootfs.py --manifest / --stamp at image time (docs/DEV-PUSH.md 8, 12)",
   "row": "G5"
  }
 }

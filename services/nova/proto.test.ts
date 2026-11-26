@@ -473,7 +473,7 @@ describe("pairing and pinned keys over TLS 1.3", () => {
 
             ({ deviceKey } = await pairOnce(core.pairStart().code));
             const c2 = await stream(deviceKey);
-            fs.rmSync(dev.root + "/var/luna/dev-mode-enabled");
+            fs.rmSync(dev.root + "/var/luna/preferences/devmode_enabled");
             expect(await closedWithin(c2.socket, 2000)).toBe(true);
         } finally { await srv2.close(); echo.close(); }
     });
@@ -489,7 +489,7 @@ describe("pairing and pinned keys over TLS 1.3", () => {
     it("answers only hello with Developer Mode off", async () => {
         const { code } = core.pairStart();
         const { deviceKey } = await pairOnce(code);
-        fs.rmSync(dev.root + "/var/luna/dev-mode-enabled");
+        fs.rmSync(dev.root + "/var/luna/preferences/devmode_enabled");
         const c = await connect(deviceKey);
         expect((await c.request({ op: "hello" })).devMode).toBe(false);
         await expect(c.request({ op: "status" })).rejects.toMatchObject({ code: "NEEDS_DEVMODE" });

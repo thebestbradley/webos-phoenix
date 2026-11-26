@@ -171,7 +171,7 @@ async function main() {
         // ---- Developer Mode off: the overlay is not read from the next start -----------------------
         await luna("luna://com.webos.service.devmode/setDevMode", { status: "disabled" });
         // novad is told at once, with no further nova call (Settings stops asking).
-        await waitFor(() => !fs.existsSync(path.join(data, "var/luna/dev-mode-enabled")), "novad told Developer Mode is off");
+        await waitFor(() => !fs.existsSync(path.join(data, "var/luna/preferences/devmode_enabled")), "novad told Developer Mode is off");
         const refused = await novaCli("status", "-d", "sim");
         check(refused.code !== 0, "Developer Mode off: a paired computer is refused at once");
         await stopSim();

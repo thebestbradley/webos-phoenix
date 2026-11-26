@@ -1,0 +1,12 @@
+{
+    "appId": "com.webos.service.devmode",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["com.webos.service.devmode"],
+    "permissions": [
+        {
+            "service": "com.webos.service.devmode",
+            "outbound": []
+        }
+    ]
+}

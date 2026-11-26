@@ -13,9 +13,11 @@
 // mount, mknod, systemctl, ls-control and pkill that record their calls.
 //
 // Files (under the root):
-//   /var/luna/dev-mode-enabled           Developer Mode is on (the flag
-//                                        file of LuneOS's devmode service,
-//                                        which Phoenix's provider keeps: P3)
+//   /var/luna/preferences/devmode_enabled
+//                                        Developer Mode is on: OSE's flag
+//                                        file (com.palm.service.devmode),
+//                                        which Phoenix's provider
+//                                        (services/devmode) keeps too
 //   /var/lib/phoenix/overlay/state.json  the overlay: its build, the files
 //                                        it holds and removes (from which
 //                                        bundle, by whom, when), the
@@ -80,7 +82,7 @@ var pake = require("./lib/pake");
 var SERVICE = "org.webosphoenix.nova";
 var METHODS = ["getStatus", "listWaiting", "apply", "decline", "revert", "restartNow", "pairStart", "pairCancel", "listKeys", "removeKey",
                "addGrant", "setRevocations", "setOptions", "restart", "rescan"];
-var DEVMODE_FLAG = "/var/luna/dev-mode-enabled";
+var DEVMODE_FLAG = "/var/luna/preferences/devmode_enabled";
 var NOVA = "/var/lib/phoenix/nova";
 var OVERLAY = overlayLib.OVERLAY;
 var MANIFEST = "/usr/share/phoenix/manifest.json";
@@ -123,7 +125,9 @@ function createNova(deps) {
     var now = deps.now || function () { return new Date(); };
     var log = deps.log || function () {};
     var random = deps.random || crypto.randomBytes;
-    var config = Object.assign({ shellUnit: "luna-surfacemanager.service", wamUnit: "webapp-mgr.service",
+    // OSE's unit names (meta-webosose luna-surfacemanager.bb:30, wam.bb:11);
+    // /etc/phoenix/nova.json may say others (LuneOS's).
+    var config = Object.assign({ shellUnit: "surface-manager-daemon.service", wamUnit: "webapp-mgr.service",
                                  authorizedKeys: "/home/user/.ssh/authorized_keys" }, deps.config || {});
     var P = function (p) { return path.join(root, p); };
     var watchers = [];

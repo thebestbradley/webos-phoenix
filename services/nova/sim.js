@@ -31,7 +31,7 @@
 //   opening the app a bundle changed) and the tests read.
 // - Developer Mode is the simulator's (its pages' setting): the runtime's
 //   org.webosphoenix.nova tells it (POST /sim/devmode), and it keeps
-//   <DIR>/var/luna/dev-mode-enabled as a device's provider would.
+//   <DIR>/var/luna/preferences/devmode_enabled as a device's provider would.
 // - Settings talks to it through the runtime (runtime/phoenix-runtime.js,
 //   org.webosphoenix.nova): a plain HTTP server on 127.0.0.1 with a random
 //   token (POST /luna/<method>), written with the TLS port to
@@ -189,7 +189,7 @@ function start(opts) {
             try { p = body ? JSON.parse(body) : {}; } catch (e) { return send(400, { returnValue: false, errorText: "not JSON" }); }
             var m = /^\/luna\/([A-Za-z]+)$/.exec(req.url);
             if (req.url === "/sim/devmode") {
-                if (p.on) { fs.mkdirSync(D("/var/luna"), { recursive: true }); fs.writeFileSync(D(nova.DEVMODE_FLAG), ""); }
+                if (p.on) { fs.mkdirSync(path.dirname(D(nova.DEVMODE_FLAG)), { recursive: true }); fs.writeFileSync(D(nova.DEVMODE_FLAG), ""); }
                 else fs.rmSync(D(nova.DEVMODE_FLAG), { force: true });
                 core.changed();
                 return send(200, { returnValue: true });

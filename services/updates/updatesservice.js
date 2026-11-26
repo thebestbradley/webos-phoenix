@@ -225,6 +225,8 @@ function parseRelease(r) {
 //       other slot, which RAUC then makes primary)
 //   rauc.markActive(slot) -> Promise (the slot the next start uses)
 //   rauc.markGood() -> Promise (the running slot started well; optional)
+//   overlays.clearOthers() -> [names] (optional: dev push's overlays of
+//       other builds, removed once the running build is good)
 //   request({method, url}) -> Promise<{status, body}> (text)
 //   requestBytes({method, url}) -> Promise<{status, bytes}> (a feed and its
 //       signature are checked over the exact bytes; optional, without it
@@ -383,8 +385,21 @@ function createUpdatesService(deps) {
     function startup() {
         if (started) return started;
         started = deps.rauc.status().then(function (rs) {
-            var good = deps.rauc.markGood ? deps.rauc.markGood().then(null, function (e) { log("mark-good: " + e.message); }) : null;
-            return Promise.resolve(good).then(function () { return rs; });
+            var good = deps.rauc.markGood
+                ? deps.rauc.markGood().then(function () { return true; }, function (e) { log("mark-good: " + e.message); return false; })
+                : true;
+            return Promise.resolve(good).then(function (ok) {
+                // Dev push's overlays of other builds (docs/DEV-PUSH.md 4.6):
+                // once this build is good (without RAUC there is no other
+                // slot to fall back to).
+                if (ok && deps.overlays) {
+                    try {
+                        var gone = deps.overlays.clearOthers();
+                        if (gone && gone.length) log("developer overlays of other builds removed: " + gone.join(", "));
+                    } catch (e) { log("developer overlays: " + e.message); }
+                }
+                return rs;
+            });
         }).then(function (rs) {
             var s = deps.state.load() || {};
             var note = null;

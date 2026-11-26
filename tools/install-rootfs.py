@@ -610,7 +610,17 @@ def content(dev, src):
 # ---- The image's manifest (docs/DEV-PUSH.md 8) ------------------------------------------
 
 DEVPUSH_PATHS = os.path.join("apps", "shared", "platform", "src", "devpush-paths.json")
-MANIFEST = "/usr/share/phoenix/manifest.json"
+# The manifest's format and the image-time stamp: meta-phoenix's library,
+# which the image's class (phoenix-devpush.bbclass) uses too.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "meta-phoenix", "lib"))
+from phoenix.devpush import MANIFEST, dump_manifest, file_mode, stamp as _stamp  # noqa: E402
+
+
+def stamp(rootfs, build=None, compatible=None):
+    try:
+        return _stamp(rootfs, build, compatible)
+    except ValueError as e:
+        sys.exit("install-rootfs --stamp: %s (or give --build)" % e)
 
 
 def devpush_rules():
@@ -650,11 +660,6 @@ def shell_plan(repo=None):
     if os.path.isfile(perm):
         out["/usr/share/luna-service2/client-permissions.d/com.webos.surfacemanager.phoenix.perm.json"] = perm
     return out
-
-
-def file_mode(st_mode):
-    """0755 for an executable, else 0644: the only two a bundle carries."""
-    return "0755" if st_mode & 0o111 else "0644"
 
 
 def product_info(repo=None):
@@ -705,56 +710,6 @@ def make_manifest(final, build="unstamped", compatible=None, repo=None):
         out["source"] = src
     out["files"] = files
     return out
-
-
-def dump_manifest(m):
-    return (json.dumps(m, indent=1, sort_keys=False) + "\n").encode("utf-8")
-
-
-def os_release_build(rootfs):
-    """BUILD_ID from ROOTFS's /etc/os-release (or /usr/lib/os-release), or None."""
-    for rel in ("etc/os-release", "usr/lib/os-release"):
-        try:
-            with open(os.path.join(rootfs, rel), encoding="utf-8") as f:
-                for line in f:
-                    k, _, v = line.strip().partition("=")
-                    if k == "BUILD_ID" and v.strip().strip("\"'"):
-                        return v.strip().strip("\"'")
-        except OSError:
-            continue
-    return None
-
-
-def stamp(rootfs, build=None, compatible=None):
-    """At image time: ROOTFS's manifest.json with each file's size, hash and
-    mode read from the image's own copy (what other recipes changed after
-    phoenix-apps installed it shows as it is; a file no longer there is
-    dropped), and the image's build id."""
-    path = os.path.join(rootfs, MANIFEST.lstrip("/"))
-    try:
-        with open(path, encoding="utf-8") as f:
-            m = json.load(f)
-    except (OSError, ValueError) as e:
-        sys.exit("install-rootfs --stamp: %s: %s" % (path, e))
-    build = build or os_release_build(rootfs)
-    if not build:
-        sys.exit("install-rootfs --stamp: no BUILD_ID in %s/etc/os-release (or give --build)" % rootfs)
-    files = []
-    for f in m.get("files", []):
-        full = os.path.join(rootfs, f["path"].lstrip("/"))
-        if os.path.islink(full) or not os.path.isfile(full):
-            continue
-        with open(full, "rb") as fh:
-            data = fh.read()
-        files.append({"path": f["path"], "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                      "mode": file_mode(os.stat(full).st_mode)})
-    m["build"] = build
-    if compatible is not None:
-        m["compatible"] = compatible
-    m["files"] = files
-    with open(path, "wb") as f:
-        f.write(dump_manifest(m))
-    return m
 
 
 def main():

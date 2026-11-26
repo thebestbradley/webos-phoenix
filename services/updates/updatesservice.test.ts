@@ -119,6 +119,7 @@ function service() {
             remove: (f: string) => fs.rmSync(f, { force: true }),
         },
         power: () => node.power(path.join(dir, "power_supply")),
+        overlays: { clearOthers: () => node.clearOtherOverlays({ dir: path.join(dir, "overlay"), osRelease: path.join(dir, "os-release") }) },
         luna: {
             call: (uri: string, params: Any) => {
                 calls.push({ uri, params });
@@ -352,6 +353,28 @@ describe("installing", () => {
         const st = await after.getStatus({});
         expect(st).toMatchObject({ state: "idle", available: null, current: { version: "1.1.0", build: 110 } });
         expect(called("/createToast").at(-1)?.params.message).toBe("Updated to webOS Phoenix 1.1.0");
+    });
+
+    // Dev push's overlays (docs/DEV-PUSH.md 4.6): kept through the switch (a
+    // fall back before mark-good finds its own), the old build's removed
+    // once the new one is marked good.
+    it("removes dev push's overlays of other builds once the new build is marked good", async () => {
+        const ov = path.join(dir, "overlay");
+        fs.mkdirSync(path.join(ov, "100/upper/usr/share/phoenix"), { recursive: true });
+        fs.writeFileSync(path.join(ov, "state.json"), JSON.stringify({ build: "100", files: {} }));
+        const svc = await ready();
+        await svc.installNow({});
+        expect(fs.existsSync(path.join(ov, "100"))).toBe(true);
+        restart();
+        await service().getStatus({});
+        expect(raucState().calls.some((c: string) => /mark-good/.test(c))).toBe(true);
+        expect(fs.existsSync(path.join(ov, "100"))).toBe(false);
+        expect(fs.existsSync(path.join(ov, "state.json"))).toBe(false);
+        // The running build's own stays.
+        fs.mkdirSync(path.join(ov, "110/upper"), { recursive: true });
+        fs.writeFileSync(path.join(ov, "state.json"), JSON.stringify({ build: "110", files: {} }));
+        expect(node.clearOtherOverlays({ dir: ov, osRelease: path.join(dir, "os-release") })).toEqual([]);
+        expect(fs.readdirSync(ov).sort()).toEqual(["110", "state.json"]);
     });
 
     it("says so when the new system did not start and the device went back", async () => {

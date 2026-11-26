@@ -79,7 +79,7 @@ afterEach(() => { core.pairCancel(); fs.rmSync(dev.root, { recursive: true, forc
 
 describe("the device's checks (docs/DEV-PUSH.md 5.3)", () => {
     it("refuses everything but getStatus with Developer Mode off", async () => {
-        fs.rmSync(path.join(dev.root, "var/luna/dev-mode-enabled"));
+        fs.rmSync(path.join(dev.root, "var/luna/preferences/devmode_enabled"));
         await expect(push([{ path: QML, data: "x" }])).rejects.toMatchObject({ code: "NEEDS_DEVMODE" });
         for (const m of ["listWaiting", "apply", "decline", "revert", "pairStart", "listKeys", "removeKey", "addGrant", "setOptions", "restart", "rescan"]) {
             expect((await core.methods[m]({})).errorCode, m).toBe("NEEDS_DEVMODE");
@@ -215,7 +215,7 @@ describe("the restart map (4.5)", () => {
         const r = await push([{ path: QML, data: "a" }, { path: "/usr/share/phoenix/qml/Phoenix/Shell/Shell.qml", data: "b" },
                               { path: "/usr/share/phoenix/runtime/phoenix-runtime.js", data: "c" }]);
         expect(r.restarted.map((x: Any) => x.what)).toEqual(["wam", "shell"]);
-        expect(restarts()).toEqual(["systemctl restart webapp-mgr.service", "systemctl restart luna-surfacemanager.service"]);
+        expect(restarts()).toEqual(["systemctl restart webapp-mgr.service", "systemctl restart surface-manager-daemon.service"]);
     });
     it("closes an open app and opens it again, and rescans when its appinfo.json changed", async () => {
         running = ["org.webosphoenix.settings"];
@@ -262,7 +262,7 @@ describe("reverting (4.6)", () => {
         expect(dev.read(SETTINGS + "old.js")).toBe(h.IMAGE[SETTINGS + "old.js"]);
         expect(state().files).toEqual({});
         expect(state().removed).toEqual({});
-        expect(sys.calls).toContain("systemctl restart luna-surfacemanager.service");
+        expect(sys.calls).toContain("systemctl restart surface-manager-daemon.service");
         expect(mounts()).toEqual([]);
         expect((await core.methods.revert({ path: QML })).errorCode).toBe("NOT_FOUND");
     });
@@ -298,13 +298,13 @@ describe("reverting (4.6)", () => {
         expect(mounts().some((c: string) => c.endsWith(" /usr/share/phoenix"))).toBe(true);
 
         reboot();
-        fs.rmSync(path.join(dev.root, "var/luna/dev-mode-enabled"));
+        fs.rmSync(path.join(dev.root, "var/luna/preferences/devmode_enabled"));
         plan = await boot.boot({ root: dev.root, run: sys.run });
         expect(plan).toMatchObject({ mount: [], why: "Developer Mode is off" });
         expect(mounts()).toEqual([]);
 
         reboot();
-        dev.write("/var/luna/dev-mode-enabled", "");
+        dev.write("/var/luna/preferences/devmode_enabled", "");
         dev.write("/etc/os-release", "BUILD_ID=20261201000000\n");
         plan = await boot.boot({ root: dev.root, run: sys.run });
         expect(plan.why).toMatch(/made for build/);

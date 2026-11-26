@@ -1,0 +1,5 @@
+{
+    "allowedNames": ["com.webos.service.devmode"],
+    "phoenix.devmode.query": ["dev"],
+    "phoenix.devmode.management": ["oem"]
+}

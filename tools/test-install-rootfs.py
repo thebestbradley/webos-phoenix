@@ -134,9 +134,54 @@ with tempfile.TemporaryDirectory() as tmp:
     r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/",
                         "--catalog-root", "c2hvcnQ="], capture_output=True, text=True)
     check(r.returncode != 0 and "Ed25519" in r.stderr, "servers-json.py: a key that is not one refused")
+    dk = base64.b64encode(os.urandom(32)).decode()
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/",
+                        "--devpush-key", dk], capture_output=True, text=True)
+    made = json.load(open(out)) if r.returncode == 0 else {}
+    check(r.returncode == 0 and made.get("devpush") == {"key": dk} and "devpush" in r.stdout,
+          "servers-json.py: dev push's platform key pinned (docs/DEV-PUSH.md 9.1)")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/"],
+                       capture_output=True, text=True)
+    check(r.returncode == 0 and json.load(open(out)).get("devpush") == {"key": None}, "servers-json.py: no dev push key unless given")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/",
+                        "--devpush-key", "c2hvcnQ="], capture_output=True, text=True)
+    check(r.returncode != 0 and "Ed25519" in r.stderr, "servers-json.py: a dev push key that is not one refused")
     r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), "--check",
                         os.path.join(REPO, "services", "account", "etc", "palm", "phoenix", "servers.json")], capture_output=True, text=True)
     check(r.returncode == 0, "servers-json.py --check: the simulator's file")
+
+# meta-phoenix's lib/phoenix/devpush.py at image time (phoenix-devpush.bbclass):
+# BUILD_ID written through OE's /etc/os-release link, Developer Mode off as
+# built (OSE's recipe writes its flag into the image).
+sys.path.insert(0, os.path.join(REPO, "meta-phoenix", "lib"))
+from phoenix import devpush as dp  # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    os.makedirs(os.path.join(tmp, "usr/lib"))
+    os.makedirs(os.path.join(tmp, "etc"))
+    with open(os.path.join(tmp, "usr/lib/os-release"), "w") as f:
+        f.write('ID=webos\nVERSION_ID="1.0.0"\nBUILD_ID="old"\n')
+    os.symlink("../usr/lib/os-release", os.path.join(tmp, "etc/os-release"))
+    written = dp.set_build_id(tmp, "20261126051500")
+    text = open(os.path.join(tmp, "usr/lib/os-release")).read()
+    check(written == os.path.join(tmp, "usr/lib/os-release") and os.path.islink(os.path.join(tmp, "etc/os-release"))
+          and text.count("BUILD_ID=") == 1 and 'BUILD_ID="20261126051500"' in text and 'VERSION_ID="1.0.0"' in text
+          and dp.os_release_build(tmp) == "20261126051500",
+          "devpush.py: BUILD_ID into os-release through /etc/os-release's link, replacing one there")
+    check(dp.set_build_id(os.path.join(tmp, "nothing"), "x") is None, "devpush.py: no os-release, nothing written")
+    prefs = os.path.join(tmp, "var/luna/preferences")
+    os.makedirs(prefs)
+    for fn in ("devmode_enabled", "dc0", "other"):
+        open(os.path.join(prefs, fn), "w").close()
+    gone = dp.devmode_off(tmp)
+    check(sorted(gone) == ["/var/luna/preferences/dc0", "/var/luna/preferences/devmode_enabled"]
+          and os.listdir(prefs) == ["other"] and dp.devmode_off(tmp) == [],
+          "devpush.py: Developer Mode off as built (OSE's flag and its dc markers gone)")
+    try:
+        dp.stamp(tmp)
+        stamped = False
+    except ValueError as e:
+        stamped = "manifest.json" in str(e)
+    check(stamped, "devpush.py: stamping without a manifest says so")
 
 # The release notes ship without "unreleased", the next version's notes
 # while work goes on (docs/APP-STORE.md 3.15); the versions as they are.
