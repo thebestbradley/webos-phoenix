@@ -594,6 +594,7 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 - [Web app runtime](docs/APP-RUNTIME.md): how the original webOS apps run
 - [Hardware](docs/HARDWARE.md): target devices, drivers, installer and updates
 - [Dev push](docs/DEV-PUSH.md): the plan for sending changed files to a test device in Developer Mode without a new image (`nova`); built so far: dev bundles, the image's manifest and `nova package`
+- [Nova Helper](docs/DEV-HELPER.md): the plan for a desktop app that runs Phoenix in UTM on an iPad or Mac with one click (JIT through a debugger) and gathers the developer tools: inspector, logs, QML debugger, push, terminal, for devices and the simulator
 - [App gaps](docs/APP-GAPS.md): the apps a modern phone needs, and which Phoenix still lacks
 - [App store](docs/APP-STORE.md): PWAs as webOS apps, legacy `.ipk` apps, and the catalog
 - [Android apps](docs/ANDROID.md): Android apps as webOS cards through Waydroid
