@@ -818,6 +818,13 @@ function createNova(deps) {
         rescan: wrap(function () { gate(); return runRestarts(["rescan"]).then(function (r) { return { restarted: r }; }); })
     };
 
+    // At start: a key revoked while an older novad left it in paired.json, or
+    // its SSH line in authorized_keys, is reconciled at once (dropRevoked), not
+    // at the next pairing change or revocation list.
+    if (revocations()) {
+        try { dropRevoked(); } catch (e) { addLog({ event: "error", reason: "reconcile revocations: " + (e && e.message || e) }); }
+    }
+
     return {
         methods: methods,
         // getStatus {subscribe}: fn(status) after every change -> stop()

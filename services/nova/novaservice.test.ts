@@ -446,6 +446,22 @@ describe("Trusted Developers: the extra layer on granted keys (9.1)", () => {
         expect(core.isPaired(desk.publicKey)).toBe(false);
     });
 
+    it("at start, a revoked key left from before the list is unpaired and its SSH key taken out", async () => {
+        dev.write("/home/user/.ssh/authorized_keys", "ssh-ed25519 AAAAmine me@laptop\n");
+        const desk = keys.generate("desk");
+        expect(await pairWith(desk, "Desk top")).toBe(true);
+        const before = dev.read("/home/user/.ssh/authorized_keys");
+        expect((await core.methods.setRevocations(h.revocations(dev.master, 1, { keys: [desk.id] }))).returnValue).toBe(true);
+        // An older novad left the revoked key in paired.json and its SSH line in place.
+        pairComputer(desk, "Desk top");
+        dev.write("/home/user/.ssh/authorized_keys", before);
+        expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("nova:Desk_top");
+        make();   // novad starts again
+        expect(core.paired().map((p: Any) => p.key)).toEqual([computer.publicKey]);
+        expect(dev.read("/home/user/.ssh/authorized_keys")).not.toContain("nova:Desk_top");
+        expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("me@laptop");
+    });
+
     it("Remove takes a paired computer or a grant away, and its bundles with it", async () => {
         await addGrant();
         expect((await core.methods.removeKey({ key: "grant-1" })).removed).toBe("grant");
