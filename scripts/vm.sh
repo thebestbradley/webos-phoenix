@@ -139,6 +139,11 @@ case $ACCEL in
     hvf) CPU_MODEL=host ;;
     kvm) CPU_MODEL=host GIC=host ;;
     tcg) CPU_MODEL=max
+         # Web apps take 40 s or more to load at boot under TCG: SAM's
+         # 10-second limit on an app's transition would kill the shell's
+         # status bar and Just Type (meta-phoenix's sam.bbappend). 10 minutes,
+         # as scripts/make-utm.sh --for ipad gives.
+         APPEND="$APPEND systemd.setenv=SAM_TRANSITION_TIMEOUT_MS=600000"
          echo "vm.sh: no hardware acceleration here ($HOST_OS $HOST_ARCH): QEMU emulates the ARM CPU (TCG), many times slower than the device" >&2 ;;
 esac
 if [ -z "$GL" ]; then

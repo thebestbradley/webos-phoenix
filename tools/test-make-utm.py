@@ -40,7 +40,8 @@ spec = importlib.util.spec_from_file_location("check_utm_bundle", os.path.join(R
 cub = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cub)
 
-# make-utm.sh makes a qcow2 disk when there is a qemu-img (PHOENIX_UTM_QEMU_IMG)
+# make-utm.sh's default root disk: a clone of the image where it can make
+# one, else qcow2 when there is a qemu-img (PHOENIX_UTM_QEMU_IMG), else raw
 HAS_QEMU_IMG = shutil.which(os.environ.get("PHOENIX_UTM_QEMU_IMG", "qemu-img"))
 IDS = ["fairphone-fp6", "ayn-odin2portal", "pinephonepro", "pinetab2", "raspberrypi4-64"]
 failures = []
@@ -67,13 +68,33 @@ def make(args, env=None):
     return run(["sh", MAKE] + args, env)
 
 
-def dry(args):
-    """The plan's first line and config.plist, from --dry-run."""
-    code, out, err = make(args + ["--dry-run"])
+def dry(args, env=None):
+    """The plan's first line and config.plist, from --dry-run. No clones
+    unless env says otherwise: the defaults then do not depend on whether
+    this checkout has an image in out/."""
+    e = {"PHOENIX_UTM_CLONE": "no"}
+    e.update(env or {})
+    code, out, err = make(args + ["--dry-run"], e)
     if code != 0:
         return code, None, None, err
     i = out.index("<?xml")
     return code, out[:i], plistlib.loads(out[i:].encode()), err
+
+
+def can_clone(folder):
+    """Whether files in folder can be cloned (APFS clonefile(2), a reflink)."""
+    a, b = os.path.join(folder, ".clone-probe"), os.path.join(folder, ".clone-probe-2")
+    with open(a, "wb") as f:
+        f.write(b"probe")
+    try:
+        if sys.platform == "darwin":
+            import ctypes
+            return ctypes.CDLL(None).clonefile(a.encode(), b.encode(), 0) == 0
+        return subprocess.run(["cp", "--reflink=always", a, b], capture_output=True).returncode == 0
+    finally:
+        for x in (a, b):
+            if os.path.exists(x):
+                os.remove(x)
 
 
 def has(cmd, *seq):
@@ -127,9 +148,9 @@ for device in IDS:
                   sysc["CPUCount"] == min(dev_cpus, 4) and sysc["MemorySize"] == min(dev_mem, 3072)
                   and sysc["JITCacheSize"] == 384, str(sysc))
             t = 600 if target == "ipad" else 1800
-            check("%s: vm.sh's command line, then systemd's timeouts at %d s" % (tag, t),
+            check("%s: vm.sh's command line, then systemd's and SAM's timeouts at %d s" % (tag, t),
                   append == ["%s systemd.default_timeout_start_sec=%d systemd.default_device_timeout_sec=%d"
-                             % (base, t, t)], str(append))
+                             " systemd.setenv=SAM_TRANSITION_TIMEOUT_MS=%d" % (base, t, t, t * 1000)], str(append))
 
 # ---- The defaults and the options ------------------------------------------
 code, plan, config, err = dry([])
@@ -243,11 +264,54 @@ try:
     code, _, err = make(["--image", img, "--out", out, "--disk", "raw", "--force"])
     _, faults = cub.check_bundle(bundle)
     check("--force replaces it", code == 0 and not faults, err)
+    clones = can_clone(tmp)
+    root = "webos-phoenix-image-phoenix-vm-arm64.rootfs"
+
+    def qcow2(bundle_name):
+        q = os.path.join(out, bundle_name, "Data", root + ".qcow2")
+        return os.path.isfile(q) and open(q, "rb").read(4) == b"QFI\xfb" and os.path.getsize(q) < 8 * 1024 * 1024
+
+    code, o, err = make(["fairphone-fp6", "--image", img, "--out", out])
+    if clones:
+        r = os.path.join(out, "Phoenix-fairphone-fp6.utm", "Data", root + ".ext4")
+        check("the default where the image's volume clones: a raw root disk, a clone of the image",
+              code == 0 and os.path.isfile(r) and "(a clone of the image: it takes no space)" in o
+              and os.path.getsize(r) == 64 * 1024 * 1024, o + err)
+        _, plan, config, _ = dry(["fairphone-fp6", "--image", img, "--out", out], {"PHOENIX_UTM_CLONE": ""})
+        check("--dry-run says so too", plan is not None and "a raw root disk (a clone of the image)" in plan
+              and config["Drive"][1]["ImageName"] == root + ".ext4", plan or "")
+    elif HAS_QEMU_IMG:
+        check("the default where nothing clones, qemu-img there: a qcow2 root disk",
+              code == 0 and qcow2("Phoenix-fairphone-fp6.utm"), o + err)
     if HAS_QEMU_IMG:
-        code, _, err = make(["fairphone-fp6", "--image", img, "--out", out])
-        q = os.path.join(out, "Phoenix-fairphone-fp6.utm", "Data", "webos-phoenix-image-phoenix-vm-arm64.rootfs.qcow2")
-        check("qemu-img there: a qcow2 root disk by default", code == 0 and os.path.isfile(q)
-              and open(q, "rb").read(4) == b"QFI\xfb" and os.path.getsize(q) < 8 * 1024 * 1024, err)
+        code, o, err = make(["pinephonepro", "--image", img, "--out", out, "--disk", "qcow2"])
+        check("--disk qcow2: a qcow2 root disk, clone or not", code == 0 and qcow2("Phoenix-pinephonepro.utm"), o + err)
+        code, o, err = make(["ayn-odin2portal", "--image", img, "--out", out], {"PHOENIX_UTM_CLONE": "no"})
+        check("no clone (PHOENIX_UTM_CLONE=no), qemu-img there: a qcow2 root disk by default",
+              code == 0 and qcow2("Phoenix-ayn-odin2portal.utm") and "clone" not in o, o + err)
+
+    # The free space it asks for: a clone needs none for the root disk, a
+    # copy its used blocks. df -Pk (the free-space check) says 4 MiB free.
+    full = os.path.join(tmp, "img-full")
+    os.makedirs(full)
+    shutil.copy(os.path.join(img, "Image"), full)
+    with open(os.path.join(full, root + ".ext4"), "wb") as f:
+        f.write(b"\x5a" * (8 * 1024 * 1024))
+    stub = os.path.join(tmp, "bin")
+    os.makedirs(stub)
+    with open(os.path.join(stub, "df"), "w") as f:
+        f.write('#!/bin/sh\ncase $1 in -Pk) echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; '
+                'echo "stub 4096 0 4096 0%% /"; exit 0 ;; esac\nexec %s "$@"\n' % shutil.which("df"))
+    os.chmod(os.path.join(stub, "df"), 0o755)
+    tight = {"PATH": stub + os.pathsep + os.environ["PATH"]}
+    code, o, err = make(["--image", full, "--out", os.path.join(tmp, "out-tight"), "--disk", "raw"],
+                        dict(tight, PHOENIX_UTM_CLONE="no"))
+    check("a copy needs room for the root disk's used blocks", code == 2 and "4 MiB free" in err
+          and not os.path.exists(os.path.join(tmp, "out-tight", "Phoenix-pinetab2.utm")), o + err)
+    if clones:
+        code, o, err = make(["--image", full, "--out", os.path.join(tmp, "out-tight")], tight)
+        check("a clone needs room only for the kernel", code == 0 and "a clone of the image" in o
+              and not cub.check_bundle(os.path.join(tmp, "out-tight", "Phoenix-pinetab2.utm"))[1], o + err)
     code, _, err = make(["--image", os.path.join(tmp, "none"), "--out", out])
     check("no image: says how to build it", code == 2 and "mac-build.sh phoenix-vm-arm64" in err, err)
     os.remove(os.path.join(bundle, "Data", "Image"))

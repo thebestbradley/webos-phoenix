@@ -288,8 +288,9 @@ from taking the first swipe at the screen's edges.
 
 ```sh
 scripts/mac-build.sh --stack luneos phoenix-vm-arm64   # the image, once (hours): Chromium 151
-brew install qemu                       # qemu-img: a qcow2 disk, smaller to copy
+brew install qemu                       # qemu-img, for --disk qcow2 (smaller to copy)
 scripts/make-utm.sh                     # out/Phoenix-pinetab2.utm (UTM with JIT)
+scripts/make-utm.sh --disk qcow2 --force  # the same, its root disk qcow2
 scripts/make-utm.sh --for ipad-se       # out/Phoenix-pinetab2-se.utm (UTM SE)
 scripts/make-utm.sh fairphone-fp6       # the phone: turn the iPad upright
 ```
@@ -334,7 +335,16 @@ bundle:
 - **Boot**: the kernel itself (no boot loader), `vm.sh`'s command line,
   and systemd's start and device timeouts at 10 minutes (30 for UTM SE)
   instead of 90 seconds: under emulation a unit can be that slow without
-  being stuck.
+  being stuck. SAM's limit on an app's launch goes up with them
+  (`systemd.setenv=SAM_TRANSITION_TIMEOUT_MS=600000`, 1800000 for UTM
+  SE): its 10 seconds killed the status bar and Just Type while WAM was
+  still loading them (an image without meta-phoenix's `sam.bbappend`
+  ignores it).
+- **Root disk**: by default a clone of the image (`Data/…rootfs.ext4`)
+  when `out/` is on the image's APFS volume: instant, and it takes no
+  space until the VM writes to it. Elsewhere it is qcow2 (with
+  `qemu-img`), which holds only what the image uses. `--disk qcow2`
+  makes the qcow2 one anyway: the smaller file to copy to the iPad.
 - **The rest**: Intel HD Audio, network (QEMU's user networking: the
   iPad's connection), ssh on the iPad's own 127.0.0.1:2222, the console
   in UTM's serial window, a virtio random number generator.
