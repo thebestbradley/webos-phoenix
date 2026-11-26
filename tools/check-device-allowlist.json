@@ -737,5 +737,17 @@
  "simrefs:loopback:services/account:127.0.0.1": {
   "owner": "intended: the simulator's servers.json (this computer's servers); meta-phoenix writes an image's own over it (tools/servers-json.py, docs/PLATFORM-CLIENT.md)",
   "row": "Q1"
+ },
+ "simrefs:loopback:services/nova:127.0.0.1": {
+  "owner": "intended: the simulator's novad (sim.js) is this computer's, and nova forward reaches ports on the device's own loopback (docs/DEV-PUSH.md, DEV-HELPER.md 8)",
+  "row": "G5"
+ },
+ "image:missing-path:/etc/phoenix/nova.json": {
+  "owner": "meta-phoenix, dev push P3 (docs/DEV-PUSH.md 12)",
+  "row": "G5"
+ },
+ "image:missing-path:/usr/share/phoenix/manifest.json": {
+  "owner": "meta-phoenix, dev push P3: tools/install-rootfs.py --manifest / --stamp at image time (docs/DEV-PUSH.md 8, 12)",
+  "row": "G5"
  }
 }
