@@ -463,3 +463,18 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 /* Long names and lines (AirPods' switches, Tracker Alerts): on a 320 px phone they wrap
    beside the toggle instead of being cut short. */
 .wrap-row .pui-row-title, .wrap-row .pui-row-subtitle { white-space: normal; }
+
+/* Developer Mode > Pushed Changes, Pair a Computer (DevPush.tsx) ------------------------- */
+
+.devpush-code {
+    margin: 8px 0 6px;
+    text-align: center;
+    font-size: 40px;
+    font-weight: 300;
+    letter-spacing: 6px;
+    font-variant-numeric: tabular-nums;
+    color: var(--pui-text);
+}
+.devpush-waiting { margin-bottom: 10px; }
+[data-testid="devpush-file"] .pui-row-subtitle, [data-testid="devpush-bundle"] .pui-row-subtitle { white-space: normal; overflow-wrap: anywhere; }
+.devpush-fingerprint { margin: -4px 4px 8px; font-size: 13px; color: var(--pui-text-dim); overflow-wrap: anywhere; }

@@ -61,6 +61,17 @@ public:
     // wins. Rescans.
     void addExtraRootfs(const QString &dir);
     QStringList extraRootfs() const { return m_extraRootfs; }
+
+    // The developer overlay (docs/DEV-PUSH.md; what `nova push -d sim`
+    // writes through services/nova/sim.js): while
+    // <data>/var/lib/phoenix/overlay/sim/active exists, a file in
+    // <data>/var/lib/phoenix/overlay/sim/upper/ wins over everything at its
+    // device path, and a ".wh.<name>" file there hides <name> (a file a
+    // bundle removed). Unlike an extra rootfs it holds single files, never
+    // whole apps. -> the file, "" (hidden: resolve() finds nothing), or a
+    // null QString (it has nothing at that path).
+    QString developerOverlayFile(const QString &devicePath) const;
+    QString developerOverlayDir() const;
     // Whether the app with this id comes from an extra rootfs.
     bool isExtraApp(const QString &appId) const { return m_extraApps.contains(appId); }
 
