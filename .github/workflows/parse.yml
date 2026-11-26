@@ -16,6 +16,7 @@ on:
       - scripts/setup-build-luneos.sh
       - scripts/luneos-layers.txt
       - scripts/parse-check.sh
+      - scripts/packageconfig-check.py
       - .github/workflows/parse.yml
 
 # A newer push to a branch or PR cancels its older runs, which would only

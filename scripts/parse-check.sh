@@ -38,6 +38,10 @@
 #                         the torchd stub, which is not in it, whisper-cpp and
 #                         phoenix-driver-feed, the Hardware app's firmware packages)
 #
+# After the dry run, scripts/packageconfig-check.py parses the recipes
+# meta-phoenix sets PACKAGECONFIG for and checks that each option exists
+# (OE checks that only in do_configure, hours into a build).
+#
 # bitbake refuses to run as root (OE's sanity check, with no setting to
 # allow it). As root, run it as an ordinary user, or in a user namespace
 # that maps root to an ordinary uid (files stay root's):
@@ -145,7 +149,8 @@ CONF
 
 # 4. Parse and resolve for each machine.
 cd "$BUILD_DIR"
-bb() (
+bbrun() (
+    # A command in the build environment for one MACHINE.
     # oe-init-build-env reads unset variables.
     m=$1; shift; set +u
     if [ "$STACK" = luneos ]; then
@@ -154,8 +159,12 @@ bb() (
     else
         . ./oe-init-build-env >/dev/null
     fi
-    MACHINE=$m bitbake "$@"
+    MACHINE=$m "$@"
 )
+bb() {
+    m=$1; shift
+    bbrun "$m" bitbake "$@"
+}
 COMPRESS=${PHOENIX_PARSE_COMPRESS-xz zstd}
 first=$1
 set -- "$@" --
@@ -175,12 +184,19 @@ while [ "$1" != -- ]; do
         else
             dry=FAILED; failed=1
         fi
+        echo "=== $m: scripts/packageconfig-check.py"
+        if bbrun "$m" python3 "$REPO_DIR/scripts/packageconfig-check.py" "$REPO_DIR/meta-phoenix" >>"$log" 2>&1; then
+            pkgconf=ok
+        else
+            pkgconf=FAILED; failed=1
+            grep -E "PACKAGECONFIG has|^error:" "$log" || true
+        fi
     else
-        parse=FAILED; dry=skipped; failed=1
+        parse=FAILED; dry=skipped; pkgconf=skipped; failed=1
     fi
     grep -E '^(ERROR|WARNING):' "$log" | sort -u || true
     [ "$parse$dry" = okok ] || tail -n 30 "$log"
-    summary="$summary$(printf '%-18s parse %-7s dry run %s' "$m" "$parse" "$dry")
+    summary="$summary$(printf '%-18s parse %-7s dry run %-7s packageconfig %s' "$m" "$parse" "$dry" "$pkgconf")
 "
 done
 
