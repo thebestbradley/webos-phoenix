@@ -527,8 +527,10 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // The shell's QML and assets with those pushed by `nova push -d sim` (simnova.h).
-    const QString shellQmlDir = rootfs.isValid()
+    // The shell's QML and assets with those pushed by `nova push -d sim`
+    // (simnova.h), once the overlay's boot step has run (a Revert to Image
+    // clears it first).
+    const QString shellQmlDir = rootfs.isValid() && bootDeveloperOverlay(&rootfs, repoDir)
         ? shellWithPushedChanges(&rootfs, qmlDir, QDir(qmlDir).filePath(QStringLiteral("../assets"))) : qmlDir;
     QQuickView view;
     view.engine()->addImportPath(shellQmlDir);

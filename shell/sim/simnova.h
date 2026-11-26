@@ -122,6 +122,35 @@ private:
     double m_seenSeq = 0;
 };
 
+// The boot step a device runs before luna-surfacemanager starts (DEV-PUSH
+// 4.2, 4.6): services/nova/sim.js --boot-only clears the overlay after
+// Revert to Image and takes the "active" marker away with Developer Mode
+// off, so the shell's QML is picked (shellWithPushedChanges) from what the
+// overlay holds now, not from before the Revert. -> false where it could not
+// run (no Node, no script), when pushed changes are left out.
+inline bool bootDeveloperOverlay(const Rootfs *rootfs, const QString &repoDir)
+{
+    const QString data = rootfs->dataDir();
+    const QString script = QDir(repoDir).filePath(QStringLiteral("services/nova/sim.js"));
+    const QString node = QStandardPaths::findExecutable(QStringLiteral("node"));
+    if (data.isEmpty() || !QFileInfo::exists(script) || node.isEmpty())
+        return false;
+    QProcess p;
+    p.setProcessChannelMode(QProcess::ForwardedChannels);
+    p.start(node, { script, QStringLiteral("--data"), data, QStringLiteral("--boot-only") });
+    if (!p.waitForFinished(30000)) {
+        p.kill();
+        p.waitForFinished(1000);
+        qWarning("phoenix-sim: the developer overlay's boot step did not finish; pushed changes are left out");
+        return false;
+    }
+    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
+        qWarning("phoenix-sim: the developer overlay's boot step failed; pushed changes are left out");
+        return false;
+    }
+    return true;
+}
+
 // The shell's QML and assets with the developer overlay's files: when the
 // overlay holds any under /usr/share/phoenix/qml or assets, a tree at
 // <overlay>/shell/{qml,assets} that links to the checkout's shell/qml and

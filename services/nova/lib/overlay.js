@@ -173,16 +173,24 @@ function createDeviceOverlay(opts) {
         // Mounts the overlay on each of mounts not mounted yet whose upper/
         // has something: the image's directory bind-mounted at LOWER, the
         // overlay over the mount point, the refused paths bound back.
+        // All or none: when one fails, what this call mounted is unmounted
+        // again, last first, and the failure passed on.
         mount: function (mounts) {
             var todo = mounts.filter(function (m) { return !isMounted(m) && exists(upper(m)); });
+            var done = [];
             return todo.reduce(function (chain, m) {
-                return chain.then(function () { return mountOne(run, root, base, m); });
-            }, Promise.resolve()).then(function () { return todo; });
+                return chain.then(function () { return mountOne(run, root, base, m, done); });
+            }, Promise.resolve()).then(function () { return todo; }, function (e) {
+                return done.slice().reverse().reduce(function (chain, target) {
+                    return chain.then(function () { return run("umount", [target]); }).then(null, function () { /* tried */ });
+                }, Promise.resolve()).then(function () { throw e; });
+            });
         }
     };
 }
 
-function mountOne(run, root, base, m) {
+// done (optional): each mount's target is added once it is mounted.
+function mountOne(run, root, base, m, done) {
     var lower = LOWER + m;
     fs.mkdirSync(path.join(root, lower), { recursive: true, mode: 0o755 });
     fs.mkdirSync(path.join(base, "upper", m), { recursive: true, mode: 0o755 });
@@ -197,7 +205,11 @@ function mountOne(run, root, base, m) {
     refusedInside(m).concat(refusedFilesIn(root, m)).forEach(function (r) {
         if (exists(path.join(root, r))) steps.push(["mount", ["--bind", LOWER + r, r]]);
     });
-    return steps.reduce(function (chain, s) { return chain.then(function () { return run(s[0], s[1]); }); }, Promise.resolve());
+    return steps.reduce(function (chain, s) {
+        return chain.then(function () { return run(s[0], s[1]); }).then(function () {
+            if (done) done.push(s[1][s[1].length - 1]);
+        });
+    }, Promise.resolve());
 }
 
 // The simulator's overlay: dir is laid out like the device's root.

@@ -272,11 +272,13 @@ function createNova(deps) {
             sha256: function (b) { return crypto.createHash("sha256").update(b).digest("hex"); },
             sha512: function (b) { return Promise.resolve(new Uint8Array(crypto.createHash("sha512").update(b).digest())); },
             // What the overlay holds after this bundle: only its files when
-            // it replaces, else those it does not overwrite as well.
+            // it replaces, else those it does not overwrite or remove as
+            // well (changeSet checks the result exactly).
             spaceLeft: function (m) {
                 if (m.mode === "replace") return opts.overlayCap;
                 var mine = {};
                 m.files.forEach(function (f) { mine[f.path] = true; });
+                m.removed.forEach(function (p) { mine[p] = true; });
                 var kept = Object.keys(s.files).filter(function (p) { return !mine[p]; })
                     .reduce(function (n, p) { return n + (s.files[p].size || 0); }, 0);
                 return opts.overlayCap - kept;
@@ -403,7 +405,17 @@ function createNova(deps) {
                 if (e.code !== "WRITE_FAILED") e = fail("WRITE_FAILED", "Could not write " + o.path + ": " + e.message + ". Nothing was changed", { path: o.path });
                 throw e;
             });
-        }, Promise.resolve()).then(null, function (e) {
+        }, Promise.resolve()).then(function () {
+            // Mounted now where the files went into upper/ directly (4.3);
+            // a mount that fails takes back what it mounted (lib/overlay.js),
+            // so the rollback below puts upper/ back as it was.
+            var touched = overlayLib.MOUNTS.filter(function (mt) {
+                return ops.some(function (o) { return o.path.indexOf(mt + "/") === 0; });
+            });
+            return Promise.resolve(b.mount(touched)).then(null, function (e) {
+                throw fail("WRITE_FAILED", "Could not mount the developer overlay: " + e.message + ". Nothing was changed");
+            });
+        }).then(null, function (e) {
             // Put back what was written, last first.
             return done.reverse().reduce(function (chain, d) {
                 return chain.then(function () { return b.restore(d.path, d.snap); }).then(null, function (x) { log("rollback " + d.path + ": " + x.message); });
@@ -411,12 +423,6 @@ function createNova(deps) {
                 addLog({ event: "failed", bundle: m.id, by: m.by, error: e.message });
                 throw e;
             });
-        }).then(function () {
-            // Mounted now where the files went into upper/ directly (4.3).
-            var touched = overlayLib.MOUNTS.filter(function (mt) {
-                return ops.some(function (o) { return o.path.indexOf(mt + "/") === 0; });
-            });
-            return b.mount(touched);
         }).then(function () {
             reverts.forEach(function (p) { delete s.files[p]; delete s.removed[p]; });
             var who = { bundle: m.id, by: m.by, name: v.trust.name || null, kind: v.trust.kind, at: at };

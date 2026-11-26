@@ -111,6 +111,10 @@ describe("the device's checks (docs/DEV-PUSH.md 5.3)", () => {
         await push([{ path: QML, data: "y".repeat(700 * 1024) }]);
         await push([{ path: SETTINGS + "index.js", data: "z".repeat(700 * 1024) }]);
         await expect(push([{ path: SETTINGS + "old.js", data: "z".repeat(700 * 1024) }], { mode: "add" })).rejects.toMatchObject({ code: "NO_SPACE" });
+        // An add that removes a file has its space back.
+        await push([{ path: QML, data: "q".repeat(1 << 20) }]);
+        await push([{ path: SETTINGS + "index.js", data: "small" }], { mode: "add", removed: [QML] });
+        expect((await core.methods.getStatus({})).usage).toBe(5);
     });
 });
 
@@ -176,6 +180,25 @@ describe("applying a bundle (4.3, 4.4)", () => {
         expect(fs.existsSync(upper(QML))).toBe(false);
         expect(mounts()).toEqual([]);
         expect(dev.read(QML)).toBe(h.IMAGE[QML]);
+    });
+
+    // A mount that fails after the files went into upper/: what this apply
+    // mounted is unmounted and upper/ put back, so a later push shows only
+    // its own files (not the failed bundle's, unlisted).
+    it("rolls back the first push when mounting fails, what it mounted too", async () => {
+        sys.failOn("mount", "lowerdir=/run/phoenix/overlay/lower/usr/palm,");
+        await expect(push([{ path: QML, data: "a\n" }, { path: SETTINGS + "index.js", data: "b\n" }]))
+            .rejects.toMatchObject({ code: "WRITE_FAILED" });
+        expect(sys.calls).toContain("umount /usr/share/phoenix");
+        expect(fs.existsSync(upper(QML))).toBe(false);
+        expect(fs.existsSync(upper(SETTINGS + "index.js"))).toBe(false);
+        expect(fs.existsSync(path.join(dev.root, "proc/mounts")) ? fs.readFileSync(path.join(dev.root, "proc/mounts"), "utf8") : "").toBe("");
+        expect(dev.read(QML)).toBe(h.IMAGE[QML]);
+        expect(state()?.files || {}).toEqual({});
+        await push([{ path: SETTINGS + "index.js", data: "c\n" }]);
+        expect(dev.read(QML)).toBe(h.IMAGE[QML]);
+        expect(dev.read(SETTINGS + "index.js")).toBe("c\n");
+        expect(Object.keys(state().files)).toEqual([SETTINGS + "index.js"]);
     });
 
     it("removes an image file with a whiteout before the first mount, by unlinking it after", async () => {

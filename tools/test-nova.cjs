@@ -21,7 +21,7 @@
 // Needs the apps built (apps/settings/dist).
 
 "use strict";
-const { spawn, execSync } = require("child_process");
+const { spawn, spawnSync, execSync } = require("child_process");
 const fs = require("fs");
 const net = require("net");
 const os = require("os");
@@ -190,6 +190,12 @@ async function main() {
         await waitFor(() => JSON.stringify(restarts()) === JSON.stringify(["reboot"]), "the restart for Revert to Image");
         check(true, "Revert to Image asks the simulator to restart");
         await stopSim();
+        // phoenix-sim runs the boot step alone before it picks the shell's
+        // QML (simnova.h bootDeveloperOverlay), so it never picks a tree the
+        // Revert is about to delete.
+        const boot = spawnSync(process.execPath, [path.join(REPO, "services/nova/sim.js"), "--data", data, "--boot-only"], { env, encoding: "utf8" });
+        check(boot.status === 0 && /Revert to Image/.test(boot.stdout) && !fs.existsSync(path.join(data, "var/lib/phoenix/overlay")),
+              "the boot step alone (--boot-only) clears the overlay before the simulator's QML is picked");
         await startSim();
         check(!fs.existsSync(path.join(data, "var/lib/phoenix/overlay")), "at the restart the overlay is gone");
         check(!(await served(SETTINGS_PAGE)).includes("nova-test"), "and the checkout's page is served again");

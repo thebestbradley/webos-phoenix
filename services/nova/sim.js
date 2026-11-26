@@ -9,6 +9,7 @@
 // against a device, without hardware.
 //
 //   node services/nova/sim.js --data DIR [--repo DIR] [--instance NAME] [--port N]
+//   node services/nova/sim.js --data DIR --boot-only    (the boot step alone)
 //
 // DIR is the simulator's data folder, laid out like a device's / where it
 // keeps its own (phoenix-sim's AppDataLocation; serve-rootfs.py's
@@ -71,13 +72,32 @@ function args(argv) {
     var o = {};
     for (var i = 0; i < argv.length; i++) {
         var m = /^--([a-z-]+)$/.exec(argv[i]);
-        if (m) o[m[1]] = argv[++i];
+        if (!m) continue;
+        // A switch (--boot-only) has no value.
+        if (i + 1 >= argv.length || /^--/.test(argv[i + 1])) o[m[1]] = true;
+        else o[m[1]] = argv[++i];
     }
     return o;
 }
 
 function configDir() {
     return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "nova");
+}
+
+// What the boot script does on a device (4.2, 4.6): Revert to Image clears
+// the overlay, Developer Mode off (or another build's) takes the marker
+// away, else the marker is made. phoenix-sim runs it (--boot-only) before it
+// picks the shell's QML (simnova.h), as a device's boot does before
+// luna-surfacemanager starts; start() again (it is idempotent). -> the plan
+function boot(dataDir) {
+    var data = path.resolve(dataDir);
+    var D = function (p) { return path.join(data, p); };
+    var activeMarker = D(overlayLib.OVERLAY + "/" + BUILD + "/active");
+    var plan = overlayLib.bootPlan({ root: data, devMode: fs.existsSync(D(nova.DEVMODE_FLAG)), build: BUILD });
+    if (plan.clear) fs.rmSync(D(overlayLib.OVERLAY), { recursive: true, force: true });
+    else if (plan.mount.length) fs.writeFileSync(activeMarker, "");
+    else fs.rmSync(activeMarker, { force: true });
+    return plan;
 }
 
 // opts: {data, repo, instance, port (TLS; 0 for any), log} -> Promise<{core,
@@ -135,13 +155,7 @@ function start(opts) {
         return Promise.resolve();
     }
 
-    // What the boot script would do (4.2, 4.6), at start.
-    var devMode = fs.existsSync(D(nova.DEVMODE_FLAG));
-    var plan = overlayLib.bootPlan({ root: data, devMode: devMode, build: BUILD });
-    if (plan.clear) fs.rmSync(D(overlayLib.OVERLAY), { recursive: true, force: true });
-    else if (plan.mount.length) fs.writeFileSync(activeMarker, "");
-    else fs.rmSync(activeMarker, { force: true });
-    log("developer overlay: " + plan.why);
+    log("developer overlay: " + boot(data).why);
 
     var core = nova.createNova({
         root: data, build: BUILD, manifest: manifest, readFile: readFile, restart: restart,
@@ -207,11 +221,15 @@ function start(opts) {
     });
 }
 
-module.exports = { start: start, BUILD: BUILD };
+module.exports = { start: start, boot: boot, BUILD: BUILD };
 
 if (require.main === module) {
     var a = args(process.argv.slice(2));
-    if (!a.data) { console.error("usage: sim.js --data DIR [--repo DIR] [--instance NAME] [--port N]"); process.exit(2); }
+    if (!a.data || a.data === true) { console.error("usage: sim.js --data DIR [--boot-only] [--repo DIR] [--instance NAME] [--port N]"); process.exit(2); }
+    if (a["boot-only"]) {
+        console.log("[nova-sim] developer overlay: " + boot(a.data).why);
+        process.exit(0);
+    }
     start({ data: a.data, repo: a.repo, instance: a.instance, port: a.port !== undefined ? Number(a.port) : 0 }).then(function (s) {
         function stop() { s.close().then(function () { process.exit(0); }); }
         process.on("SIGTERM", stop);

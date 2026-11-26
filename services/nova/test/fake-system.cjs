@@ -16,9 +16,15 @@
 //                                 mounted and writes through M from then on
 //   mknod F c 0 0                 an overlayfs whiteout: here a file whose
 //                                 bytes say so (whiteout.is)
+//   umount T                      an overlay at T: its line leaves
+//                                 /proc/mounts and T is the image's again
+//                                 (from its lowerdir); the lower bind:
+//                                 emptied; a refused path's bind: nothing
+//                                 (the overlay's umount puts T back)
 //   systemctl, ls-control, pkill  recorded; pkill exits 1 (nothing ran)
 //
-// failOn(cmd) makes the next such command fail.
+// failOn(cmd, text?) makes the next such command fail (whose arguments
+// contain text, when given).
 
 "use strict";
 
@@ -29,7 +35,7 @@ const WHITEOUT = "\0overlayfs whiteout 0/0\0";
 
 function createFakeSystem(root) {
     const calls = [];
-    const failing = new Set();
+    const failing = [];
     const R = (p) => path.join(root, p);
     function copyTree(src, dst) {
         if (!fs.existsSync(src)) return;
@@ -59,8 +65,9 @@ function createFakeSystem(root) {
     }
     function run(cmd, args) {
         calls.push([cmd].concat(args).join(" "));
-        if (failing.has(cmd)) {
-            failing.delete(cmd);
+        const f = failing.findIndex((x) => x.cmd === cmd && (!x.text || args.join(" ").includes(x.text)));
+        if (f >= 0) {
+            failing.splice(f, 1);
             return Promise.reject(Object.assign(new Error(cmd + " failed (a test said so)"), { exitCode: 2 }));
         }
         if (cmd === "mount" && args[0] === "--bind") {
@@ -72,6 +79,19 @@ function createFakeSystem(root) {
             layer(R(o.upperdir), args[5]);
             fs.mkdirSync(R("/proc"), { recursive: true });
             fs.appendFileSync(R("/proc/mounts"), `overlay ${args[5]} overlay rw,lowerdir=${o.lowerdir},upperdir=${o.upperdir},workdir=${o.workdir} 0 0\n`);
+        } else if (cmd === "umount") {
+            const t = args[0];
+            const lines = fs.existsSync(R("/proc/mounts")) ? fs.readFileSync(R("/proc/mounts"), "utf8").split("\n").filter(Boolean) : [];
+            const mine = lines.find((l) => l.split(" ")[1] === t);
+            if (mine) {
+                const lower = /lowerdir=([^,]+)/.exec(mine)[1];
+                fs.writeFileSync(R("/proc/mounts"), lines.filter((l) => l !== mine).map((l) => l + "\n").join(""));
+                fs.rmSync(R(t), { recursive: true, force: true });
+                copyTree(R(lower), R(t));
+            } else if (t.indexOf("/run/phoenix/overlay/lower/") === 0) {
+                fs.rmSync(R(t), { recursive: true, force: true });
+                fs.mkdirSync(R(t), { recursive: true });
+            }
         } else if (cmd === "mknod") {
             fs.mkdirSync(path.dirname(args[0]), { recursive: true });
             fs.writeFileSync(args[0], WHITEOUT);
@@ -84,7 +104,7 @@ function createFakeSystem(root) {
         calls,
         run,
         whiteout: { make: (f) => run("mknod", [f, "c", "0", "0"]), is: isWhiteout },
-        failOn: (cmd) => failing.add(cmd),
+        failOn: (cmd, text) => failing.push({ cmd, text }),
         reset: () => { calls.length = 0; },
     };
 }
