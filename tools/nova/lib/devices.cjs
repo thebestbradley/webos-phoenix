@@ -96,7 +96,12 @@ function select(sel) {
     const entry = d.devices.find((x) => x.address === a.address && x.port === a.port) || null;
     return { name: entry ? entry.name : sel, address: a.address, port: a.port, key: entry ? entry.key : null, entry };
 }
-function target(e) { return { name: e.name, address: e.address, port: e.port || PORT, key: e.key, entry: e }; }
+// A paired simulator is looked up where it runs now (sim.js takes a new
+// port at each start), as -d sim is.
+function target(e) {
+    if (e.name === "sim" || /^sim:/.test(e.name)) return select(e.name);
+    return { name: e.name, address: e.address, port: e.port || PORT, key: e.key, entry: e };
+}
 
 // After pairing: the device kept under name (replacing one with the same
 // name or key).

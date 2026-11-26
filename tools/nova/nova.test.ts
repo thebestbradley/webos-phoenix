@@ -220,6 +220,11 @@ describe("nova -d sim", () => {
             s = await sim.start({ data, repo: image, log: () => {} });
             expect(fs.existsSync(upper)).toBe(false);
             expect((await run("status", "-d", "sim")).out).toMatch(/No pushed changes/);
+            // Without -d (the one paired device is the simulator): where it
+            // runs now, not the port it had when it was paired.
+            const plain = await run("status");
+            expect(plain.code, plain.err).toBe(0);
+            expect(plain.out).toMatch(/No pushed changes/);
         } finally {
             await s.close();
             fs.rmSync(tmp, { recursive: true, force: true });
