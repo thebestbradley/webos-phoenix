@@ -1,0 +1,45 @@
+{
+    "//": [
+        "Dev push's path rules (docs/DEV-PUSH.md 4.2, 4.5, 9.1, 9.4), read by every side that makes or checks a dev bundle: @phoenix/platform's devpush.js (the nova command, org.webosphoenix.nova on a device, Phoenix-Web-Services' checks follow it), tools/install-rootfs.py (the image's manifest.json lists only the files these rules let a bundle change).",
+        "mounts: the five directories a developer overlay covers; nothing outside them is ever changed. refused: inside them, never in a bundle (a prefix ending in / is a directory, else one file): the trust anchors, com.palm.update (so a pushed file can never stop the update that clears the overlay), org.webosphoenix.nova itself, and the image's own manifest. refusedPatterns: the same for files matched by a regular expression (the two services' Luna files).",
+        "parts: what part of the system a path belongs to, the first prefix that matches (a granted developer key names the parts it may change, 9.1). compiled: checkout folders built into binaries a bundle cannot carry (section 10): a change there needs an image.",
+        "maxBundleBytes: 64 MB per bundle (decision 9); maxOverlayBytes: the overlay's cap on a device (decision 10, a setting there); maxUnpackedBytes: what a bundle may unpack to at most."
+    ],
+    "format": 1,
+    "mounts": ["/usr/share/phoenix", "/usr/palm", "/usr/lib/luna", "/usr/share/luna-service2", "/etc/palm"],
+    "refused": [
+        "/etc/palm/phoenix/",
+        "/etc/palm/marketplace/sources.json",
+        "/etc/palm/hardware/catalog.json",
+        "/usr/palm/services/com.palm.update/",
+        "/usr/palm/services/org.webosphoenix.nova/",
+        "/usr/share/phoenix/manifest.json"
+    ],
+    "refusedPatterns": [
+        "^/usr/share/luna-service2/[^/]+/(com\\.palm\\.update|org\\.webosphoenix\\.nova)(\\.[^/]*)?$"
+    ],
+    "parts": [
+        ["/usr/share/luna-service2/", "roles"],
+        ["/usr/palm/applications/", "apps"],
+        ["/usr/palm/services/", "services"],
+        ["/etc/palm/", "services"],
+        ["/usr/share/phoenix/", "shell"],
+        ["/usr/palm/", "shell"],
+        ["/usr/lib/luna/", "shell"]
+    ],
+    "compiled": [
+        "shell/native/",
+        "services/common/",
+        "services/devices/",
+        "services/keyboard/",
+        "services/l2cap/",
+        "services/pdeath/",
+        "services/pty/",
+        "services/tts/",
+        "services/wakeword/",
+        "meta-phoenix/"
+    ],
+    "maxBundleBytes": 67108864,
+    "maxOverlayBytes": 268435456,
+    "maxUnpackedBytes": 268435456
+}
