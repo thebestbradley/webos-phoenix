@@ -54,18 +54,28 @@ var core = nova.createNova({
     log: function (m) { console.log("[nova] " + m); }
 });
 
+// getStatus {subscribe}'s watchers by the subscription's token: webos-service tells a
+// method's cancel callback (given at register) which message went; messages have no
+// "cancel" event of their own (com.webos.service.devmode crashed on it, Revision 7 N16).
+var watching = {};
+function cancelled(message) {
+    var stop = watching[message.uniqueToken];
+    delete watching[message.uniqueToken];
+    if (stop) stop();
+}
+
 nova.METHODS.forEach(function (name) {
     service.register(name, function (message) {
         var payload = message.payload || {};
         core.methods[name](payload).then(function (reply) {
             if (name === "getStatus" && payload.subscribe && message.isSubscription && reply.returnValue) {
                 reply.subscribed = true;
-                var stop = core.watch(function (st) { message.respond(Object.assign({ returnValue: true }, st)); });
-                message.on("cancel", function () { stop(); });
+                if (watching[message.uniqueToken]) watching[message.uniqueToken]();
+                watching[message.uniqueToken] = core.watch(function (st) { message.respond(Object.assign({ returnValue: true }, st)); });
             }
             message.respond(reply);
         });
-    });
+    }, name === "getStatus" ? cancelled : undefined);
 });
 
 // The listeners follow Developer Mode and the two switches: one at a time
