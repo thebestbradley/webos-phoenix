@@ -123,11 +123,11 @@ function used(name, address) {
 }
 function forget(name) {
     const d = load();
-    const before = d.devices.length;
-    d.devices = d.devices.filter((x) => x.name !== name && x.deviceId !== name);
-    if (d.last === name) d.last = null;
+    const gone = d.devices.filter((x) => x.name === name || x.deviceId === name);
+    d.devices = d.devices.filter((x) => gone.indexOf(x) < 0);
+    if (gone.some((x) => x.name === d.last)) d.last = null;
     save(d);
-    return d.devices.length !== before;
+    return gone.length > 0;
 }
 
 module.exports = { USB_ADDRESS, PORT, load, save, select, remember, used, forget, sim, listSims, parseAddress };

@@ -97,10 +97,15 @@ async function unpair(a, out) {
     try {
         await withDevice(Object.assign({}, a, { device: name }), out, (d) => d.conn.request({ op: "unpair" }));
     } catch (e) {
-        if (e.code !== "UNREACHABLE" && e.code !== "NOT_PAIRED") throw e;
+        // A stopped simulator (NO_SIM) is offline too: it is forgotten here.
+        if (e.code !== "UNREACHABLE" && e.code !== "NOT_PAIRED" && e.code !== "NO_SIM") throw e;
         out.err(`Could not tell the device (${e.message}); forgetting it here only. Remove this computer in its Settings > Developer Mode.`);
     }
-    if (!devices.forget(name === "sim" || name.startsWith("sim:") ? name : devices.select(name).name)) out.err(`${name} was not paired here`);
+    let known = name;
+    if (!(name === "sim" || name.startsWith("sim:"))) {
+        try { known = devices.select(name).name; } catch (e) { if (e.code !== "NO_SIM") throw e; }
+    }
+    if (!devices.forget(known)) out.err(`${name} was not paired here`);
     out.log(`Unpaired ${name}`);
     return 0;
 }

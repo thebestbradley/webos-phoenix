@@ -225,6 +225,13 @@ describe("nova -d sim", () => {
             const plain = await run("status");
             expect(plain.code, plain.err).toBe(0);
             expect(plain.out).toMatch(/No pushed changes/);
+            // A stopped simulator is forgotten here all the same.
+            await s.close();
+            const gone = await run("unpair", "sim");
+            expect(gone.code, gone.err).toBe(0);
+            expect(gone.out).toBe("Unpaired sim");
+            expect(devices.load().devices).toEqual([]);
+            s = await sim.start({ data, repo: image, log: () => {} });
         } finally {
             await s.close();
             fs.rmSync(tmp, { recursive: true, force: true });
