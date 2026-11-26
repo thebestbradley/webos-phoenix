@@ -25,6 +25,7 @@ Every build, run and test command across webos-phoenix, phoenix-ember-glass-ui (
 - [Test: shell](#test-shell)
 - [Test: apps](#test-apps)
 - [Apps (webos-phoenix)](#apps-webos-phoenix)
+- [Developer tools for a device (nova)](#developer-tools-for-a-device-nova)
 - [Default apps (phoenix-default-apps)](#default-apps-phoenix-default-apps)
 - [Ember Glass UI (ember-glass-ui)](#ember-glass-ui-ember-glass-ui)
 - [System UI 2.0 (phoenix-ember-glass-ui)](#system-ui-20-phoenix-ember-glass-ui)
@@ -972,6 +973,12 @@ python3 tools/test-install-rootfs.py
 python3 tools/test-sounds-pcm.py
 ```
 
+Dev bundles: the image's manifest, the bundle maker, the device's checks:
+
+```sh
+node tools/test-nova-bundle.cjs
+```
+
 The Marketplace catalog:
 
 ```sh
@@ -1702,6 +1709,96 @@ Show the image's layout:
 
 ```sh
 python3 tools/install-rootfs.py out/rootfs --list
+```
+
+## Developer tools for a device (nova)
+
+`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode: dev bundles of changed system files now, pairing and pushing next (docs/DEV-PUSH.md, P2). Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use.
+
+### Run nova
+
+From a checkout, or put it on the PATH.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-42,98-101 · tools/nova/nova.cjs:8-9`
+
+```sh
+./phoenix nova --help
+```
+
+Then `nova` anywhere:
+
+```sh
+ln -s "$PWD/tools/nova/nova.cjs" /usr/local/bin/nova
+```
+
+This computer's public key and fingerprint:
+
+```sh
+./phoenix nova key
+```
+
+### Make a dev bundle
+
+The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:28-49 · docs/DEV-PUSH.md section 8`
+
+Devpush-<build>-<id>.ipk:
+
+```sh
+./phoenix nova package --system --manifest manifest.json
+```
+
+Only the shell's QML:
+
+```sh
+./phoenix nova package --system --manifest manifest.json --only /usr/share/phoenix/qml --note "Card view fix" -o fix.ipk
+```
+
+Say what it would hold:
+
+```sh
+./phoenix nova package --system --manifest manifest.json --dry-run
+```
+
+The device's checks, here:
+
+```sh
+./phoenix nova verify fix.ipk --build 20261124093012 --product 1.0
+```
+
+### Package an app
+
+Palm's palm-package: `<id>_<version>_all.ipk`.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/nova/nova.cjs:28-29`
+
+```sh
+./phoenix nova package apps/settings/dist -o out
+```
+
+### The image's manifest
+
+What a dev bundle is compared against: every file Phoenix ships that a bundle may change.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/install-rootfs.py:39-48`
+
+This checkout's:
+
+```sh
+python3 tools/install-rootfs.py --print-manifest > manifest.json
+```
+
+Install, and write out/rootfs/usr/share/phoenix/manifest.json:
+
+```sh
+python3 tools/install-rootfs.py out/rootfs --manifest
+```
+
+At image time: the image's own hashes and BUILD_ID:
+
+```sh
+python3 tools/install-rootfs.py --stamp out/rootfs
 ```
 
 ## Default apps (phoenix-default-apps)

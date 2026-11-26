@@ -5,8 +5,11 @@ The plan for sending a handful of changed files (the shell's QML,
 Developer Mode without building a new image, and restarting only what
 changed. Written 25 November 2026 at the owner's request ("plan it with both
 the direct push and server channel, follow closely to Palm's workflow and
-naming conventions"). **Status: plan, nothing built.** 1.0 (this repository)
-is the core; 2.0 (phoenix-ember-glass-ui) gets it by merging 1.0.
+naming conventions"). **Status: P1 built** (26 November 2026: the dev
+bundle format and its checks, the image's manifest, the bundle maker and
+`nova package`; section 12, "P1 as built"); P2 onwards still a plan. 1.0
+(this repository) is the core; 2.0 (phoenix-ember-glass-ui) gets it by
+merging 1.0.
 
 The doc keeps the owner's name for the feature, "dev push", so it is easy to
 find. The tools it plans are named in Palm's style (section 2): the host
@@ -146,7 +149,7 @@ sent), **Pushed Changes** (the list in Settings > Developer Mode) and
 | `luna-send -n 1 palm://com.palm.applicationManager/rescan '{}'` | Pick up new or changed apps | Automatic after a push; by hand `nova rescan` | Same call |
 | `novacom run file:///usr/bin/luna-send -- ...` | Run a program | `nova luna-send URI JSON` (as the developer role); arbitrary commands only over SSH | Narrower |
 | `novacom -t open tty://`, `novaterm` | Root shell | `nova term`: SSH as `user` with the paired key, Developer Mode's SSH ([TERMINAL.md](TERMINAL.md) T4); no root shell | Same verb, safer |
-| `palm-package` (`ares-package`) | Make an `.ipk` | `nova package APPDIR` (apps, `tools/package-ipk`), `nova package --system` (a dev bundle: section 8) | Same verb |
+| `palm-package` (`ares-package`) | Make an `.ipk` | `nova package APPDIR` (an app), `nova package --system` (a dev bundle: section 8) | Same verb |
 | `palm-install [-r]` | Install / remove an app | `nova install IPK`, `nova install -r ID` (`com.webos.appInstallService`, `developerMode: true`) | Same |
 | `palm-launch [-c] [-i]` | Launch, close, inspect | `nova launch ID [JSON]`, `-c` close; `-i` later (WebAppMgr's inspector port) | Same |
 | `palm-log [-f]` | App and system log | `nova log [-f] [ID]` (the journal, filtered to the app or service) | Same |
@@ -385,16 +388,47 @@ and `data.tar.gz`.
   "id": "2f1c...e9",
   "made": "2026-11-25T14:03:00Z",
   "build": "20261124093012",
+  "product": "1.0",
   "compatible": "phoenix-pinephonepro",
+  "device": "any",
+  "counter": 1795615380000,
   "mode": "replace",
+  "parts": ["apps", "shell"],
   "files": [{"path": "/usr/share/phoenix/qml/Phoenix/Shell/CardView.qml", "sha256": "...", "size": 18231, "mode": "0644"}],
   "removed": ["/usr/palm/applications/org.webosphoenix.settings/old.js"],
-  "restart": ["shell", "app:org.webosphoenix.settings"],
+  "restart": ["app:org.webosphoenix.settings", "shell"],
   "source": {"repo": "webos-phoenix", "commit": "a1b2c3d", "dirty": true},
   "note": "Card view: fix the throw on a minimized card",
   "by": "ed25519:<base64 public key>"
 }
 ```
+
+  As built in P1 (`docs/platform-api/devpush.schema.json`, `bundleManifest`;
+  the reader `apps/shared/platform/src/devpush.js`):
+  - `id`: the first 32 hex digits of the SHA-256 of the rest of devpush.json
+    (keys sorted), so the same changes make the same bundle.
+  - `product`: the product line, product.json's major version (`"1.0"`,
+    `"2.0"`): decision 12 checked on its own, not only through `build`.
+  - `compatible`: RAUC's compatible, or `null` for any device of that build
+    (the build already ties it to one image).
+  - `device` and `counter`: section 9.1's no-replay rule. `device` is a
+    device id or `"any"` (never `"any"` from a granted key); `counter` must
+    be above the last one the device applied for the same grant (or, for a
+    paired computer or the platform's key, the same key). nova makes it
+    from the time the bundle was made, in milliseconds, so a computer keeps
+    no counter of its own and two computers with one key never collide.
+  - `parts`: the parts its paths are in, sorted: `apps`
+    (`/usr/palm/applications`), `roles` (`/usr/share/luna-service2`),
+    `services` (`/usr/palm/services`, `/etc/palm`) and `shell` (the rest:
+    `/usr/share/phoenix`, frameworks, `/usr/lib/luna`, sounds); a grant
+    names the parts it allows (9.1).
+  - `restart`: `hub`, `configurator`, `rescan`, `service:<id>`, `app:<id>`,
+    `wam`, `shell`, `reboot`, narrowest first (4.5).
+  - The path rules and caps every side reads are one file,
+    `apps/shared/platform/src/devpush-paths.json`: the five mounts, the
+    refused paths (9.4, plus the image's own `manifest.json`, and
+    `com.palm.update`'s and `org.webosphoenix.nova`'s Luna files), the
+    parts, the compiled folders (section 10) and the caps.
 
 - Beside it, `<bundle>.ipk.sig`: base64 of the Ed25519 signature of the
   `.ipk`'s bytes and a newline, the detached form every Phoenix feed uses
@@ -417,13 +451,36 @@ under an overlay mount and none is refused (`REFUSED_PATH`, section 9.4);
 each file's size and SHA-256 match `files` (`BAD_BUNDLE`); the overlay stays
 under its cap (`NO_SPACE`).
 
+As built (`devpush.js` `verify`, which nova, `org.webosphoenix.nova` and the
+simulator share): `TOO_BIG` first (over 64 MB, before anything is read),
+then `NEEDS_DEVMODE`; the signature is checked against the device's trusted
+keys **before the bundle is unpacked**, so nothing an untrusted sender
+wrote is parsed; then `UNTRUSTED` also for an expired or revoked grant and
+for a `by` that is not the key that signed; `NOT_A_BUNDLE` (not an `.ipk`,
+no `devpush.json`); `WRONG_BUILD`, `WRONG_PRODUCT` (the product line),
+`WRONG_DEVICE` (the device type, or a `device` that is not this one, or
+`"any"` from a granted key); `OUT_OF_SCOPE` (a grant not covering this
+device or product); `REPLAY` (the counter); `REFUSED_PATH`; `OUT_OF_SCOPE`
+(a part the grant does not allow); `BAD_BUNDLE` (devpush.json not valid; a
+file's size, SHA-256 or mode not as listed, a file not listed or missing, a
+link or special file, more than 256 MB unpacked); `NO_SPACE`.
+
 ## 6. The direct push
 
 ### 6.1 The host command
 
 `tools/nova/` in this repository, Node.js 22 with no packages beyond what
 the repository already has, run as `./phoenix nova ...` or installed on the
-`PATH` as `nova`. Every subcommand takes `-d DEVICE` (a paired device's
+`PATH` as `nova`. Why Node (confirmed when P1 was built): it is on every
+developer's computer already (`./phoenix` installs Node 22 on macOS and
+Ubuntu), it has Ed25519, TLS 1.3 with pinned keys and an HTTPS server in
+its standard library (what P2's pairing and push need, with no package),
+and the device's `org.webosphoenix.nova` is a Node.js service: the bundle
+format, its checks and the `.ipk` code are one set of CommonJS files both
+ends load (`@phoenix/platform` `devpush.js`, the Marketplace's `lib/ipk.js`).
+The bundle maker calls `tools/install-rootfs.py` (Python 3, as the image
+build does) for the checkout's file plan, so there is one plan, not a copy
+in JavaScript. Every subcommand takes `-d DEVICE` (a paired device's
 name, `usb`, `sim`, or an address), as Palm's did; without it, the one
 device connected, else the last used.
 
@@ -438,7 +495,7 @@ device connected, else the last used.
 | `nova revert [PATH]` | One file back to the image's; without a path, Revert to Image (restarts the device) |
 | `nova restart shell\|wam\|app ID\|service ID` | By hand |
 | `nova rescan` | Palm's `rescan` |
-| `nova package APPDIR` / `nova package --system [-o FILE]` | An app's `.ipk` / a dev bundle to a file (for the server channel) |
+| `nova package APPDIR` / `nova package --system [-o FILE]` | An app's `.ipk` / a dev bundle to a file (for the server channel). **Built (P1)**, with `nova verify BUNDLE` (the device's checks, on the computer) and `nova key` |
 | `nova install IPK`, `nova install -r ID` | Install, remove an app (Developer Mode's installer path) |
 | `nova launch ID [JSON]`, `nova launch -c ID` | Launch, close |
 | `nova log [-f] [ID]` | The journal, filtered |
@@ -611,7 +668,55 @@ repository's build and the device's image, and put only that in the bundle.
 2.0 (phoenix-ember-glass-ui) merges this; its own `product.json`,
 rootfs additions and QML come through the same plan, so its bundles hold
 2.0's files for 2.0's images, and a 1.0 bundle is refused on a 2.0 image by
-`build` and `compatible`.
+`build` and `product`.
+
+### 8.1 As built (P1)
+
+- **The manifest** (`docs/platform-api/devpush.schema.json`,
+  `imageManifest`): `{format: 1, build, product: {name, version, line},
+  compatible, source: {repo, commit, dirty}, files: [{path, size, sha256,
+  mode}]}`, the files sorted by path: every file Phoenix ships under the
+  five mounts but the refused ones, the shell's QML, assets and client
+  permissions included (from `shell/`, as `shell/CMakeLists.txt` installs
+  them), with the size and hash of the bytes the image holds (an app page
+  with the runtime's `<script>`, `appinfo.json` as WebAppMgr gets it, the
+  release notes without "unreleased"). A list, not `{path: sha256}`, so it
+  carries size and mode and the schema can check it.
+- **Written in two steps**, because `BUILD_ID` exists only when the image
+  is put together: `tools/install-rootfs.py DESTDIR --manifest` (phoenix-apps'
+  do_install) writes it with build `"unstamped"`, and
+  `tools/install-rootfs.py --stamp ROOTFS` (a `ROOTFS_POSTPROCESS_COMMAND`
+  of the image, as `phoenix-firmware-policy.bbclass` already writes
+  `/usr/share/phoenix/firmware/licences.json`) takes `BUILD_ID` from
+  `ROOTFS/etc/os-release` and rehashes each listed file from the image's
+  own copy, so what other recipes did after phoenix-apps (the image's
+  `servers.json` is refused anyway; `.pcm` twins are not Phoenix's files
+  and not listed) shows as it is, and a file gone from the image is
+  dropped. Wiring both into meta-phoenix is P3 ("the manifest in the
+  image"; the image recipe has no checkout, so the stamp comes as a native
+  tool or a bbclass carrying `install-rootfs.py`'s `stamp()`); the maker
+  refuses an unstamped manifest.
+- **The checkout's side** is the same code: `install-rootfs.py
+  --print-manifest` (not strict: what is not built is named, and nova stops
+  with "Build first"), and `install-rootfs.py STAGE --only -` lays just the
+  changed files into a temporary folder for the bundle, as the image would
+  have them. `--repo DIR` runs the plan over another checkout.
+- **Compiled parts**: the manifest's `source.commit`; nova runs `git diff`
+  from it over the folders `devpush-paths.json` names as compiled
+  (`shell/native`, `services/{devices,keyboard,l2cap,pdeath,pty}`), and a
+  change there stops the bundle ("shell/native changed: this needs a new
+  image") unless `--allow-compiled`. Without a commit this checkout has, it
+  says it cannot tell. `meta-phoenix/` is not on the list: a recipe change
+  is not always a file change, and the manifest shows the files that did.
+- **Refused paths** never reach either manifest; one in an image's
+  manifest (an older or hand-made one) is left out with a warning.
+- **Deterministic**: the same checkout, manifest, key and `--made` (or
+  `SOURCE_DATE_EPOCH`) make the same bytes on a Mac and on Linux (tar
+  times 0, gzip's OS byte fixed).
+- `nova package --system` options: `--manifest FILE` (P2 reads it from
+  the device, P4 from the server), `--device ID`, `--compatible NAME`,
+  `--add`, `--note TEXT`, `--only PATH` (device path prefixes), `--counter`,
+  `--made`, `--repo`, `--dry-run`, `--allow-compiled`, `--key FILE`, `-o`.
 
 ## 9. Security
 
@@ -746,10 +851,22 @@ tested with a fake root in CI, and the rest on the VM image.
 - `nova` (vitest): argument parsing, device selection, the pairing
   exchange against an in-process `novad`, TLS with pinned keys (a wrong
   key, a replayed code, five wrong codes).
-- The bundle maker (Python, `tools/test-nova-bundle.py`, a quick check):
-  the plan against a recorded manifest; changed, new and removed files;
-  refused paths; a `shell/native` change stopping it; deterministic bundles
-  (same input, same bytes).
+- The bundle maker: **built as `tools/test-nova-bundle.cjs`** (Node, a quick
+  check, `tools/ci-checks.sh nova-bundle`; Node rather than Python because
+  the maker and the device's checks are Node): a small checkout made in a
+  temporary folder, its image's manifest written, stamped and checked
+  against the schema; changed, new and removed files; the restart map's
+  rows and the parts; `--add`, `--only`; refused paths; a `shell/native`
+  change stopping it; an unstamped manifest, another product line and
+  unbuilt apps refused; deterministic bundles (same input, same bytes); the
+  64 MB cap. The device's checks (`devpush.js` `verify`) in the same file:
+  a good bundle and every refusal (a tampered bundle and a tampered file,
+  bad and untrusted signatures, `by`, build, product, device type and
+  device, counter replay, forbidden paths and removals, links, setuid
+  modes, size and space caps, Developer Mode off, a grant's expiry,
+  revocation, device, product and parts); the path rules alike in Python
+  and JavaScript; `nova` itself and `./phoenix nova`.
+  `tools/test-install-rootfs.py` checks this checkout's manifest.
 - `org.webosphoenix.nova` (vitest, as `services/updates` is tested with a
   fake RAUC): a temporary directory as the root and a stand-in for `mount`
   and `systemctl` that records what is called; every refusal of 5.3; apply
@@ -786,9 +903,9 @@ deploys the server; the owner decides (section 13).
 | Phase | What | Size | Who | Needs |
 | --- | --- | --- | --- | --- |
 | **P0** | The owner's answers to section 13 | — | owner | this plan |
-| **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests | M | cloud | P0 names |
+| **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests. **Done** 26 November 2026 (below) | M | cloud | P0 names |
 | **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs` | L | cloud | P1 |
-| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image; the Legacy novacom switch, section 9.6); kernel configuration for the USB gadget | M | cloud | P2 |
+| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1); the Legacy novacom switch, section 9.6); kernel configuration for the USB gadget | M | cloud | P2 |
 | **P3v** | Build the VM image with P3, verify the list in section 11, report unit names and anything that differs | M | local | P3 |
 | **P4** | Phoenix-Web-Services: grants, the `devpush` scope, the endpoints, storage and expiry, manifests per build; the device's polling and notification; `nova send` | M | cloud (code on a branch), codex or local (staging deploy after review) | P2, owner's yes to Q3 and Q9 |
 | **P4v** | End to end: a bundle from a second account to the owner's VM through staging, Apply, Revert | S | local | P3v, P4 deployed |
@@ -796,7 +913,35 @@ deploys the server; the owner decides (section 13).
 | **Later** | The `.ipk` path for compiled parts (an opkg root in the overlay), shared with U5 | L | cloud, local | owner |
 
 P1 and P2 need no image, server or decision beyond P0's names, and can
-start at once. The read-only root and RAUC (S3, U1) are not needed: the
+start at once.
+
+### P1 as built (26 November 2026)
+
+| Piece | Where |
+| --- | --- |
+| The format, the path rules, the device's checks, the restart map | `apps/shared/platform/src/devpush.js`, `devpush-paths.json` (in `@phoenix/platform`, which every Node service on a device already carries) |
+| The schema (devpush.json and manifest.json) | `docs/platform-api/devpush.schema.json` |
+| The image's manifest | `tools/install-rootfs.py --manifest`, `--stamp`, `--print-manifest`, `--only`, `--repo` |
+| `nova` (`package`, `package --system`, `verify`, `key`) | `tools/nova/nova.cjs`, `lib/bundle.cjs`, `lib/keys.cjs`; `./phoenix nova` |
+| `.ipk` | The Marketplace's `lib/ipk.js`, now also giving a package's control files and every data entry (links and special files, so they can be refused) and writing extra control files |
+| Tests | `tools/test-nova-bundle.cjs` (quick check `nova-bundle`), `tools/test-install-rootfs.py` |
+
+Design changes from the plan above, each said where it is described:
+`product`, `device`, `counter` and `parts` in devpush.json (5.1); the
+signature checked before unpacking, and `WRONG_PRODUCT`, `REPLAY`,
+`OUT_OF_SCOPE` and `TOO_BIG` (5.3); the manifest a list with sizes and
+modes, written in two steps (8.1); the maker's test in Node (11).
+
+**What P2 needs from P1**: `org.webosphoenix.nova` loads `devpush.js` from
+its own `@phoenix/platform` copy and needs the `.ipk` reader: the
+Marketplace's `lib/ipk.js` is not a shared package, so P2 either moves it
+into `@phoenix/platform` (the Marketplace and the runtime's in-page copy
+keep loading it; check `runtime/phoenix-runtime.js` `loadModule("lib/ipk.js")`)
+or carries a copy; the device passes `verify` its trusted keys, the
+running `BUILD_ID`, product line, RAUC compatible and device id, and keeps
+the last counter per scope (`grant:<id>` or `key:<base64>`). `nova push`
+reads `/usr/share/phoenix/manifest.json` from `novad` and calls
+`makeSystemBundle`; `nova` keeps its key where P1 made it. The read-only root and RAUC (S3, U1) are not needed: the
 overlay works on today's writable root, and the build tie stands in for the
 update clearing it until RAUC is there.
 

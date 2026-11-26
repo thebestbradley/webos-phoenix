@@ -36,6 +36,10 @@
 #                                 simulator-only references, image contents,
 #                                 recipes, licences), with a summary
 #                                 (tools/check-device.sh; docs/PRE-IMAGE-CHECKLIST.md)
+#   ./phoenix nova COMMAND [ARGS]  the developer command (tools/nova,
+#                                 docs/DEV-PUSH.md): nova package APPDIR,
+#                                 nova package --system (a dev bundle),
+#                                 nova verify, nova key (nova --help)
 #   ./phoenix test --quick [--fail-fast] [ID...]
 #                                 the quick checks, CI's first job: generated
 #                                 docs and art, lockfiles, the tool and PHP
@@ -89,6 +93,11 @@ REPO_DIR=$(cd "$(dirname "$0")" && pwd)
 if [ "${1:-}" = check-device ]; then
     shift
     exec sh "$REPO_DIR/tools/check-device.sh" "$@"
+fi
+# nova, the developer command (Node.js and Python 3, nothing to build).
+if [ "${1:-}" = nova ]; then
+    shift
+    exec node "$REPO_DIR/tools/nova/nova.cjs" "$@"
 fi
 BUILD_DIR=${PHOENIX_BUILD_DIR:-$REPO_DIR/build}
 case "$BUILD_DIR" in /*) ;; *) BUILD_DIR=$REPO_DIR/$BUILD_DIR ;; esac

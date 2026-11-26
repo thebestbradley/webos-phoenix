@@ -155,6 +155,31 @@ with tempfile.TemporaryDirectory() as tmp:
     json.dump({"format": 1, "unreleased": {"new": ["Next."]}, "versions": source["versions"]}, open(notes, "w"))
     check(json.loads(ir.shipped_notes(notes)) == {"format": 1, "versions": source["versions"]}, "release notes: unreleased notes dropped")
 
+# The image's manifest (docs/DEV-PUSH.md 8; tools/test-nova-bundle.cjs tests
+# --manifest, --stamp and the bundle maker on a small checkout): this
+# checkout's, every file a dev bundle may change and nothing else.
+import hashlib  # noqa: E402
+final, _ = ir.plan(strict=False)
+man = ir.make_manifest(final, "test-build")
+mpaths = [f["path"] for f in man["files"]]
+rules = ir.devpush_rules()
+check(man["format"] == 1 and man["build"] == "test-build" and man["product"]["line"] == "1.0"
+      and man["product"]["version"] == product["version"], "manifest: format 1, the build, the product line 1.0")
+check(mpaths == sorted(mpaths) and len(set(mpaths)) == len(mpaths), "manifest: %d files, sorted, each once" % len(mpaths))
+check(all(ir.overlayable(p, rules) for p in mpaths), "manifest: only paths the developer overlay covers")
+check(not any(p.startswith(("/etc/palm/phoenix/", "/usr/palm/services/com.palm.update/", "/media/")) for p in mpaths)
+      and "/etc/palm/marketplace/sources.json" not in mpaths and "/etc/palm/hardware/catalog.json" not in mpaths
+      and ir.MANIFEST not in mpaths, "manifest: no trust anchors, com.palm.update, /media or itself")
+check("/usr/share/phoenix/qml/Phoenix/Shell/Shell.qml" in mpaths and "/usr/share/phoenix/runtime/phoenix-runtime.js" in mpaths
+      and not any("noto-color-emoji" in p for p in mpaths), "manifest: the shell's QML and the runtime, not the emoji font")
+check(set(mpaths) >= {p for p in paths if ir.overlayable(p, rules)}, "manifest: every overlayable file install-rootfs.py installs")
+page = "/usr/palm/applications/org.webosphoenix.settings/index.html"
+entry = next((f for f in man["files"] if f["path"] == page), None)
+want = ir.inject_runtime(open(final[page], "rb").read()) if page in final else b""
+check(entry is not None and entry["sha256"] == hashlib.sha256(want).hexdigest() and entry["size"] == len(want),
+      "manifest: an app page's hash is of the page with the runtime's tag, as the image holds it")
+check(all(f["mode"] in ("0644", "0755") for f in man["files"]), "manifest: modes 0644 or 0755")
+
 if failures:
     print("%d failed" % failures)
     sys.exit(1)

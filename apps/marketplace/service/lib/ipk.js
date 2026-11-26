@@ -99,6 +99,7 @@ function readTar(bytes) {
         if (type === "0" || type === "\0" || type === "7") files.push({ path: path, mode: mode, data: body });
         else if (type === "5") files.push({ path: path.replace(/\/$/, ""), mode: mode, dir: true });
         else if (type === "2" || type === "1") files.push({ path: path, link: ascii(h, 157, 257).replace(/\0.*$/, "") });
+        else files.push({ path: path, special: type });   // a device, a FIFO...: never installed
     }
     return files;
 }
@@ -171,7 +172,10 @@ function createIpk(opts) {
     var gz = opts.gzip;
 
     // bytes -> {control, scripts: [names], files: [{path, mode, data}], apps:
-    // [{id, dir, appinfo}], services: [paths]}.
+    // [{id, dir, appinfo}], services: [paths], controlFiles: [{path, mode,
+    // data}] (every file in control.tar.gz: a dev bundle's devpush.json),
+    // entries: [everything in data.tar.gz, folders, links and special
+    // files ({path, special: type}) too]}.
     function read(bytes) {
         var ar;
         try { ar = readAr(bytes); } catch (e) { return Promise.reject(e); }
@@ -195,14 +199,17 @@ function createIpk(opts) {
                 files: data.filter(function (f) { return f.data; }),
                 links: data.filter(function (f) { return f.link; }).map(function (f) { return f.path; }),
                 apps: apps,
-                services: data.filter(function (f) { return /^usr\/palm\/services\//.test(f.path); }).map(function (f) { return f.path; })
+                services: data.filter(function (f) { return /^usr\/palm\/services\//.test(f.path); }).map(function (f) { return f.path; }),
+                controlFiles: control.filter(function (f) { return f.data; }),
+                entries: data
             };
         }, function () { throw fail("NOT_AN_IPK", "Damaged .ipk package (gzip)"); });
     }
 
     // {control: {Package, Version, ...}, files: [{path (device path without
     // the leading /), data: Uint8Array | string}], scripts?: {postinst: text,
-    // ...}} -> the .ipk's bytes.
+    // ...}, controlFiles?: [{path, data}] (more files beside ./control: a dev
+    // bundle's devpush.json)} -> the .ipk's bytes.
     function write(pkg) {
         var c = pkg.control, lines = [];
         ["Package", "Version", "Section", "Priority", "Architecture", "Maintainer", "Installed-Size", "Description", "Source"].forEach(function (k) {
@@ -213,7 +220,8 @@ function createIpk(opts) {
         });
         return Promise.all([
             gz.gzip(writeTar([{ path: "control", data: utf8(lines.join("\n") + "\n") }].concat(
-                Object.keys(pkg.scripts || {}).map(function (n) { return { path: n, data: utf8(pkg.scripts[n]), mode: 493 }; })))),
+                Object.keys(pkg.scripts || {}).map(function (n) { return { path: n, data: utf8(pkg.scripts[n]), mode: 493 }; }),
+                (pkg.controlFiles || []).map(function (f) { return { path: f.path, data: typeof f.data === "string" ? utf8(f.data) : f.data, mode: 420 }; })))),
             gz.gzip(writeTar(files))
         ]).then(function (r) {
             return writeAr([{ name: "debian-binary", data: utf8("2.0\n") }, { name: "control.tar.gz", data: r[0] },

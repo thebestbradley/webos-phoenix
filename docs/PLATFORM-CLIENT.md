@@ -9,8 +9,10 @@ the real servers is a change of one file.
 The contract both sides follow is in [platform-api/](platform-api/):
 [openapi.yaml](platform-api/openapi.yaml) (every endpoint, both hosts) with
 JSON Schemas for the feeds ([feeds.schema.json](platform-api/feeds.schema.json)),
-the API's bodies ([api.schema.json](platform-api/api.schema.json)) and the
-configuration ([servers.schema.json](platform-api/servers.schema.json)).
+the API's bodies ([api.schema.json](platform-api/api.schema.json)), the
+configuration ([servers.schema.json](platform-api/servers.schema.json)) and
+dev push's bundles and image manifests ([devpush.schema.json](platform-api/devpush.schema.json),
+[DEV-PUSH.md](DEV-PUSH.md)).
 [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) tells the platform's
 builder to build to them; [the conformance suite](#conformance) checks a
 server against them by running the device's own code.
