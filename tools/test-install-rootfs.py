@@ -29,7 +29,7 @@ def check(cond, what):
 
 
 listed = subprocess.run([sys.executable, os.path.join(REPO, "tools", "install-rootfs.py"), "/nonexistent", "--list"],
-                        check=True, capture_output=True, text=True).stdout.split()
+                        check=True, capture_output=True, text=True).stdout.splitlines()  # one path a line: some have spaces
 paths = set(listed)
 services = sorted(p for p in paths if p.startswith("/usr/share/luna-service2/services.d/"))
 check(len(services) >= 20, "%d bus services are installed" % len(services))
