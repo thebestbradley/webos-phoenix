@@ -565,20 +565,20 @@ and tests; local runs it on the owner's Mac and iPad; the owner decides.
 H1 can start at once. H3 does not wait for Phoenix's image: it is about
 UTM and the iPad, and is checked with any VM in UTM.
 
-## 16. Open questions for the owner
+## 16. Decisions (the owner, 26 November 2026)
 
-| # | Question | Recommendation |
-| --- | --- | --- |
-| 1 | Which iPad (chip) and iOS do you test on, and may local keep it on its iOS version during H3v? | Tell local which; keep one test iPad on its current iOS until H3v passes. A15/M2 or later on iOS 26 is the case that matters most (TXM) |
-| 2 | Platforms: Mac first, Linux next, no Windows? | Yes |
-| 3 | Should the helper attach the debugger itself (bundled `nova-jit`, permissive) or only guide users to StikDebug or SideStore? | Itself, with StikDebug as the documented way when away from a computer |
-| 4 | Start the VM from the helper too? UTM removed its `utm://start` URL (4.5.1); on iPadOS only Shortcuts can start a VM | v1: the user taps the VM in UTM. Later: a Shortcut the helper offers to install, if it can be run from the helper |
-| 5 | DDIs on Linux: ask the user for Xcode's DDI folder, or download Apple's from a community mirror? | Ask for the folder; never download or ship Apple's files |
-| 6 | One key for `nova` and the helper in the OS keychain? | Yes (changes DEV-PUSH 6.4's file) |
-| 7 | QML debugging in the device's shell: in every image behind Developer Mode, or only in a developer image? | Behind Developer Mode in every image, listening on the loopback only; the debug build of luna-surfacemanager costs little |
-| 8 | Ship the helper with the simulator download (D2) or separately? | Separately at first, the same signing job |
-| 9 | Name: **Nova Helper**? | Yes (section 2) |
-| 10 | Gate WebAppMgr's port 9998 on Developer Mode in all images now (a fix apart from the helper)? | Yes, in H4 or sooner |
+| # | Decision |
+| --- | --- |
+| 1 | **The test device runs iOS 27.** That is the least proven case (section 4: only apps that adopted Apple's new opt-in keep JIT; UTM is reported among them; DDI mounting has failed on some new chips). H3 builds `nova-jit` for iOS 27 first, with 17.4-18 and 26 behind it, and H3v on the owner's device is the first real proof. If iOS 27 turns out to give UTM no JIT a debugger can provide, the helper says so plainly and UTM SE is the fallback. Local should not update the test device's iOS during H3v |
+| 2 | **Mac and Linux together** from the first release (no Windows). Linux needs `usbmuxd` (the system's package) and Xcode's DDI folder copied from a Mac (decision 5); both platforms are in CI and H5 packages a Linux AppImage beside the Mac `.dmg` |
+| 3 | **The helper attaches the debugger itself** (`nova-jit`, permissive); StikDebug is documented for when away from a computer |
+| 4 | The user taps the VM in UTM in v1 |
+| 5 | DDIs: ask for Xcode's DDI folder; never download or ship Apple's files |
+| 6 | One key for `nova` and the helper, in the OS keychain (macOS Keychain, Linux Secret Service) |
+| 7 | QML debugging behind Developer Mode in every image, loopback only |
+| 8 | Ship separately from the simulator download at first, with the same signing |
+| 9 | The name is **Nova Helper** |
+| 10 | Gate WebAppMgr's port 9998 on Developer Mode in all images, **now**, as a 1.0 core fix apart from the helper |
 
 ## 17. Risks
 
