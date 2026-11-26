@@ -340,10 +340,15 @@ lists it).
   anything. A live revert is not offered: emptying a mounted overlay's
   upper directory is exactly what overlayfs forbids, and a restart is a
   minute.
-- **One file back** (`nova revert PATH`): the image's copy (read from the
-  lower directory, bind-mounted at `/run/phoenix/overlay/lower/` for this)
-  is written through the merged path, and the restart map runs; the
-  leftover copy is dropped at the next boot. Works live.
+- **One file back** (`nova revert PATH`): if the image has the file, its
+  copy (read from the lower directory, bind-mounted at
+  `/run/phoenix/overlay/lower/` for this) is written through the merged
+  path; the leftover copy is dropped at the next boot. If the image has no
+  such file (a bundle added it), it is removed through the merged path,
+  which deletes it from the upper directory and leaves no whiteout, as the
+  lower directory never had it. If a bundle deleted an image file, the
+  revert takes the whiteout away by writing the image's copy back. Either
+  way the restart map runs. Works live; the tests cover all three cases.
 - **A full update clears it.** The overlay is kept under its `BUILD_ID`.
   After an A/B switch the new slot's `BUILD_ID` differs, so nothing is
   mounted; `com.palm.update` deletes overlays of other builds when it marks
@@ -547,11 +552,20 @@ As adb does, never as novacom did:
    `/var/lib/phoenix/nova/` readable by root only.
 2. **Pairing** needs the owner at the unlocked device: Settings >
    Developer Mode > **Pair a Computer** shows a six-digit code and the
-   device's key fingerprint for two minutes. `nova pair` asks for the code;
-   both sides prove they know it over a channel bound to both keys (an
-   HMAC of both fingerprints keyed with the code, after TLS with both
-   keys), and each stores the other's key. Five wrong codes end the
-   window. **The code is asked over USB too** (the owner, 26 November
+   device's key fingerprint for two minutes. `nova pair` asks for the code,
+   and the two sides run a **password-authenticated key exchange** with it:
+   CPace (the CFRG's balanced PAKE, draft-irtf-cfrg-cpace) or SPAKE2
+   (RFC 9382), whichever has a vetted permissive-licence implementation for
+   both the host CLI and `novad`, with the session's identities bound to
+   both keys' fingerprints and the TLS exporter of the connection. Each
+   side then proves with the PAKE's shared key that it holds its own key,
+   and each stores the other's key. A PAKE is what makes a six-digit code
+   safe here: a plain proof keyed with the code (an HMAC of the
+   fingerprints) would let anyone on the network who poses as the device
+   during pairing take that proof away and try all million codes offline,
+   whatever the attempt limit. With a PAKE, a guess is possible only by
+   talking to the real device, one guess per run. Five failed runs end
+   the window, so a guess succeeds at most 5 times in a million. **The code is asked over USB too** (the owner, 26 November
    2026): a cable is no proof of who holds it, so there is no Allow-only
    shortcut as adb's RSA prompt has.
 3. After pairing, TLS with both keys pinned: the device takes connections
@@ -850,7 +864,9 @@ tested with a fake root in CI, and the rest on the VM image.
 
 - `nova` (vitest): argument parsing, device selection, the pairing
   exchange against an in-process `novad`, TLS with pinned keys (a wrong
-  key, a replayed code, five wrong codes).
+  key, a replayed code, five wrong codes; a stand-in device in the middle
+  during pairing learns nothing it can test a code against offline, and
+  one run gives it one guess).
 - The bundle maker: **built as `tools/test-nova-bundle.cjs`** (Node, a quick
   check, `tools/ci-checks.sh nova-bundle`; Node rather than Python because
   the maker and the device's checks are Node): a small checkout made in a
@@ -871,7 +887,8 @@ tested with a fake root in CI, and the rest on the VM image.
   fake RAUC): a temporary directory as the root and a stand-in for `mount`
   and `systemctl` that records what is called; every refusal of 5.3; apply
   and its rollback on a failed write; replace and add; the restart map,
-  each row; revert one file and all; the build tie (another `BUILD_ID`,
+  each row; revert one file (one the image has, one a bundle added, one
+  a bundle deleted) and all; the build tie (another `BUILD_ID`,
   nothing mounted); Developer Mode off; the size cap.
 - `phoenix-overlay` (the boot script) against a fake root in a container
   with overlayfs where CI allows it (`unshare -m` as root), else its
