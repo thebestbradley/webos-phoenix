@@ -96,5 +96,33 @@ if [ -e "${PHOENIX_UA_CLIENT_HINTS_FILE:-/usr/share/phoenix/webruntime-client-hi
     export WAM_EXTRA_FLAGS
 fi
 
+# The web inspector, only in Developer Mode. WebAppMgr's start script turns
+# Chromium's remote debugging on for every image, on port 9998
+# (meta-webos-ports ec5e878 recipes-webos-ose/wam/wam/webapp-mgr.sh.in:222,
+# WAM_COMMON_SWITCHES; OSE's the same), so anyone who could reach that port
+# could inspect and drive every web app, the Lock Screen's PIN entry and
+# Accounts' sign-ins included. This file is sourced after the switches are
+# built (webapp-mgr.sh.in:278-279), so it takes the port away unless
+# Developer Mode is on (Developer Mode's flag file: LuneOS's
+# org.webosports.service.devmode, DevModeAssistants.js:23-28 at 65588c2d,
+# and Phoenix's own provider to come, docs/DEV-PUSH.md 4.2). In Developer
+# Mode it listens on the device's loopback only: a computer reaches it
+# through the developer's paired connection (nova forward, SSH), never
+# straight over the network (docs/DEV-HELPER.md 9, 13).
+# For the tests: PHOENIX_DEVMODE_FLAG.
+phoenix_wam_switches=""
+for phoenix_wam_switch in $WAM_SWITCHES; do
+    case $phoenix_wam_switch in
+        --remote-debugging-port=*|--remote-debugging-address=*) ;;
+        *) phoenix_wam_switches="$phoenix_wam_switches $phoenix_wam_switch" ;;
+    esac
+done
+if [ -e "${PHOENIX_DEVMODE_FLAG:-/var/luna/dev-mode-enabled}" ]; then
+    phoenix_wam_switches="$phoenix_wam_switches --remote-debugging-port=9998 --remote-debugging-address=127.0.0.1"
+fi
+WAM_SWITCHES=$phoenix_wam_switches
+export WAM_SWITCHES
+
 unset phoenix_ua_anchor phoenix_ua_period phoenix_ua_now phoenix_ua_major \
-    phoenix_ua_device_json phoenix_ua_form phoenix_ua_mobile
+    phoenix_ua_device_json phoenix_ua_form phoenix_ua_mobile \
+    phoenix_wam_switches phoenix_wam_switch
