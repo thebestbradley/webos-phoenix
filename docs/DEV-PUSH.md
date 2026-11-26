@@ -13,6 +13,10 @@ find. The tools it plans are named in Palm's style (section 2): the host
 command is **`nova`**, after Nova, Palm's codename for webOS that novacom and
 novaterm are named for, and the device's end is **`novad`**.
 
+A desktop app over `nova`, **Nova Helper**, which also gets UTM its JIT
+on an iPad and gathers the developer tools (inspector, logs, QML debugger),
+is planned in [DEV-HELPER.md](DEV-HELPER.md); it adds `nova forward`.
+
 ## Contents
 
 1. [Goal](#1-goal)
@@ -152,7 +156,7 @@ sent), **Pushed Changes** (the list in Settings > Developer Mode) and
 | `palm-log [-f]` | App and system log | `nova log [-f] [ID]` (the journal, filtered to the app or service) | Same |
 | `palm-generate` | New project | Later: `nova generate` over the SDK's templates ([APP-SDK.md](APP-SDK.md)) | Later |
 | `palm-emulator` | Emulator | `./phoenix run` (phoenix-sim); `nova push --device sim` pushes to it too | Same role |
-| `palm-inspector` | Web Inspector | Later: `nova inspect ID` | Later |
+| `palm-inspector` | Web Inspector | Later: `nova inspect ID`; in a window, Nova Helper ([DEV-HELPER.md](DEV-HELPER.md)) | Later |
 | webOS Doctor | Back to the stock image | **Revert to Image** (drops the overlay); a full reflash as ever | New name for the light case |
 | Preware patches + Emergency Patch Recovery; patches out before an OTA | Community system changes and their undo | The overlay is cleared by a full update automatically (section 4.6) | Community precedent |
 | (none) | | **Server channel**: dev bundles through Phoenix-Web-Services, Apply on the device (section 7) | New |
