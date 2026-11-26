@@ -1689,7 +1689,10 @@ Verizon Pixels) cannot be unlocked and are out.
   commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
   (parse every recipe) and `bitbake -n webos-phoenix-image` (a dry run that
   resolves the whole task graph, including every `RDEPENDS`, and runs
-  nothing; the `torchd` stub is resolved too). Nothing
+  nothing; the `torchd` stub is resolved too), then
+  `scripts/packageconfig-check.py`, which checks that every `PACKAGECONFIG`
+  option `meta-phoenix` asks for exists in its recipe (OE checks that only in
+  `do_configure`, hours into a build). Nothing
   is fetched (`BB_NO_NETWORK`) or built. Each machine adds about 300 MB
   and about 12 minutes on 4 cores. The build directory is
   `${TMPDIR:-/tmp}/webos-phoenix-parse` unless `PHOENIX_PARSE_DIR` says
@@ -1922,7 +1925,9 @@ the current Chrome, so sites that check the version keep working.
 
 The parse job (`scripts/parse-check.sh`, see Build above) catches recipes
 that do not parse, missing `DEPENDS`/`RDEPENDS` providers, wrong
-`bbappend` targets and layer-series mismatches. It cannot catch what only
+`bbappend` targets, layer-series mismatches and `PACKAGECONFIG` options a
+recipe no longer has (Mesa 26 dropped `kmsro`; the first PineTab2 build
+stopped on it). It cannot catch what only
 shows when sources arrive: a wrong `LIC_FILES_CHKSUM` md5, a `SRC_URI` or
 `SRCREV` that does not exist upstream, a missing `file://` file (bitbake
 only notes its absence while parsing) or a compile error. Those wait for the
