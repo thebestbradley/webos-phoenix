@@ -868,19 +868,28 @@ ever has them, report the overlay as a modification.
 ### 9.6 Legacy novacom, for vintage tools
 
 The owner chose to keep LG's `novacomd` (26 November 2026) so the real
-`novacom` from webos-sdk-redux works with Phoenix too. Started as it ships,
-it gives an unauthenticated root shell, so Phoenix keeps it behind its own
-switch:
-- Settings > Developer Mode > **Legacy novacom (USB)**, off by default,
-  shown only with Developer Mode on, with a plain warning ("Anyone with a
-  cable gets full control of this device").
-- **USB only:** never bound to a network interface.
-- **A password:** turning it on asks for one and writes
-  `/var/novacom/passwd`, the file novacomd's own authentication reads
-  (`src/device/auth.c`), so the switch never runs it open.
-- **It turns itself off** after an hour and at every restart; nothing
-  starts it at boot.
-- `novad` and the developer overlay don't depend on it.
+`novacom` from webos-sdk-redux works with Phoenix too, and settled how on
+27 November: **installed but off, a flag turns it on**. Reading novacomd
+(`webOS-ports/novacomd` at `537338a`) showed its USB side cannot work on
+Phoenix's hardware: it opens gadgetfs at `/dev/gadget/musb_hdrc`
+(`src/device/usb-gadget.c:387`), the USB controller of Palm's own phones,
+and Phoenix's port carries USB debugging's link (6.2). Porting it is days
+of C for a niche; its inet transport (the emulator's, port 6969,
+`src/transport_inet.c`) works as it is. So (P3b):
+
+- **Installed, off:** LuneOS-based images already have `novacomd`
+  (meta-luneos `packagegroup-webos-extended`, `VIRTUAL-RUNTIME_novacomd`),
+  and nothing starts it; OSE-based images have none.
+- **A flag turns it on:** `phoenix-legacy-novacom.service` (phoenix-devmode)
+  starts it only with Developer Mode on and `/var/lib/phoenix/legacy-novacom`
+  made by hand, as root. Off again: remove the flag and restart.
+- **Never on the network:** without `-b` it listens on the device's
+  loopback only. A computer reaches it through nova's paired, encrypted
+  connection: `nova forward 6969` (now in the forward list), then
+  `novacomd -c 127.0.0.1` on the computer, then the vintage tools as usual.
+  No novacom password is needed for that, as nothing off the device can
+  reach the port; the Settings switch and the password planned here are
+  dropped.
 
 ## 10. Out of scope
 
@@ -965,7 +974,7 @@ deploys the server; the owner decides (section 13).
 | **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests. **Done** 26 November 2026 (below) | M | cloud | P0 names |
 | **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs`. **Done** 26 November 2026 (below) | L | cloud | P1 |
 | **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1). **Built** ("P3 as built") | M | cloud | P2 |
-| **P3b** | The rest of P3: the USB NCM gadget (configfs, made while "USB debugging" is on) and its kernel configuration; the Legacy novacom switch (9.6); the `user` account's sudo and SSH in Developer Mode (TERMINAL.md); an app rescan on the device; the Luna role for `nova luna-send` | M | cloud | P3 |
+| **P3b** | The rest of P3: the USB NCM gadget (configfs, made while "USB debugging" is on) and its kernel configuration; the Legacy novacom switch (9.6); the `user` account's sudo and SSH in Developer Mode (TERMINAL.md); an app rescan on the device; the Luna role for `nova luna-send`. **Built** ("P3b as built"); sudo stays TERMINAL.md T4 | M | cloud | P3 |
 | **P3v** | Build the VM image with P3, verify the list in section 11, report unit names and anything that differs | M | local | P3 |
 | **P4** | Phoenix-Web-Services: grants, the `devpush` scope, the endpoints, storage and expiry, manifests per build; the device's polling and notification; `nova send` | M | cloud (code on a branch), codex or local (staging deploy after review) | P2, owner's yes to Q3 and Q9 |
 | **P4v** | End to end: a bundle from a second account to the owner's VM through staging, Apply, Revert | S | local | P3v, P4 deployed |
@@ -1203,6 +1212,48 @@ listens (`ss -ltn | grep 6965`), `nova pair` and a push from a Mac over the
 LAN; Revert to Image; the unit names on LuneOS's build if it is the one
 used. Anything that differs goes on the board.
 
+### P3b as built (27 November 2026)
+
+- **USB debugging's link:** `phoenix-usb-debug up|down|status`
+  (phoenix-devmode, `/usr/sbin`), which novad runs as Developer Mode and the
+  "USB debugging" switch change. A CDC NCM gadget through configfs (macOS,
+  Linux and Windows 11 drive it without a driver), stable addresses from
+  the machine id, the device at 172.16.42.1 and the computer given
+  172.16.42.2 by BusyBox's `udhcpd` (one lease; without it the computer is
+  set by hand, and the script says so). It makes its own gadget only: when
+  another holds the USB controller (a phone's Android gadget, USB
+  tethering's) it leaves it and says so; on a device without a controller
+  (the VM) it says that. Kernel: `CONFIG_USB_CONFIGFS_NCM` and its
+  dependencies in `phoenix-ose.cfg` (the phone and tablet kernels).
+  `tools/test-usb-debug.py` (a quick check, `usb-debug`) runs it over a
+  pretend configfs.
+- **SSH in Developer Mode, production images:** `phoenix-devmode-ssh`
+  (installed when `PHOENIX_PRODUCTION = "1"`, which takes the debug SSH
+  server out): OpenSSH, started only with Developer Mode's flag
+  (`sshd.socket` and `sshd.service` drop-ins), for `user` by key alone
+  (`sshd_config.d/10-phoenix-devmode.conf`), the keys being the paired
+  computers' (novad writes them). Development images keep their own SSH as
+  it is. `sudo` waits for TERMINAL.md T4 (the device passcode through PAM).
+- **Rescan on a device:** `com.palm.applicationManager/rescan` in
+  `services/appmanager` (Palm's call): every app folder there is, and every
+  listed app whose folder is gone, handed to SAM's `scanApp` (webOS-ports'
+  SAM). OSE's SAM has none: `NO_RESCAN`, and novad keeps the change pending
+  a restart, as before. novad has the group (`phoenix.appmanager.manage`).
+- **`nova luna-send`'s permissions:** the client permissions of
+  `org.webosphoenix.nova.developer` (`luna-send -a`): public and private,
+  launching and listing apps, Developer Mode's state, system settings,
+  activities, notifications, db8.
+- **Legacy novacom:** 9.6 (the flag, loopback only, `nova forward 6969`).
+
+**For P3v:** with "USB debugging" on, a cable to a Mac or Linux computer
+gives it 172.16.42.2 and `nova pair 172.16.42.1` works; connman leaves the
+link's address alone (LuneOS found connman taking a gadget link over:
+meta-luneos `connman-conf/main.conf`); turning the switch off takes the link
+down; a production image answers SSH only in Developer Mode, by key; a
+pushed new app shows after `nova rescan` or the restart; `nova luna-send`
+gets an answer; on a LuneOS-based image, the flag and `nova forward 6969`
+give a vintage `novacom` a shell.
+
 ## 13. Decisions (the owner, 26 November 2026)
 
 The owner answered questions 1, 3, 4 and 5; the rest take the
@@ -1214,7 +1265,7 @@ recommendation they had, and the owner can change any of them.
 | 2 | Dev bundles are `.ipk` files with a signed manifest |
 | 3 | **Both:** the platform's dev-signing key ("master"), and developer keys the owner grants, **with an extra layer on granted keys** to make abuse harder (section 9.1) |
 | 4 | **A six-digit code for both** the LAN and USB; no Allow-only shortcut on USB (section 6.4) |
-| 5 | **Keep LG's `novacomd` for vintage tools**, behind its own switch (section 9.6) |
+| 5 | **Keep LG's `novacomd` for vintage tools**: installed but off, a flag turns it on (27 November; section 9.6) |
 | 6 | Developer Mode off: the overlay stays inactive on disk until Revert to Image or the next update |
 | 7 | Bundles may carry Luna role and permission files, listed separately on the Apply screen; for granted keys only when their grant allows it (section 9.1) |
 | 8 | Apply from the server channel asks the device passcode every time |

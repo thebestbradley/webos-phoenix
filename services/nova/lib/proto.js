@@ -36,7 +36,12 @@ var MAX_BYTES = 80 * 1024 * 1024;
 // nova forward (docs/DEV-HELPER.md 9.1): the device-local ports a paired
 // computer may reach, and nothing else: WebAppMgr's Web Inspector, the
 // shell's QML debugger (Developer Mode's QML Debugging switch), SSH.
-var FORWARD_PORTS = { 9998: "Web Inspector (WebAppMgr)", 3768: "QML debugger (the shell)", 22: "SSH (nova term)" };
+// 6969: Palm's novacomd (its inet transport, the emulator's), for vintage
+// tools on LuneOS-based images when Legacy novacom is on (phoenix-devmode's
+// phoenix-legacy-novacom.service; docs/DEV-PUSH.md 9.6): it listens on the
+// device's loopback only, so nova forward is the way to it.
+var FORWARD_PORTS = { 9998: "Web Inspector (WebAppMgr)", 3768: "QML debugger (the shell)", 22: "SSH (nova term)",
+                      6969: "Legacy novacomd (vintage tools)" };
 
 function fail(code, text) {
     var e = new Error(text);

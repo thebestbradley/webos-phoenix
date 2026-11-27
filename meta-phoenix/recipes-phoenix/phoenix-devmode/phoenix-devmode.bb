@@ -17,12 +17,13 @@ LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
 
 SRC_URI = "file://novad.service file://phoenix-overlay.service file://nova.json file://phoenix-usb-debug \
-    file://sshd-phoenix-devmode.conf file://ssh-devmode-only.conf"
+    file://sshd-phoenix-devmode.conf file://ssh-devmode-only.conf \
+    file://phoenix-legacy-novacom.service"
 S = "${UNPACKDIR}"
 
 inherit allarch systemd
 
-SYSTEMD_SERVICE:${PN} = "novad.service phoenix-overlay.service"
+SYSTEMD_SERVICE:${PN} = "novad.service phoenix-overlay.service phoenix-legacy-novacom.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
 do_configure[noexec] = "1"
@@ -30,7 +31,8 @@ do_compile[noexec] = "1"
 
 do_install() {
     install -d ${D}${systemd_system_unitdir} ${D}${sysconfdir}/phoenix
-    install -m 0644 ${UNPACKDIR}/novad.service ${UNPACKDIR}/phoenix-overlay.service ${D}${systemd_system_unitdir}/
+    install -m 0644 ${UNPACKDIR}/novad.service ${UNPACKDIR}/phoenix-overlay.service \
+        ${UNPACKDIR}/phoenix-legacy-novacom.service ${D}${systemd_system_unitdir}/
     install -m 0644 ${UNPACKDIR}/nova.json ${D}${sysconfdir}/phoenix/nova.json
     install -d ${D}${sbindir}
     install -m 0755 ${UNPACKDIR}/phoenix-usb-debug ${D}${sbindir}/phoenix-usb-debug
@@ -46,6 +48,7 @@ do_install() {
 FILES:${PN} = " \
     ${systemd_system_unitdir}/novad.service \
     ${systemd_system_unitdir}/phoenix-overlay.service \
+    ${systemd_system_unitdir}/phoenix-legacy-novacom.service \
     ${sysconfdir}/phoenix/nova.json \
     ${sbindir}/phoenix-usb-debug \
 "
