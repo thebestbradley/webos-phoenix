@@ -24,6 +24,8 @@ works, and how to host every piece yourself.
   on Linux when it runs), and Moving Along the Route, which walks, cycles
   or drives the device along the route Maps shows, a fix a second, for
   testing navigation.
+  On a device the position comes from the sources in "Where the position
+  comes from" below.
 - **Search**: when the user submits (never as-you-type), with Photon or
   Nominatim, cached; coordinates typed in are understood. When the server
   fails or search is set to offline, the offline index answers.
@@ -105,6 +107,46 @@ works, and how to host every piece yourself.
   `@phoenix/luna` `units`), voice, and every server (tiles, search,
   routing, renderer), with "Reset to Defaults". An image or organisation
   sets the defaults for all devices by replacing `providers.json` in the app.
+
+## Where the position comes from
+
+On a device (since 27 November 2026) every app's position comes from
+LuneOS's `com.webos.service.location` (OSE's location service), patched in
+meta-phoenix (`dynamic-layers/meta-luneos/recipes-navigation/
+com.webos.service.location`). Apps ask it through `@phoenix/luna`'s
+`location`, after the per-app permission (`org.webosphoenix.service.location`
+in 2.0); web pages in the web runtime reach the same service. It has two
+handlers, which Settings > Location Services turns on and off:
+
+| Source | Handler | Where | How |
+| --- | --- | --- | --- |
+| A GNSS receiver | `gps` | Phones with one (PinePhone Pro: the EG25 modem's NMEA port, `/dev/ttyUSB1`) | The nyx GPS module (`nyxGpsMain`) reads NMEA from the port in `/etc/location/gpsConfig.conf` (nyx-conf, per machine) |
+| The Mac's own position | `gps` | VMs on a Mac (UTM, `scripts/vm.sh`) | The VM has a virtio serial port, `org.webosphoenix.gps.0` (`/dev/virtio-ports/…`, the VM machine's gpsConfig.conf), whose QEMU end connects to 127.0.0.1:45570. There the Mac app **Phoenix VM Location** (`tools/vm-location`, Core Location; build it with `tools/vm-location/build.sh` and open it, and allow it the location once) sends `$GPGGA`/`$GPRMC` each second. `tools/vm-location/nmea-feed.py --fixed LAT,LON` sends a fixed position instead (the image regression suite does the same, at the Eiffel Tower). `make-utm.sh --for mac` and `vm.sh` add the port (`--gps PORT\|off`) |
+| Wi-Fi access points and cells | `network` | Anything with Wi-Fi or a modem | The service posts them (Ichnaea / Google Geolocation API) to the platform's `/v1/location/geolocate` (`/etc/location/geolocate.conf`, from `PHOENIX_API_URL`), which looks them up in [beaconDB](https://beacondb.net) without the device's address; with no platform address, to beaconDB directly |
+| The internet address | `network` | VMs on an iPad or a Mac without the helper, tablets on a wired network, phones without a SIM | With no Wi-Fi or cell data within 4 s of a request, the service posts `{"considerIp": true}`; the platform looks the address up in DB-IP's IP to City Lite on its own server (a city, 25 km) |
+| The user's own | `network` | Anywhere | Settings > Location Services > **Set my location**: a town searched by name (`getGeoCodeLocation`), kept by the service (`setNetworkProvider {provider: "manual", position}`, luna-prefs) and answered at once, without a connection, until **Find my location automatically** |
+
+Place names (`getReverseLocation`: Weather's Current Location, Maps'
+"what is here" through the service; `getGeoCodeLocation`: Set my location)
+come from the platform's `/v1/location/geocode/json`, GeoNames' towns in
+the Geocoding API's shape (`/etc/location/wsp.conf`).
+
+**Which answer wins.** A request without a `Handler` (Weather, Maps,
+`navigator.geolocation`) is hybrid: both handlers start. A one-off request
+gets the first fix: a running GPS (about a second), else the network one
+(the user's own at once; an IP position after 4 s). A subscription keeps
+getting fixes, but after its first only those better than 100 m (the GPS)
+or a minute apart, so a GPS fix replaces a network one and a network one
+cannot override the GPS for a minute. A GPS handler whose source cannot
+start (no receiver, no port) no longer fails a hybrid request: the network
+handler answers it alone.
+
+**No keys.** LG's Google Maps key (LuneOS's location sources ship it in
+`wsp.conf`) and LuneOS's Google key for GeoClue (its
+`0001-Use-Google-as-default-and-add-API-key.patch`) are not in the image:
+meta-phoenix replaces `wsp.conf` and drops the patch, and GeoClue's Wi-Fi
+and IP lookups go to the platform too (Qt Positioning still depends on
+GeoClue; webOS's own clients do not use it).
 
 ## Decisions
 
@@ -301,6 +343,7 @@ Preferences.
   but Maps does not list them).
 - Downloading the demo region's missing zoom levels 1-9 (it jumps from the
   world tile to zoom 10).
-- A settings pane for location services (`APP-GAPS.md`); GPS on hardware
-  (GeoClue behind `com.webos.service.location`, see
-  [HARDWARE.md](HARDWARE.md)).
+- GPS on the Qualcomm phones (Fairphone 6, AYN Odin 2 Portal): their
+  GNSS is the modem's QMI location service, which nothing reads yet; they
+  have the network position ([HARDWARE.md](HARDWARE.md)).
+- The legacy `com.palm.location` API (Mojo apps).
