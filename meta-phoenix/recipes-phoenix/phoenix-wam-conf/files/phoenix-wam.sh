@@ -99,28 +99,49 @@ fi
 # Tile memory. WebAppMgr's start script caps the memory Chromium keeps for
 # each page's drawn tiles at 60 MB (MAX_GPU_MEM_LIMIT into
 # --force-gpu-mem-available-mb, meta-webos-ports ec5e878
-# recipes-webos-ose/wam/wam/webapp-mgr.sh.in:160, 214), a TV's budget: one
+# recipes-webos-ose/wam/wam/webapp-mgr.sh.in:160, 207), a TV's budget: one
 # 1080p screen and a small chip. A tile takes 4 bytes a pixel: 4 MB a
 # screenful at the PineTab2's 1280x800, 16 MB at 2560x1600 (the Mac VM at
 # Retina size), where a card's layers run past 60 MB and the tiles that do
 # not fit are left undrawn: white blocks over parts of the page, at random,
 # until something redraws (Settings, 27 November 2026; none with 512 MB in
-# the same steps). It is a ceiling, not a reservation: a page takes what
-# its layers need, and more room lets Chromium draw ahead of a scroll. What
-# bounds it is memory (each card has its own, and the GPU shares the RAM):
-# 512 MB with 3.5 GB of memory or more (MemTotal; a "4 GB" device reports
-# about 3.8), 256 MB with 1.75 GB or more, else 128 MB; never less than
-# twelve screenfuls of the largest connected screen (each connected DRM
-# connector's preferred mode, the first line of its modes) nor the start
-# script's own value. For the tests: PHOENIX_MEMINFO, PHOENIX_DRM_DIR.
+# the same steps).
+#
+# It is a ceiling per card, not one for all of them, and on Phoenix every
+# open card keeps all of it. Chromium gives a page this budget only while
+# the page is visible (cc's LayerTreeHostImpl::UpdateTileManagerMemoryPolicy,
+# layer_tree_host_impl.cc:1839 in webOS-ports' chromium151) and, with the
+# start script's --enable-aggressive-release-policy, drops its tiles the
+# moment it is hidden (SetVisible, :4313). A desktop browser hides every
+# tab but the one in front, which is why its default is 512 MB
+# (layer_tree_settings.cc:160-191). Phoenix's cards are never hidden: they
+# go on painting in the card view (the start script's
+# WAM_SHELL_KEEPS_DEACTIVATED_WINDOWS_SHOWN, webapp-mgr.sh.in:135), so each
+# open card may hold its whole budget, in WebAppMgr's own process (the
+# start script's --in-process-gpu with --disable-gpu-rasterization: tiles
+# are drawn in the renderer and kept as textures in WebAppMgr's GPU thread),
+# which the kernel never picks to free memory (webapp-mgr.service's
+# OOMScoreAdjust=-1000). Under memory pressure the budget is halved and
+# drawing ahead stops (--tile-manager-low-mem-policy-bytes-limit-reduction-
+# factor=2, :4401), but only once OSE's memory manager says memory is low
+# (below 350 MB available), which is late on a device that also runs the
+# compositor, the keyboard and the on-device model (27 November 2026, Rev 22
+# at 4 GB: 803 MB available with two cards open).
+#
+# So the budget is Chromium's own for a device whose pages all stay visible
+# at once, Android's: 256 MB with 2,000 MB of memory or more (MemTotal;
+# a "4 GB" device reports about 3.8 GB), else 96 MB
+# (layer_tree_settings.cc:151-157), four times the TV's 60 MB that left the
+# white blocks. Never less than twelve screenfuls of the largest connected
+# screen (each connected DRM connector's preferred mode, the first line of
+# its modes: 188 MB at 2560x1600), nor the start script's own value. For the
+# tests: PHOENIX_MEMINFO, PHOENIX_DRM_DIR.
 phoenix_wam_mem_kb=$(sed -n 's/^MemTotal:[[:space:]]*\([0-9][0-9]*\) kB$/\1/p' "${PHOENIX_MEMINFO:-/proc/meminfo}" 2>/dev/null | head -n 1)
 case $phoenix_wam_mem_kb in ''|*[!0-9]*|??????????*) phoenix_wam_mem_kb=0 ;; esac
-if [ "$phoenix_wam_mem_kb" -ge 3670016 ]; then
-    phoenix_wam_gpu_mb=512
-elif [ "$phoenix_wam_mem_kb" -ge 1835008 ]; then
+if [ "$phoenix_wam_mem_kb" -ge 2048000 ]; then
     phoenix_wam_gpu_mb=256
 else
-    phoenix_wam_gpu_mb=128
+    phoenix_wam_gpu_mb=96
 fi
 for phoenix_wam_conn in "${PHOENIX_DRM_DIR:-/sys/class/drm}"/card*-*; do
     [ "$(cat "$phoenix_wam_conn/status" 2>/dev/null)" = connected ] || continue
