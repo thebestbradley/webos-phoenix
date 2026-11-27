@@ -96,6 +96,45 @@ if [ -e "${PHOENIX_UA_CLIENT_HINTS_FILE:-/usr/share/phoenix/webruntime-client-hi
     export WAM_EXTRA_FLAGS
 fi
 
+# Tile memory. WebAppMgr's start script caps the memory Chromium keeps for
+# each page's drawn tiles at 60 MB (MAX_GPU_MEM_LIMIT into
+# --force-gpu-mem-available-mb, meta-webos-ports ec5e878
+# recipes-webos-ose/wam/wam/webapp-mgr.sh.in:160, 214), a TV's budget: one
+# 1080p screen and a small chip. A tile takes 4 bytes a pixel: 4 MB a
+# screenful at the PineTab2's 1280x800, 16 MB at 2560x1600 (the Mac VM at
+# Retina size), where a card's layers run past 60 MB and the tiles that do
+# not fit are left undrawn: white blocks over parts of the page, at random,
+# until something redraws (Settings, 27 November 2026; none with 512 MB in
+# the same steps). It is a ceiling, not a reservation: a page takes what
+# its layers need, and more room lets Chromium draw ahead of a scroll. What
+# bounds it is memory (each card has its own, and the GPU shares the RAM):
+# 512 MB with 3.5 GB of memory or more (MemTotal; a "4 GB" device reports
+# about 3.8), 256 MB with 1.75 GB or more, else 128 MB; never less than
+# twelve screenfuls of the largest connected screen (each connected DRM
+# connector's preferred mode, the first line of its modes) nor the start
+# script's own value. For the tests: PHOENIX_MEMINFO, PHOENIX_DRM_DIR.
+phoenix_wam_mem_kb=$(sed -n 's/^MemTotal:[[:space:]]*\([0-9][0-9]*\) kB$/\1/p' "${PHOENIX_MEMINFO:-/proc/meminfo}" 2>/dev/null | head -n 1)
+case $phoenix_wam_mem_kb in ''|*[!0-9]*|??????????*) phoenix_wam_mem_kb=0 ;; esac
+if [ "$phoenix_wam_mem_kb" -ge 3670016 ]; then
+    phoenix_wam_gpu_mb=512
+elif [ "$phoenix_wam_mem_kb" -ge 1835008 ]; then
+    phoenix_wam_gpu_mb=256
+else
+    phoenix_wam_gpu_mb=128
+fi
+for phoenix_wam_conn in "${PHOENIX_DRM_DIR:-/sys/class/drm}"/card*-*; do
+    [ "$(cat "$phoenix_wam_conn/status" 2>/dev/null)" = connected ] || continue
+    phoenix_wam_mode=$(head -n 1 "$phoenix_wam_conn/modes" 2>/dev/null)
+    phoenix_wam_w=${phoenix_wam_mode%%x*}
+    phoenix_wam_h=${phoenix_wam_mode#*x}
+    phoenix_wam_h=${phoenix_wam_h%%[!0-9]*}
+    case $phoenix_wam_w$phoenix_wam_h in ''|*[!0-9]*|0*) continue ;; esac
+    case $phoenix_wam_w in ?????*) continue ;; esac
+    case $phoenix_wam_h in ?????*) continue ;; esac
+    phoenix_wam_mb=$(( (phoenix_wam_w * phoenix_wam_h * 4 * 12 + 1048575) / 1048576 ))
+    [ "$phoenix_wam_mb" -le "$phoenix_wam_gpu_mb" ] || phoenix_wam_gpu_mb=$phoenix_wam_mb
+done
+
 # The web inspector, only in Developer Mode. WebAppMgr's start script turns
 # Chromium's remote debugging on for every image, on port 9998
 # (meta-webos-ports ec5e878 recipes-webos-ose/wam/wam/webapp-mgr.sh.in:222,
@@ -114,6 +153,15 @@ phoenix_wam_switches=""
 for phoenix_wam_switch in $WAM_SWITCHES; do
     case $phoenix_wam_switch in
         --remote-debugging-port=*|--remote-debugging-address=*) ;;
+        --force-gpu-mem-available-mb=*)
+            # The tile budget above, where it is larger than the start
+            # script's (a value that is not a plain number stays as it is).
+            case ${phoenix_wam_switch#*=} in
+                ''|*[!0-9]*|?????*) ;;
+                *) [ "$phoenix_wam_gpu_mb" -le "${phoenix_wam_switch#*=}" ] \
+                       || phoenix_wam_switch=--force-gpu-mem-available-mb=$phoenix_wam_gpu_mb ;;
+            esac
+            phoenix_wam_switches="$phoenix_wam_switches $phoenix_wam_switch" ;;
         *) phoenix_wam_switches="$phoenix_wam_switches $phoenix_wam_switch" ;;
     esac
 done
@@ -125,4 +173,5 @@ export WAM_SWITCHES
 
 unset phoenix_ua_anchor phoenix_ua_period phoenix_ua_now phoenix_ua_major \
     phoenix_ua_device_json phoenix_ua_form phoenix_ua_mobile \
-    phoenix_wam_switches phoenix_wam_switch
+    phoenix_wam_switches phoenix_wam_switch phoenix_wam_gpu_mb phoenix_wam_mb \
+    phoenix_wam_conn phoenix_wam_mode phoenix_wam_w phoenix_wam_h phoenix_wam_mem_kb
