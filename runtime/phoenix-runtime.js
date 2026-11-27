@@ -15749,8 +15749,11 @@
                 device: function () {
                     var slots = runtime.updateSlots ? runtime.updateSlots.get() : null;
                     var booted = slots && slots.slots[slots.booted];
+                    // The slot's version, else the product's (a slot stored before
+                    // product.json was there has ""); accountservice.js leaves out
+                    // what is still empty.
                     return Promise.resolve({ name: "Phoenix Simulator", model: "phoenix-sim", compatible: (slots && slots.compatible) || "phoenix-sim",
-                                             osVersion: (booted && booted.version) || "", build: (booted && booted.build) || 0 });
+                                             osVersion: (booted && booted.version) || runtime.product().version, build: (booted && booted.build) || 0 });
                 },
                 log: function (m) { console.info("[account] " + m); }
             });
