@@ -379,10 +379,19 @@ function start(opts) {
             return send(res, 200, bytes, { "X-Phoenix-Signature": keys.entitlements.sign(bytes) });
         }
         if (p === "v1/devices" && req.method === "POST") {
-            const miss = ["publicKey", "name", "compatible"].filter((k) => typeof b[k] !== "string" || !b[k]);
+            // The platform's AccountController::register rules. model, compatible, osVersion and build
+            // are optional, but one that is there must have a value: Laravel reads "" as missing, and
+            // the platform answered 422 to "" (26 November, a VM image). compatible: RAUC's
+            // characters; build: what its unsigned BIGINT column holds within JSON's whole numbers.
+            const miss = ["publicKey", "name"].filter((k) => typeof b[k] !== "string" || !b[k]);
             if (miss.length) return error(res, 422, "Missing " + miss.join(", "), "VALIDATION", Object.fromEntries(miss.map((k) => [k, "required"])));
+            const limits = { model: 100, compatible: 100, osVersion: 50 };
+            const bad = Object.keys(limits).filter((k) => k in b && b[k] !== null && (typeof b[k] !== "string" || !b[k] || b[k].length > limits[k]));
+            if (typeof b.compatible === "string" && b.compatible && !/^[A-Za-z0-9._-]+$/.test(b.compatible)) bad.push("compatible");
+            if ("build" in b && b.build !== null && !(Number.isSafeInteger(b.build) && b.build >= 0)) bad.push("build");
+            if (bad.length) return error(res, 422, "Invalid " + bad.join(", "), "VALIDATION", Object.fromEntries(bad.map((k) => [k, "invalid"])));
             const id = "d_" + rand(6);
-            const d = { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible, osVersion: b.osVersion || "", build: b.build | 0,
+            const d = { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible || "", osVersion: b.osVersion || "", build: b.build || 0,
                         publicKey: b.publicKey, created: iso(now()), lastSeen: iso(now()).slice(0, 10) };
             st.devices.set(id, d);
             auth.device = id;
