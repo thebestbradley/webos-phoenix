@@ -4,6 +4,7 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": ["activity.operation", "phoenix.appmanager.launch", "phoenix.ongoing"],
     "title": "Notification Lab",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
