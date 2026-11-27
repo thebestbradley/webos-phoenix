@@ -53,7 +53,7 @@ runs:
       env:
         MORE: ${{ inputs.apt }}
       run: |
-        sudo apt-get update
+        .github/ci/apt-update.sh
         # shellcheck disable=SC2086  # MORE is a list of package names
         sudo apt-get install -y --no-install-recommends \
           libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0 libnss3 libxkbfile1 \

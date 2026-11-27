@@ -564,7 +564,14 @@ Then the device registers itself:
 `POST /v1/devices` (`account`) `{"publicKey": base64 Ed25519 (made on the
 device, kept in the key store), "name": "Bradley's TouchPad", "model":
 "PinePhone Pro", "compatible": "phoenix-pinephonepro", "osVersion":
-"1.0.0", "build": 100}` -> `201 {"id": "d_…", "name", "created"}`. The
+"1.0.0", "build": 100}` -> `201 {"id": "d_…", "name", "created"}`. On a
+device the details are `services/account/deviceinfo.js`'s: `compatible` is
+RAUC's, else `phoenix-<MACHINE>` from the image's `/etc/buildinfo` (the VM
+images: `phoenix-vm-arm64`); `model` the device tree's, else the VM's
+device profile, else DMI's; `osVersion` the product's version; `build` the
+image's `BUILD_ID` (its build time, 14 digits since dev push P3, so the
+platform takes any whole number up to 2^53-1). A detail the device can't
+read is left out, never sent as `""`. The
 device key lets later requests be signed (backup uploads, push channel
 registration) so a stolen bearer token alone is not enough for those
 (optional for v1, recommended). `GET /v1/me/devices` -> `{"items": [{id,
