@@ -718,16 +718,28 @@ function createNova(deps) {
     // The paired computers' keys may log in as `user` over Developer Mode's
     // SSH (nova term): the lines nova writes in that account's
     // authorized_keys, between markers; the rest of the file is left alone.
+    // A fresh image has the account's home (phoenix-pty's useradd) but no
+    // ~/.ssh: it is made here, and both it and the file belong to the
+    // account, as sshd reads them as `user` and refuses (StrictModes) a
+    // file or directory another account owns or may write. novad runs as
+    // root, so a file it makes is root's until chowned. No home: no account.
     function authorizedKeys() {
         var f = P(config.authorizedKeys);
+        var dir = path.dirname(f), home;
+        try { home = fs.statSync(path.dirname(dir)); } catch (e) { return; }
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { mode: 0o700 });
         var text = "";
-        try { text = fs.readFileSync(f, "utf8"); } catch (e) { if (!fs.existsSync(path.dirname(f))) return; }
+        try { text = fs.readFileSync(f, "utf8"); } catch (e) { /* none yet */ }
         var begin = "# nova: paired computers (org.webosphoenix.nova)", end = "# nova: end";
         var re = new RegExp("\\n?" + begin.replace(/[()]/g, "\\$&") + "[\\s\\S]*?" + end + "\\n?");
         text = text.replace(re, "\n").replace(/^\n+/, "");
         var lines = paired().filter(function (p) { return !isRevoked(p.key); }).map(function (p) { return keys.sshPublic(p.key, "nova:" + p.name.replace(/\s+/g, "_")); });
         if (lines.length) text = (text ? text.replace(/\n?$/, "\n") : "") + begin + "\n" + lines.join("\n") + "\n" + end + "\n";
         fs.writeFileSync(f, text, { mode: 0o600 });
+        fs.chmodSync(dir, 0o700);
+        fs.chmodSync(f, 0o600);
+        fs.chownSync(dir, home.uid, home.gid);
+        fs.chownSync(f, home.uid, home.gid);
     }
 
     function isPaired(key) { return !isRevoked(key) && paired().some(function (p) { return p.key === key; }); }
