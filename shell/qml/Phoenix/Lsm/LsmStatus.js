@@ -145,16 +145,54 @@ function soundPrefs(reply) {
     return Object.keys(out).length ? out : null;
 }
 
-// audiod-pro's master/getVolume {soundOutput: "alsa", subscribe}: {volumeStatus:
-// {volume, muted, soundOutput}} (OSEMasterVolumeManager::getVolumeInfo,
-// OSEMasterVolumeManager.cpp:2245-2285). Returns {volume} (0-100) or null.
-// Its mute is the output's; the shell's "Mute Sound" is the ringer's (the
-// muteSound preference), as LunaSysMgr's was.
+// audiod-pro's master/getVolume {subscribe}, asked with no soundOutput: the
+// active output's (OSEMasterVolumeManager::getVolume,
+// OSEMasterVolumeManager.cpp:1058-1063). {soundOutput: "alsa"}, which
+// master/setVolume takes for the active output (:563-600), getVolume
+// refuses (:1045-1057, isValidSoundDevice): error 204 "Volume control is
+// not supported", so until 27 November 2026 the shell never read the volume
+// (Revision 21's journal) and the system menu's slider stayed at 100
+// whatever Settings set. A new object each time (the bus call adds
+// subscribe to it).
+function masterVolumeQuery() { return {}; }
+
+// Its answer: {volumeStatus: {volume, muted, soundOutput}}
+// (OSEMasterVolumeManager::getVolumeInfo, :2245-2285). Returns {volume}
+// (0-100) or null. Its mute is the output's; the shell's "Mute Sound" is
+// the ringer's (the muteSound preference), as LunaSysMgr's was.
 function masterVolume(reply) {
     if (!reply || reply.returnValue === false || !reply.volumeStatus || typeof reply.volumeStatus !== "object")
         return null;
     var v = reply.volumeStatus.volume;
     return _num(v) ? { volume: Math.max(0, Math.min(100, Math.round(v))) } : null;
+}
+
+// ---- Brightness (com.webos.settingsservice picture.backlight) -------------------
+// The user's brightness, 1-100: Settings > Screen & Lock writes it
+// (setSystemSettings {category: "picture", settings: {backlight}}), and the
+// simulator keeps it there too (the runtime's settings.picture.backlight; its
+// com.palm.display setProperty {maximumBrightness}). getSystemSettings
+// {category: "picture", keys: ["backlight"], subscribe} answers {settings:
+// {backlight}}; a number in a string is taken too. Returns 1-100 or null.
+function backlight(reply) {
+    if (!reply || typeof reply !== "object" || !reply.settings || typeof reply.settings !== "object")
+        return null;
+    var v = reply.settings.backlight;
+    var b = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+    return _num(b) ? Math.max(1, Math.min(100, Math.round(b))) : null;
+}
+
+// OSE's settingsservice has no default for picture.backlight: until it is
+// set, the get answers {returnValue: false, errorKey: ["backlight"]} and
+// registers no subscription (PrefsDb8Get::sendResultReply, subscriptions
+// only for the keys it found). A set of a key with no description is kept
+// (PrefsDb8Set: keys with no description go to the base kind), so the
+// shell sets its own once and asks again. True for that answer.
+function backlightUnset(reply) {
+    if (!reply || typeof reply !== "object" || backlight(reply) !== null)
+        return false;
+    var keys = reply.errorKey;
+    return Array.isArray(keys) ? keys.indexOf("backlight") >= 0 : reply.returnValue === false && !reply.errorCode;
 }
 
 // ---- Wi-Fi (OSE's com.webos.service.wifi, webos-connman-adapter) ----------------
