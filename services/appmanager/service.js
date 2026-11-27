@@ -30,6 +30,18 @@ function samCall(method, params) {
 var manager = am.createAppManager({
     sam: samCall,
     readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return null; } },
+    // The installed apps: the system's and the user's (SAM's two folders).
+    appFolders: function () {
+        var out = [];
+        ["/usr/palm/applications", "/media/cryptofs/apps/usr/palm/applications"].forEach(function (d) {
+            var names = [];
+            try { names = fs.readdirSync(d); } catch (e) { /* none */ }
+            names.forEach(function (n) {
+                if (out.indexOf(n) < 0 && fs.existsSync(path.join(d, n, "appinfo.json"))) out.push(n);
+            });
+        });
+        return out;
+    },
     registry: {
         load: function () { try { return JSON.parse(fs.readFileSync(FILE, "utf8")); } catch (e) { return null; } },
         save: function (obj) {

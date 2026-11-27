@@ -25,6 +25,7 @@ var Service = require("webos-service");
 var nova = require("./novaservice");
 var proto = require("./lib/proto");
 var createListeners = require("./lib/listeners").createListeners;
+var createUsbLink = require("./lib/usblink").createUsbLink;
 var system = require("./lib/system");
 
 var CONFIG = (function () {
@@ -96,7 +97,14 @@ var listeners = createListeners({
     isPrivate: proto.isPrivate,
     log: function (m) { console.log("[nova] " + m); }
 });
-function follow() { listeners.follow(); }
+// The USB debugging link (docs/DEV-PUSH.md 6.2; lib/usblink.js): tried
+// again at each follow() until the helper has done what was asked.
+var usbLink = createUsbLink({
+    want: function () { return core.devMode() && !!core.options().usb; },
+    run: system.run,
+    log: function (m) { console.log("[nova] " + m); }
+});
+function follow() { usbLink.follow(); listeners.follow(); }
 core.watch(follow);
 follow();
 // Developer Mode is a flag file another service writes (and turning it on

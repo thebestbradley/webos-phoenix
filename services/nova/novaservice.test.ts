@@ -644,3 +644,28 @@ async function pairWith(key: Any, name: string) {
     run.finish(res.confirm.toString("base64"), proof, name);
     return true;
 }
+
+// nova term's SSH (sshd-phoenix-devmode.conf): sshd reads authorized_keys
+// as `user` and refuses (StrictModes) one another account owns.
+describe("the paired computers' SSH keys on a fresh image", () => {
+    it("makes ~/.ssh when the image has none, and both it and authorized_keys belong to the account", async () => {
+        const home = path.join(dev.root, "home/user");
+        fs.rmSync(path.join(home, ".ssh"), { recursive: true, force: true });
+        // As root (a container), give the home another owner, so the chown is seen.
+        if (process.getuid && process.getuid() === 0) fs.chownSync(home, 4242, 4242);
+        const owner = fs.statSync(home);
+        const desk = keys.generate("desk");
+        expect(await pairWith(desk, "Desk top")).toBe(true);
+        expect(dev.read("/home/user/.ssh/authorized_keys")).toContain("nova:Desk_top");
+        const dir = fs.statSync(path.join(home, ".ssh")), file = fs.statSync(path.join(home, ".ssh/authorized_keys"));
+        expect(dir.mode & 0o777).toBe(0o700);
+        expect(file.mode & 0o777).toBe(0o600);
+        expect([dir.uid, dir.gid, file.uid, file.gid]).toEqual([owner.uid, owner.gid, owner.uid, owner.gid]);
+    });
+
+    it("writes nothing when the account has no home", async () => {
+        fs.rmSync(path.join(dev.root, "home/user"), { recursive: true, force: true });
+        expect(await pairWith(keys.generate("desk"), "Desk top")).toBe(true);
+        expect(dev.exists("/home/user")).toBe(false);
+    });
+});

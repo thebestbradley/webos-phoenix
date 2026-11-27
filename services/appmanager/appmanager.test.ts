@@ -211,3 +211,31 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(role.trustLevel).toBe("oem");
     });
 });
+
+describe("rescan (Palm's; docs/DEV-PUSH.md 4.5)", () => {
+    function rescanWorld(scanApp: Any) {
+        const calls: Any[] = [];
+        const listed = [{ id: "com.palm.app.clock", folderPath: "/usr/palm/applications/com.palm.app.clock" },
+                        { id: "org.example.gone", folderPath: "/usr/palm/applications/org.example.gone" },
+                        { id: "com.example.builtin" }];
+        const sam = (method: string, params: Any) => {
+            calls.push({ method, params });
+            if (method === "listApps") return Promise.resolve({ returnValue: true, apps: listed });
+            if (method === "scanApp") return Promise.resolve(scanApp(params));
+            return Promise.resolve({ returnValue: false, errorText: "unknown " + method });
+        };
+        const m = am.createAppManager({ sam, readFile: () => null, now: () => 0,
+                                        appFolders: () => ["com.palm.app.clock", "org.example.new"] });
+        return { m, calls };
+    }
+    it("hands SAM's scanApp every app folder there is and every listed app whose folder is gone", async () => {
+        const w = rescanWorld(() => ({ returnValue: true }));
+        expect(await w.m.methods.rescan({})).toEqual({ returnValue: true, scanned: ["com.palm.app.clock", "org.example.gone", "org.example.new"] });
+        expect(w.calls.filter((c: Any) => c.method === "scanApp")).toEqual([{ method: "scanApp", params: { ids: ["com.palm.app.clock", "org.example.gone", "org.example.new"] } }]);
+    });
+    it("says so when SAM cannot (OSE's SAM has no scanApp)", async () => {
+        const w = rescanWorld(() => ({ returnValue: false, errorText: "Unknown method \"scanApp\"" }));
+        expect(await w.m.methods.rescan({})).toMatchObject({ returnValue: false, errorCode: "NO_RESCAN" });
+    });
+});
+

@@ -1,9 +1,20 @@
 {
     "id": "org.webosphoenix.nova",
     "version": "0.1.0",
-    "roleFiles": ["/usr/share/luna-service2/roles.d/org.webosphoenix.nova.role.json"],
-    "serviceFiles": ["/usr/share/luna-service2/services.d/org.webosphoenix.nova.service"],
-    "apiPermissionFiles": ["/usr/share/luna-service2/api-permissions.d/org.webosphoenix.nova.api.json"],
-    "clientPermissionFiles": ["/usr/share/luna-service2/client-permissions.d/org.webosphoenix.nova.perm.json"],
-    "groupsFiles": ["/usr/share/luna-service2/groups.d/org.webosphoenix.nova.groups.json"]
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/org.webosphoenix.nova.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/org.webosphoenix.nova.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/org.webosphoenix.nova.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/org.webosphoenix.nova.perm.json",
+        "/usr/share/luna-service2/client-permissions.d/org.webosphoenix.nova.developer.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/org.webosphoenix.nova.groups.json"
+    ]
 }

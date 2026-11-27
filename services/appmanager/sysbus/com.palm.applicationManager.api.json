@@ -38,6 +38,7 @@
         "com.palm.applicationManager/setDockModeLaunchPoints"
     ],
     "phoenix.appmanager.manage": [
-        "com.palm.applicationManager/close"
+        "com.palm.applicationManager/close",
+        "com.palm.applicationManager/rescan"
     ]
 }
