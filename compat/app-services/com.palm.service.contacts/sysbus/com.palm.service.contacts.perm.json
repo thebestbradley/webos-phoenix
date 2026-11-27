@@ -2,6 +2,7 @@
     "com.palm.service.contacts": [
         "database.operation",
         "phoenix.appmanager.query",
-        "phoenix.appmanager.launch"
+        "phoenix.appmanager.launch",
+        "systemsettings.query"
     ]
 }

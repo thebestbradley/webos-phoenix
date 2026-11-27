@@ -180,6 +180,14 @@ export function createDriveRouter(opts: DriveRouterOptions): DriveRouter {
 
     function cachePathOf(w: Where): string { return cacheDir + "/" + w.drive.accountId + w.path; }
     function tempPath(name: string): string { return cacheDir + "/.transfer/" + now().toString(36) + "-" + (++tempCount) + "-" + name.replace(/[/\\]/g, "-"); }
+    // The transfer folder, made before each use: the file manager's mkdir
+    // makes one level and the cache may never have been made, or was
+    // cleared (Revision 34: every write to Phoenix Drive failed, ENOENT
+    // .../drive-cache/.transfer/...). An error here (it is there already)
+    // is left to the write that follows.
+    async function transferDir(): Promise<void> {
+        for (const dir of [cacheDir, cacheDir + "/.transfer"]) await opts.local.mkdir({ path: dir }).catch(() => null);
+    }
 
     async function localOk(r: Promise<Reply>): Promise<Reply> {
         const x = await r;
@@ -283,6 +291,7 @@ export function createDriveRouter(opts: DriveRouterOptions): DriveRouter {
         }
         if (src && dst) {
             // From one drive to another: through a file of the device.
+            await transferDir();
             const temp = tempPath(dst.path.replace(/^.*\//, ""));
             try {
                 await call(svc(src, "downloadFile"), { accountId: src.drive.accountId, path: src.path, to: temp });
@@ -379,6 +388,7 @@ export function createDriveRouter(opts: DriveRouterOptions): DriveRouter {
             const w = await where(path);
             if (!w || w.path === "/") throw fileError(FILE_ERRORS.PERMISSION, "Not a file inside a drive: " + path);
             if (p.overwrite === false && await exists(path)) throw fileError(FILE_ERRORS.EXISTS, "Already exists: " + path);
+            await transferDir();
             const temp = tempPath(w.path.replace(/^.*\//, ""));
             try {
                 const written = await localOk(opts.local.write({ path: temp, data: p.data, encoding: p.encoding || "utf8" }));

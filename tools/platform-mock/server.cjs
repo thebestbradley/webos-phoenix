@@ -20,7 +20,7 @@
 //                  real platform's staging must offer the same way
 //
 //   node tools/platform-mock/server.cjs [--port 8099] [--host 127.0.0.1]
-//        [--token TOKEN] [--write-servers FILE] [--seed]
+//        [--public-host HOST] [--token TOKEN] [--write-servers FILE] [--seed]
 //
 // --write-servers writes a servers.json (or a Developer Mode override) for
 // it, with its keys pinned; --seed publishes a sample catalog (a web app
@@ -543,7 +543,10 @@ function start(opts) {
 
     return new Promise((resolve) => {
         server.listen(opts.port || 0, opts.host || "127.0.0.1", () => {
-            base = "http://" + (opts.host || "127.0.0.1") + ":" + server.address().port;
+            // publicHost: the address clients use when it is not the one listened
+            // on (a VM reaches the Mac at QEMU's 10.0.2.2: --host 0.0.0.0
+            // --public-host 10.0.2.2, tools/image-regression's account flow).
+            base = "http://" + (opts.publicHost || opts.host || "127.0.0.1") + ":" + server.address().port;
             publishCatalog({ apps: [] });
             resolve({
                 get url() { return base; }, feeds: feedsUrl(), api: apiUrl(), issuer: issuer(), token, keys, state: st, files,
@@ -607,7 +610,7 @@ module.exports = { start, seed, samplePackages };
 if (require.main === module) {
     const args = process.argv.slice(2);
     const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-    start({ port: Number(arg("--port", 8099)), host: arg("--host", "127.0.0.1"), token: arg("--token", "conformance") }).then(async (mock) => {
+    start({ port: Number(arg("--port", 8099)), host: arg("--host", "127.0.0.1"), publicHost: arg("--public-host", null), token: arg("--token", "conformance") }).then(async (mock) => {
         if (args.includes("--seed")) await seed(mock);
         const out = arg("--write-servers", null);
         if (out) fs.writeFileSync(out, JSON.stringify(mock.servers(arg("--pin", "root")), null, 4) + "\n");

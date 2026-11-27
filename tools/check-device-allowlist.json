@@ -194,10 +194,6 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:no-permissions:org.webosphoenix.enyo2demo": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:no-permissions:org.webosphoenix.firstuse": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
@@ -207,10 +203,6 @@
   "row": "C4"
  },
  "luna:no-permissions:org.webosphoenix.messaging": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.notificationlab": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },

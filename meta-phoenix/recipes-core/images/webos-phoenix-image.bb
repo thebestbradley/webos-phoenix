@@ -51,6 +51,11 @@ inherit phoenix-devpush
 # docs/APP-RUNTIME.md, "The user agent").
 IMAGE_INSTALL:append = " phoenix-wam-conf"
 
+# settingsservice's description of picture.backlight (the brightness) and
+# the *Priv methods for settings.management, without which it refuses the
+# shell and Settings ("Access denied"): phoenix-settingsservice-conf.
+IMAGE_INSTALL:append = " phoenix-settingsservice-conf"
+
 # Hardware (docs/HARDWARE.md, "Hardware support and the Hardware app"):
 # every open source kernel module the kernel was built with (the
 # phoenix-hardware*.cfg fragments), loaded by modalias when the hardware is
