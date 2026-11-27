@@ -41,6 +41,9 @@ IMAGE_INSTALL:append = " phoenix-device-config"
 # their configuration; at image time the build id, Developer Mode off as
 # built and the image's manifest stamped (phoenix-devpush.bbclass).
 IMAGE_INSTALL:append = " phoenix-devmode"
+# A production image has no SSH server at boot (above); Developer Mode is
+# the way in: OpenSSH's, for `user` by key alone, only while it is on.
+IMAGE_INSTALL:append = "${@' phoenix-devmode-ssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 inherit phoenix-devpush
 
 # The web apps' user agent: Chrome on Android at the current Chrome stable

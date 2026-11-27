@@ -96,7 +96,22 @@ var listeners = createListeners({
     isPrivate: proto.isPrivate,
     log: function (m) { console.log("[nova] " + m); }
 });
-function follow() { listeners.follow(); }
+// The USB debugging link (docs/DEV-PUSH.md 6.2): the CDC NCM gadget, while
+// Developer Mode and "USB debugging" are on (phoenix-devmode's
+// phoenix-usb-debug; a device without a USB device controller says so).
+var usbLink = null;
+function followUsb() {
+    var o = core.options();
+    var want = core.devMode() && !!o.usb;
+    if (want === usbLink) return;
+    usbLink = want;
+    system.run("/usr/sbin/phoenix-usb-debug", [want ? "up" : "down"]).then(function (r) {
+        console.log("[nova] " + String(r.stdout || "").trim());
+    }, function (e) {
+        console.log("[nova] USB debugging link " + (want ? "up" : "down") + ": " + (e.stdout || e.message || e));
+    });
+}
+function follow() { followUsb(); listeners.follow(); }
 core.watch(follow);
 follow();
 // Developer Mode is a flag file another service writes (and turning it on

@@ -46,8 +46,11 @@
 //                                 the exhibitions (appinfo.json
 //                                 "exhibitionMode"), the user's in a file
 //
+//   rescan {}                     the installed apps read again (SAM's scanApp)
+//
 // createAppManager({sam(method, params) -> Promise<reply>, readFile(path) ->
-// string | null, registry: {load() -> obj | null, save(obj)}, now()}) ->
+// string | null, registry: {load() -> obj | null, save(obj)}, now(),
+// appFolders() -> [the ids of the app folders installed]}) ->
 // {methods: {name: (params, caller) -> Promise<reply>}, watchLaunchPoints}
 // STATUS: written against SAM's source and appmanager.test.ts; not yet run
 // on a device.
@@ -478,6 +481,33 @@ function createAppManager(opts) {
             p.appIds.forEach(function (id) { r[String(id)] = 0; });
             return Promise.resolve(r);
         },
+        // Palm's rescan {} (luna-sysmgr ApplicationManagerService.cpp:2985):
+        // read the installed apps again, so one a dev bundle added, changed
+        // or removed (docs/DEV-PUSH.md 4.5) shows without a restart. SAM
+        // reads its list once, at start; a SAM with scanApp (webOS-ports'
+        // SAM: it scans the given ids as it does an install or removal, an
+        // id whose folder is gone being removed) is given every app folder
+        // there is and every app it lists whose folder is gone. Without
+        // scanApp (OSE's SAM) it says so, and novad has the change wait for
+        // the next restart (NO_RESCAN). opts.appFolders() -> [ids].
+        rescan: function () {
+            var onDisk = opts.appFolders ? opts.appFolders() : [];
+            return apps().then(function (list) {
+                var ids = {};
+                onDisk.forEach(function (id) { ids[id] = true; });
+                list.forEach(function (a) { if (onDisk.indexOf(a.id) < 0 && a.folderPath) ids[a.id] = true; });
+                var all = Object.keys(ids).sort();
+                if (!all.length) return ok({ scanned: [] });
+                return sam("scanApp", { ids: all }).then(function (r) {
+                    forget();
+                    if (r.returnValue === false) {
+                        return fail("NO_RESCAN", "The application manager cannot read the apps again (" + (r.errorText || "no scanApp") +
+                            "); they are read at the next start");
+                    }
+                    return ok({ scanned: all });
+                });
+            });
+        },
         listPendingLaunchPoints: function () { return Promise.resolve(ok({ launchPoints: [] })); },
         listDockPoints: function () { return Promise.resolve(ok({ dockPoints: [] })); },
 
@@ -697,7 +727,7 @@ function createAppManager(opts) {
 }
 
 var METHODS = ["launch", "open", "listApps", "getAppInfo", "getAppBasePath", "listLaunchPoints", "searchApps",
-               "running", "close", "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "listPendingLaunchPoints", "listDockPoints",
+               "running", "close", "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "rescan", "listPendingLaunchPoints", "listDockPoints",
                "getHandlerForMimeType", "getResourceInfo", "listAllHandlersForMime", "mimeTypeForExtension",
                "getHandlerForExtension", "getHandlerForUrl", "addResourceHandler", "swapResourceHandler",
                "removeHandlersForAppId", "listResourceHandlers", "listExtensionMap", "addRedirectHandler",

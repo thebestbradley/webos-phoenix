@@ -1,0 +1,107 @@
+#!/bin/sh
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Developer Mode's USB debugging link (docs/DEV-PUSH.md 6.2): a CDC NCM
+# gadget (a USB network card macOS, Linux and Windows 11 drive without a
+# driver) made through configfs, the device at 172.16.42.1 and the computer
+# given 172.16.42.2 by BusyBox's DHCP server, as postmarketOS's USB network
+# is. novad runs it as Developer Mode and its "USB debugging" switch change:
+#
+#   phoenix-usb-debug up | down | status
+#
+# It makes its own gadget only: when another gadget holds the USB device
+# controller (a phone's Android gadget, USB tethering's), "up" leaves it
+# and says so (exit 3). "down" takes away only what "up" made.
+# For the tests: PHOENIX_CONFIGFS, PHOENIX_UDC_DIR, PHOENIX_RUN_DIR, and the
+# commands it runs (ip, udhcpd) are looked up on PATH.
+
+set -u
+
+CONFIGFS=${PHOENIX_CONFIGFS:-/sys/kernel/config}
+UDC_DIR=${PHOENIX_UDC_DIR:-/sys/class/udc}
+RUN=${PHOENIX_RUN_DIR:-/run/phoenix}
+G="$CONFIGFS/usb_gadget/phoenix-debug"
+ADDR=${PHOENIX_USB_ADDRESS:-172.16.42.1}
+HOST=${PHOENIX_USB_HOST:-172.16.42.2}
+
+# On standard output, and standard error too (novad logs a failure's).
+say() { echo "phoenix-usb-debug: $*"; echo "phoenix-usb-debug: $*" >&2; }
+
+# The gadget's interface name (usb0, or what the kernel chose).
+ifname() { cat "$G/functions/ncm.usb0/ifname" 2>/dev/null || echo usb0; }
+
+# Stable MAC addresses from the machine id, so the computer sees the same
+# network card each time (locally administered, unicast).
+mac() {
+    id=$(cat /etc/machine-id 2>/dev/null || echo 00000000000000000000000000000000)
+    echo "$1:$(echo "$id" | cut -c1-2):$(echo "$id" | cut -c3-4):$(echo "$id" | cut -c5-6):$(echo "$id" | cut -c7-8):$(echo "$id" | cut -c9-10)"
+}
+
+up() {
+    if [ -d "$G" ] && [ -n "$(cat "$G/UDC" 2>/dev/null)" ]; then
+        say "already up"; return 0
+    fi
+    udc=$(ls "$UDC_DIR" 2>/dev/null | head -n 1)
+    if [ -z "$udc" ]; then
+        say "no USB device controller (a computer cannot connect over USB here)"; return 2
+    fi
+    for other in "$CONFIGFS"/usb_gadget/*; do
+        [ -d "$other" ] && [ "$other" != "$G" ] || continue
+        if [ "$(cat "$other/UDC" 2>/dev/null)" = "$udc" ]; then
+            say "the USB port is in use by another gadget ($(basename "$other")); not changed"; return 3
+        fi
+    done
+    mkdir -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409" "$G/functions/ncm.usb0" || return 1
+    echo 0x1d6b > "$G/idVendor"            # Linux Foundation
+    echo 0x0104 > "$G/idProduct"           # Multifunction Composite Gadget
+    echo 0x0100 > "$G/bcdDevice"
+    echo "webOS Phoenix" > "$G/strings/0x409/manufacturer"
+    echo "webOS Phoenix (Developer Mode)" > "$G/strings/0x409/product"
+    echo "$(cat /etc/machine-id 2>/dev/null | cut -c1-16)" > "$G/strings/0x409/serialnumber"
+    echo "USB debugging" > "$G/configs/c.1/strings/0x409/configuration"
+    echo 250 > "$G/configs/c.1/MaxPower"
+    mac 02 > "$G/functions/ncm.usb0/dev_addr" 2>/dev/null
+    mac 06 > "$G/functions/ncm.usb0/host_addr" 2>/dev/null
+    [ -e "$G/configs/c.1/ncm.usb0" ] || ln -s "$G/functions/ncm.usb0" "$G/configs/c.1/ncm.usb0"
+    echo "$udc" > "$G/UDC" || { say "could not bind to $udc"; return 1; }
+    dev=$(ifname)
+    ip addr flush dev "$dev" 2>/dev/null
+    ip addr add "$ADDR/24" dev "$dev" && ip link set "$dev" up || return 1
+    mkdir -p "$RUN"
+    cat > "$RUN/usb-debug-udhcpd.conf" <<CONF
+interface $dev
+start $HOST
+end $HOST
+max_leases 1
+option subnet 255.255.255.0
+pidfile $RUN/usb-debug-udhcpd.pid
+lease_file $RUN/usb-debug-udhcpd.leases
+CONF
+    : > "$RUN/usb-debug-udhcpd.leases"
+    if command -v udhcpd >/dev/null 2>&1; then
+        udhcpd "$RUN/usb-debug-udhcpd.conf" || say "udhcpd did not start: set $HOST/24 on the computer by hand"
+    else
+        say "no udhcpd: set $HOST/24 on the computer by hand"
+    fi
+    say "up on $dev ($ADDR, the computer $HOST)"
+}
+
+down() {
+    if [ -f "$RUN/usb-debug-udhcpd.pid" ]; then
+        kill "$(cat "$RUN/usb-debug-udhcpd.pid")" 2>/dev/null
+        rm -f "$RUN/usb-debug-udhcpd.pid"
+    fi
+    [ -d "$G" ] || { say "not up"; return 0; }
+    echo "" > "$G/UDC" 2>/dev/null
+    rm -f "$G/configs/c.1/ncm.usb0"
+    rmdir "$G/configs/c.1/strings/0x409" "$G/configs/c.1" "$G/functions/ncm.usb0" "$G/strings/0x409" "$G" 2>/dev/null
+    say "down"
+}
+
+case "${1:-}" in
+up) up ;;
+down) down ;;
+status) if [ -d "$G" ] && [ -n "$(cat "$G/UDC" 2>/dev/null)" ]; then echo up; else echo down; fi ;;
+*) echo "usage: phoenix-usb-debug up | down | status" >&2; exit 64 ;;
+esac

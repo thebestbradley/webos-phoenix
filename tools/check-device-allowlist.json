@@ -338,10 +338,6 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
- "luna:unknown-method:com.palm.applicationManager/rescan": {
-  "owner": "dev push P3: Palm's rescan (docs/DEV-PUSH.md 4.5) has no provider on the image yet (Phoenix's com.palm.applicationManager lacks it on a device; OSE's SAM reads the apps at start); novad then says \"Restart the device to finish\"",
-  "row": "DEV-PUSH P3"
- },
  "luna:unknown-method:com.palm.systemmanager/enableFpsCounter": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
