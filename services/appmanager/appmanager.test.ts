@@ -122,6 +122,11 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(await w.m.methods.getResourceInfo({ uri: "file:///media/internal/a.mp4" }))
             .toMatchObject({ returnValue: true, appIdByExtension: "org.webosphoenix.videos", mimeByExtension: "video/mp4", canStream: false });
         expect(await w.m.methods.getResourceInfo({ uri: "https://x.example/a.mp4" })).toMatchObject({ canStream: true });
+        // A type no app opens: a web address's goes to the Browser, which downloads it (LunaSysMgr's
+        // scheme handler, its last try); anything else still has no handler.
+        expect(await w.m.methods.getResourceInfo({ uri: "http://10.0.2.2/regress-slow.bin", mime: "application/octet-stream" }))
+            .toMatchObject({ returnValue: true, appIdByExtension: "com.palm.app.browser", canStream: false });
+        expect(await w.m.methods.getResourceInfo({ uri: "file:///media/internal/a.nosuchtype" })).toMatchObject({ returnValue: false });
         expect(await w.m.methods.mimeTypeForExtension({ extension: ".PDF" })).toMatchObject({ returnValue: true, mimeType: "application/pdf" });
         expect(await w.m.methods.getHandlerForExtension({ extension: "pdf" })).toMatchObject({ appId: "org.webosphoenix.pdfview", download: true });
         expect(await w.m.methods.getHandlerForUrl({ url: "sms:5550100" })).toMatchObject({ returnValue: true, appId: "org.webosphoenix.messaging" });

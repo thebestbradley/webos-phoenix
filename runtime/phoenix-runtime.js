@@ -3077,6 +3077,12 @@
             var m = urlMatches(String(url || ""))[0];
             return m ? m.active.appId : null;
         };
+        // The handler of the address's scheme alone ("^https?:" the browser),
+        // for getResourceInfo's last try.
+        runtime.schemeHandlerFor = function (url) {
+            var m = urlMatches(String(url || "")).filter(function (x) { return x.active.schemeForm; })[0];
+            return m ? m.active.appId : null;
+        };
         am["/addRedirectHandler"] = function (p, reply) {
             if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
             if (typeof p.urlPattern !== "string" || !p.urlPattern) return reply({ subscribed: false, returnValue: false, errorCode: "Missing urlPattern parameter" });
@@ -11646,7 +11652,15 @@
                 try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
                 var mime = MIME[extOf(path)] || p.mime || "application/octet-stream";
                 var h = handlersFor(mime, extOf(path))[0] || (p.mime ? handlersFor(p.mime)[0] : null);
-                if (!h) return reply(fail(-1, "No handler for " + mime));
+                if (!h) {
+                    // No app for the type: the handler of the address's scheme, as
+                    // LunaSysMgr's last try (luna-sysmgr ApplicationManagerService.cpp
+                    // :558-567): a web address's is the browser, which then downloads
+                    // the file (isis-browser BrowserApp.js:391-394).
+                    var scheme = runtime.schemeHandlerFor ? runtime.schemeHandlerFor(uri) : null;
+                    if (!scheme) return reply(fail(-1, "No handler for " + mime));
+                    return reply(ok({ uri: uri, appIdByExtension: scheme, mimeByExtension: mime, canStream: false }));
+                }
                 // stream: the app plays a web address itself (Videos); else it is downloaded first.
                 var ext = extOf(path);
                 var streams = registeredTypes().some(function (r) {
