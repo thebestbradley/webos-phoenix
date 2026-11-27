@@ -133,6 +133,29 @@ Item {
             compare(boot[0].params.preload, "partial");
         }
 
+        // Closed under memory pressure (memorymanager, Revision 34): started
+        // again, hidden, after a while, and not again at once.
+        function test_systemUiStartedAgainWhenClosed() {
+            windows._bootAppRestarted = {};
+            windows.bootAppRestartMs = 10;
+            FakeBus.clear();
+            windows.bootAppEvent({ returnValue: true, appId: "org.webosphoenix.notes", event: "close" });
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "foreground" });
+            wait(50);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 0, "only a boot app's stop or close");
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "close" });
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "stop" });
+            tryCompare(windows, "_bootAppsDue", []);
+            var again = FakeBus.find("com.webos.applicationManager", "/launch");
+            compare(again.length, 1);
+            compare(again[0].params.id, "com.palm.systemui");
+            compare(again[0].params.preload, "partial");
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "stop" });
+            wait(50);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 1, "not again within the gap");
+            windows.bootAppRestartMs = 5000;
+        }
+
         function test_launchAndStatusGoToTheBus() {
             FakeBus.clear();
             windows.launch("org.webosphoenix.memos", "", null);

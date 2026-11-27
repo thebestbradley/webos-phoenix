@@ -1128,12 +1128,53 @@ Item {
 
     function startBootApps() {
         for (var b = 0; b < bootApps.length; ++b)
-            lunaCall("luna://com.webos.applicationManager/launch",
-                     { id: bootApps[b], preload: "partial", params: { launchedAtBoot: true } }, function() {});
+            startBootApp(bootApps[b]);
+    }
+    function startBootApp(appId) {
+        lunaCall("luna://com.webos.applicationManager/launch",
+                 { id: appId, preload: "partial", params: { launchedAtBoot: true } }, function() {});
+    }
+
+    // Started again when closed (Revision 34: under memory pressure OSE's
+    // memorymanager closes the hidden system UI as an idle background app,
+    // and nothing started it again until a reboot, so no dashboard or
+    // download notice showed). The life event "stop" (or "close") of a boot
+    // app starts it again after bootAppRestartMs, at most once per
+    // bootAppRestartGapMs, so a device short of memory is not kept busy.
+    property int bootAppRestartMs: 5000
+    property int bootAppRestartGapMs: 60000
+    property var _bootAppRestarted: ({})
+    property var _bootAppsDue: []
+    function bootAppEvent(r) {
+        if (!r || r.returnValue === false || bootApps.indexOf(r.appId) < 0)
+            return;
+        if (r.event !== "stop" && r.event !== "close")
+            return;
+        var last = _bootAppRestarted[r.appId] || 0;
+        if (Date.now() - last < bootAppRestartGapMs || _bootAppsDue.indexOf(r.appId) >= 0)
+            return;
+        _bootAppsDue.push(r.appId);
+        bootAppTimer.restart();
+    }
+    function restartDueBootApps() {
+        var due = _bootAppsDue;
+        _bootAppsDue = [];
+        for (var i = 0; i < due.length; ++i) {
+            _bootAppRestarted[due[i]] = Date.now();
+            startBootApp(due[i]);
+        }
+    }
+    Timer {
+        id: bootAppTimer
+        interval: source.bootAppRestartMs
+        repeat: false
+        onTriggered: source.restartDueBootApps()
     }
 
     Component.onCompleted: {
         startBootApps();
+        lunaSubscribe("luna://com.webos.applicationManager/getAppLifeEvents", { subscribe: true },
+                      function(r) { source.bootAppEvent(r); });
         _listenToPages();
         lunaSubscribe("luna://com.webos.notification/getToastNotification", { subscribe: true }, function(r) {
             if (r && r.returnValue !== false && typeof r.message === "string")
