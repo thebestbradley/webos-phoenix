@@ -106,6 +106,45 @@ describe("signing in with a code (RFC 8628)", () => {
         expect(calls.some((c) => c.uri.endsWith("/createToast") && /Signed in to your Phoenix Account as test@example.org/.test(c.params.message))).toBe(true);
     });
 
+    // 26 November 2026: the 2.0 Revision 15 VM image (no RAUC, no device-tree
+    // model, BUILD_ID the image's 14-digit DATETIME) and the simulator (osVersion
+    // "" before an update slot has a version) were refused with 422; 1.0's images
+    // and simulator sent the same.
+    it.each([
+        ["a VM image", { name: "PINE64 PineTab2", model: "PINE64 PineTab2", compatible: "phoenix-vm-arm64", osVersion: "1.0.0", build: 20261126153551 },
+         { name: "PINE64 PineTab2", model: "PINE64 PineTab2", compatible: "phoenix-vm-arm64", osVersion: "1.0.0", build: 20261126153551 }],
+        ["a device that could read nothing", { name: "", model: "", compatible: "", osVersion: "", build: 0 },
+         { name: "Phoenix device", model: "", compatible: "", osVersion: "", build: 0 }],
+        ["the simulator before a slot has a version", { name: "Phoenix Simulator", model: "phoenix-sim", compatible: "phoenix-sim", osVersion: "", build: 0 },
+         { name: "Phoenix Simulator", compatible: "phoenix-sim", osVersion: "", build: 0 }],
+    ])("registers %s without empty fields", async (_what, dev, stored) => {
+        const bodies: Any[] = [];
+        const svc = service({
+            device: async () => dev,
+            request: (req: Any) => {
+                if (req.method === "POST" && req.url.endsWith("v1/devices")) bodies.push(JSON.parse(req.body));
+                return device.request(req);
+            },
+        });
+        const st = await signedIn(svc);
+        expect(bodies).toHaveLength(1);
+        expect(Object.values(bodies[0])).not.toContain("");
+        expect(bodies[0]).not.toHaveProperty("build", 0);
+        expect(mock.state.devices.get(st.device.id)).toMatchObject(stored);
+    });
+
+    it("the mock refuses what the platform refuses: empty strings, a compatible with other characters, a build it can't store", async () => {
+        await signedIn(service());
+        const post = (body: Any) => device.request({
+            method: "POST", url: mock.url + "/api/v1/devices", body: JSON.stringify(body),
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + keystore["account:tokens"].accessToken },
+        });
+        const ok = { publicKey: crypto.randomBytes(32).toString("base64"), name: "x" };
+        for (const bad of [{ model: "" }, { osVersion: "" }, { compatible: "" }, { compatible: "pine tab/2" }, { build: 2 ** 53 }, { build: -1 }, { build: 1.5 }])
+            expect((await post({ ...ok, ...bad })).status, JSON.stringify(bad)).toBe(422);
+        expect((await post({ ...ok, build: 20261126153551 })).status).toBe(201);
+    });
+
     it("turned down, or expired, says so", async () => {
         const svc = service();
         const st = await svc.signIn({}, "org.webosphoenix.settings");

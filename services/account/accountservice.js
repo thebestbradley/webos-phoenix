@@ -110,6 +110,21 @@ function form(o) {
     return Object.keys(o).filter(function (k) { return o[k] !== undefined && o[k] !== null; })
         .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(o[k]); }).join("&");
 }
+// POST /v1/devices's body: what device() found, without what it couldn't
+// read. The platform answers 422 to an empty string (Laravel reads "" as
+// missing, and "compatible" was required) and to a build it can't store, so
+// a field without a value is left out rather than sent as "" or 0.
+// "build" is the image's build number (14 digits since dev push P3), sent
+// whole up to 2^53-1 (the server's column is an unsigned BIGINT).
+function registration(publicKey, dev) {
+    dev = dev || {};
+    var body = { publicKey: publicKey, name: (typeof dev.name === "string" && dev.name.trim()) || "Phoenix device" };
+    ["model", "compatible", "osVersion"].forEach(function (k) {
+        if (typeof dev[k] === "string" && dev[k].trim()) body[k] = dev[k].trim();
+    });
+    if (typeof dev.build === "number" && dev.build > 0 && Number.isSafeInteger(dev.build)) body.build = dev.build;
+    return body;
+}
 
 // deps:
 //   request({method, url, headers, body}) -> Promise<{status, headers, body (text)}>
@@ -126,7 +141,8 @@ function form(o) {
 //   crypto {sha256, sha512 -> Promise<Uint8Array>, randomBytes(n) -> Uint8Array,
 //           deviceKey() -> Promise<base64 Ed25519 public key> (made once, the
 //           private half kept on the device)}
-//   device() -> Promise<{name, model, compatible, osVersion, build}>
+//   device() -> Promise<{name, model?, compatible?, osVersion?, build?}> (a
+//       device: deviceinfo.js; what it can't read, left out)
 //   timers {set(fn, ms) -> handle, clear(handle)} (optional)
 //   now(), log() (optional)
 function createAccountService(deps) {
@@ -390,8 +406,7 @@ function createAccountService(deps) {
             var s = load();
             var reg = s.deviceId && s.accountId === me.id
                 ? Promise.resolve({ id: s.deviceId })
-                : apiJson("POST", "v1/devices", { publicKey: got[2], name: dev.name || "Phoenix device", model: dev.model || "",
-                                                   compatible: dev.compatible || "", osVersion: dev.osVersion || "", build: dev.build || 0 },
+                : apiJson("POST", "v1/devices", registration(got[2], dev),
                           { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)) });
             return reg.then(function (d) {
                 var s2 = load();
@@ -697,4 +712,5 @@ function createAccountService(deps) {
     return methods;
 }
 
-module.exports = { SERVICE: SERVICE, METHODS: METHODS, ACCOUNT_NAME: ACCOUNT_NAME, createAccountService: createAccountService };
+module.exports = { SERVICE: SERVICE, METHODS: METHODS, ACCOUNT_NAME: ACCOUNT_NAME, createAccountService: createAccountService,
+                   registration: registration };
