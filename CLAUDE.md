@@ -101,6 +101,16 @@ Run what covers the change before committing; CI runs all of it.
 
 ## Rules
 
+- **Phoenix first** (the owner, 27 November 2026; a golden rule): where a
+  Phoenix service, app or component exists, it is always the one used, never
+  LuneOS's (or another layer's) version of it. LuneOS's layers are there
+  only to fill gaps Phoenix has not built. So: never install, enable, alias
+  or point Phoenix's code at a LuneOS service that does what a Phoenix one
+  does (bus name, flag file, unit or app); when LuneOS's and Phoenix's both
+  arrive in an image, Phoenix's wins and LuneOS's is removed; when Phoenix
+  builds something LuneOS was filling, LuneOS's goes. A gap LuneOS fills is
+  named in `docs/LUNEOS.md` "Phoenix first". Asked to choose otherwise, ask
+  the owner.
 - Find the root cause. A failure is never "a flake" until proven; reproduce it,
   explain it, fix it. No workarounds that hide a problem.
 - Follow the original. The behaviour to match is luna-sysmgr's, luna-systemui's

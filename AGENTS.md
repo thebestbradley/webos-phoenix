@@ -2,6 +2,12 @@
 
 The project rules are in CLAUDE.md, CONTRIBUTING.md and the README; read them first.
 
+**Golden rule, Phoenix first** (the owner, 27 November 2026): where a Phoenix
+service, app or component exists, it is always the one used, never LuneOS's
+(or another layer's) version of it; LuneOS only fills gaps Phoenix has not
+built. CLAUDE.md "Rules" and docs/DECISIONS.md (27 November 2026) have it
+in full; docs/LUNEOS.md "Phoenix first" lists what LuneOS fills.
+
 ## The team: three agents
 
 Phoenix is worked on by three agents as one team (the owner, 24 October
