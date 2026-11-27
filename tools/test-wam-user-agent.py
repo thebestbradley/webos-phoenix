@@ -205,6 +205,55 @@ for SH in SHELLS:
                       "%s: no inspector port, got %r" % (what, switches))
             check(leftover == "unset", "%s: conf.sh leaves no phoenix_wam_ names, got %r" % (what, leftover))
 
+# The tile budget (conf.sh: 512 MB with 3.5 GB of memory or more, 256 with
+# 1.75 GB or more, else 128; never below twelve screenfuls of the largest
+# connected screen nor the start script's --force-gpu-mem-available-mb; a
+# value that is not a plain number stays as it is).
+GB = 1048576
+GPU_CASES = [
+    # (MemTotal kB, connectors as (name, status, first mode), start script's value, expected value)
+    (3920000, [("card0-Virtual-1", "connected", "2560x1600")], "60", "512"),
+    (3920000, [("card0-DSI-1", "connected", "1280x800")], "60", "512"),
+    (3670016, [], "60", "512"),
+    (3670015, [], "60", "256"),
+    (1835008, [("card0-DSI-1", "connected", "720x1440")], "60", "256"),
+    (1835007, [("card0-DSI-1", "connected", "720x1440")], "60", "128"),
+    (1000000, [("card0-Virtual-1", "connected", "2560x1600")], "60", "188"),
+    (1000000, [("card0-HDMI-A-1", "disconnected", "3840x2160"), ("card0-DSI-1", "connected", "1280x800")], "60", "128"),
+    (1000000, [("card0-DSI-1", "connected", "1280x800"), ("card0-HDMI-A-1", "connected", "3840x2160i")], "60", "380"),
+    (16 * GB, [("card0-HDMI-A-1", "connected", "7680x4320")], "60", "1519"),
+    (3920000, [("card0-Virtual-1", "connected", "2560x1600")], "600", "600"),
+    (3920000, [("card0-Virtual-1", "connected", "2560x1600")], "lots", "lots"),
+    (1000000, [("card0-Virtual-1", "connected", "")], "60", "128"),
+    (1000000, [("card0-Virtual-1", "connected", "x1600")], "60", "128"),
+    (None, [], "60", "128"),
+]
+for SH in SHELLS:
+    for mem_kb, conns, upstream, want in GPU_CASES:
+        with tempfile.TemporaryDirectory() as tmp:
+            drm = os.path.join(tmp, "drm")
+            os.mkdir(drm)
+            for name, status, mode in conns:
+                d = os.path.join(drm, name)
+                os.mkdir(d)
+                open(os.path.join(d, "status"), "w").write(status + "\n")
+                open(os.path.join(d, "modes"), "w").write((mode + "\n640x480\n") if mode else "")
+            meminfo = os.path.join(tmp, "meminfo")
+            open(meminfo, "w").write("MemTotal:       %s kB\nMemFree:         1234 kB\n" % mem_kb if mem_kb else "")
+            switches = "--no-sandbox --force-gpu-mem-available-mb=%s --webos-wam" % upstream
+            env = dict(os.environ, WAM_SWITCHES=switches, WAM_EXTRA_FLAGS="", PHOENIX_DRM_DIR=drm, PHOENIX_MEMINFO=meminfo,
+                       PHOENIX_DEVMODE_FLAG=os.path.join(tmp, "none"),
+                       PHOENIX_DEVICE_JSON=os.path.join(tmp, "none.json"),
+                       PHOENIX_UA_CLIENT_HINTS_FILE=os.path.join(tmp, "none"))
+            script = ('. %s || :\nprintf "%%s\\n" "$WAM_SWITCHES" "${phoenix_wam_gpu_mb-unset}"\n'
+                      % shlex.quote(CONF))
+            out = subprocess.run(SH + ["-c", script], env=env, capture_output=True, text=True, check=True).stdout
+            got, leftover = out.rstrip("\n").split("\n")
+            what = "%s, MemTotal %s kB, screens %r, start script %s" % (SH[0], mem_kb, conns, upstream)
+            check(got.split() == ["--no-sandbox", "--force-gpu-mem-available-mb=" + want, "--webos-wam"],
+                  "%s: --force-gpu-mem-available-mb=%s, got %r" % (what, want, got))
+            check(leftover == "unset", "%s: conf.sh leaves no phoenix_wam_ names, got %r" % (what, leftover))
+
 if failures:
     print("%d failed" % len(failures))
     sys.exit(1)
