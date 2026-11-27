@@ -510,6 +510,27 @@ describe("the permission gate", () => {
         t.as("org.webosphoenix.somebody");
         expect((await t.svc.ask({ text: "hello" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
     });
+
+    // On a device the shell is luna-surfacemanager, and its calls (the
+    // Assistant's view, announcements, widgets) come as com.webos.surfacemanager,
+    // not the simulator's com.palm.systemui: Revisions 1-22 answered every
+    // question asked there "Only the system and the Assistant may ask", and
+    // every announcement "Only the system UI announces" (the journal's
+    // surface-manager "Error response ... -3").
+    it("takes the system UI by its device name as by the simulator's", async () => {
+        const t = setup();
+        t.as("com.webos.surfacemanager");
+        await ask(t, "set a timer for 5 minutes");
+        const announced = await t.svc.announce({ appId: "com.palm.app.clock", title: "Alarm", body: "Wake up" });
+        expect(announced.returnValue, announced.errorText).toBe(true);
+        expect((await t.svc.sessionPhrase({ kind: "goodbye", speak: false })).returnValue).toBe(true);
+        // Not a page or service that only shares a prefix.
+        for (const other of ["com.webos.surfacemanager-1", "com.webos.surfacemanagerx", "com.webos.app.surfacemanager"]) {
+            t.as(other);
+            expect((await t.svc.ask({ text: "hello" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+            expect((await t.svc.announce({ appId: "com.palm.app.clock", title: "x" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+        }
+    });
 });
 
 describe("the on-device model", () => {
