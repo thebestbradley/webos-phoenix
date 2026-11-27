@@ -125,7 +125,7 @@ left out. **Uses** says whether Phoenix's code calls it today.
 | `luna-universalsearchmgr` | Just Type's daemon (`com.palm.universalsearch`) | the runtime, the app manager |
 | `imlibpurpleservice`, `imaccountvalidator`, `messaging-accounts` | IM over libpurple | two references (review: Phoenix's connectors may cover it) |
 | `com.palm.app.backup` | Backup and restore app; serves `com.palm.service.backup` | 2.0 keeps it (Phoenix has `org.webosphoenix.service.backup` but no app of its own) |
-| `novacomd` | Palm's device link | kept for vintage tools behind a switch (DEV-PUSH.md 9.6) |
+| `novacomd` | Palm's device link | installed, off: a flag turns it on for vintage tools, on loopback, reached through `nova forward 6969` (the owner, 27 November; DEV-PUSH.md 9.6). Its USB side cannot work on Phoenix's hardware |
 
 ### LuneOS has, Phoenix has nothing like it: to review
 
