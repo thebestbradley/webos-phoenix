@@ -133,7 +133,7 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | com.palm.certificatemanager | certificates | runtime | certmgrd (LuneOS), not packaged | ⬜ | runtime |
 | com.palm.storage | erase, mass storage | runtime + `SimStorage` | storaged (LuneOS), not packaged | ⬜ | runtime; `services/systemmanager` calls `erase/Wipe` |
 | com.palm.image, com.palm.image2 | image conversion | runtime | none on OSE | ⬜ | runtime |
-| com.palm.location, com.webos.service.location, org.webosphoenix.service.location | location | runtime | OSE has no location service | ⬜ | runtime |
+| com.palm.location, com.webos.service.location, org.webosphoenix.service.location | location | runtime | LuneOS's `com.webos.service.location`, patched in meta-phoenix: GPS through nyx's NMEA module (on a VM a virtio port fed by `tools/vm-location`), the network position and place names from the platform's `/v1/location/*` (beaconDB, an IP fallback), a position the user sets; the per-app permission is `org.webosphoenix.service.location` (2.0). The legacy `com.palm.location` API has no service ([MAPS.md](MAPS.md), "Where the position comes from") | 🟡 legacy API ⬜ | runtime; meta-phoenix `recipes-navigation` |
 | com.palm.imap, com.palm.pop, com.palm.smtp | mail | runtime | mojomail (C++), not built | ⬜ | runtime |
 | com.webos.service.vpn | VPN | runtime | LuneOS's VPN adapter, no recipe | ⬜ | runtime |
 | com.palm.browserServer | browser cookies and cache | runtime → host | none (Q38) | ⬜ | runtime |
