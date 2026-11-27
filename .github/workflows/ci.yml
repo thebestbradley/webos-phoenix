@@ -455,7 +455,7 @@ jobs:
 
       - name: Build tools
         run: |
-          sudo apt-get update
+          .github/ci/apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0 libnss3 libxkbfile1 \
             xvfb xauth libgl1-mesa-dri fonts-dejavu-core pkg-config libglib2.0-dev
