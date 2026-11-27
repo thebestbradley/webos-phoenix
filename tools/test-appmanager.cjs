@@ -127,6 +127,13 @@ async function main() {
         // ---- Redirect handlers ----------------------------------------------------------------
         check((await luna(AM + "getHandlerForUrl", { url: "mailto:someone@example.com" })).appId === "com.palm.app.email", "getHandlerForUrl: mailto: is Email's");
         check((await luna(AM + "getHandlerForUrl", { url: "https://example.com/" })).appId === "com.palm.app.browser", "a web page is the browser's");
+        // A file no app opens, at a web address: the browser's (LunaSysMgr's scheme handler, the
+        // last try of getResourceInfo), which downloads it; elsewhere still none.
+        const bin = await luna(AM + "getResourceInfo", { uri: "https://example.com/data.bin", mime: "application/octet-stream" });
+        check(bin.returnValue === true && bin.appIdByExtension === "com.palm.app.browser" && bin.canStream === false,
+              "getResourceInfo: a web address's file of no app's type is the browser's to download");
+        check((await luna(AM + "getResourceInfo", { uri: "file:///media/internal/a.nosuchtype" })).returnValue === false,
+              "getResourceInfo: a local file of no app's type has no handler");
         check((await luna(AM + "addRedirectHandler", { appId: "org.webosphoenix.maps", urlPattern: "^osm:", schemeForm: "yes" })).errorCode
               === "schemeForm parameter incorrectly specified (should be a boolean value)", "addRedirectHandler: schemeForm must be a boolean");
         check((await luna(AM + "addRedirectHandler", { appId: "org.webosphoenix.maps", urlPattern: "^osm:", schemeForm: true })).returnValue, "addRedirectHandler");

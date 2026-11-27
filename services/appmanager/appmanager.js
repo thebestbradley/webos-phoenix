@@ -525,7 +525,17 @@ function createAppManager(opts) {
                 var ext = extOf(path);
                 var mime = MIME[ext] || p.mime || "application/octet-stream";
                 var h = handlersFor(list, mime, ext)[0] || (p.mime ? handlersFor(list, p.mime)[0] : null);
-                if (!h) return fail(-1, "No handler for " + mime);
+                if (!h) {
+                    // No app for the type: the handler of the address's scheme, as
+                    // LunaSysMgr's last try (luna-sysmgr ApplicationManagerService.cpp
+                    // :558-567, getActiveHandlerForRedirect with command handlers):
+                    // a web address's is the Browser, which then downloads the file
+                    // (isis-browser BrowserApp.js:391-394). Without it the Browser's
+                    // every download of a type no app opens (a .bin, a .zip) failed.
+                    var scheme = urlMatches(list, uri).filter(function (m) { return m.active.schemeForm; })[0];
+                    if (!scheme) return fail(-1, "No handler for " + mime);
+                    return ok({ uri: uri, appIdByExtension: scheme.active.appId, mimeByExtension: mime, canStream: false });
+                }
                 var streams = registeredTypes(list).some(function (r) {
                     return r.appId === h.appId && r.stream && (r.extension === ext || typeMatches(r.mime, mime));
                 });
