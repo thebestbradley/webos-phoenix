@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: webOS Phoenix contributors <webos-phoenix@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 09:00:00 -0500
+Subject: [PATCH] zram-on: size zram from all of the memory, not the Normal
+ zone
+
+zram-on.sh sizes zram at a quarter of the memory (40 % under 1.5 GiB),
+but it counted only the Normal and HighMem zones of /proc/zoneinfo.
+That is all of the memory on 32-bit ARM. On arm64 and x86-64 the memory
+below 4 GiB is in the DMA and DMA32 zones, and Normal holds only what
+lies above 4 GiB, so:
+
+  - a 4 GiB arm64 VM (RAM from 1 GiB to 5 GiB) counted 0.9 GiB and got
+    375 MiB of zram (40 % of it) instead of about 980 MiB;
+  - a 3 GiB one counted nothing and got the 350 MiB floor:
+    "33333 DISKSIZE/TOTAL_FREE :  350 / 0".
+
+Take MemTotal, which is every zone's managed pages, as the 32-bit count
+was. The page size the old count needed goes with it.
+
+Upstream-Status: Pending
+---
+ common/lib/systemd/system/scripts/zram-on.sh.in | 26 ++++++++------------------
+ 1 file changed, 8 insertions(+), 18 deletions(-)
+
+diff --git a/common/lib/systemd/system/scripts/zram-on.sh.in b/common/lib/systemd/system/scripts/zram-on.sh.in
+index 0543743..3841856 100644
+--- a/common/lib/systemd/system/scripts/zram-on.sh.in
++++ b/common/lib/systemd/system/scripts/zram-on.sh.in
+@@ -62,24 +62,14 @@ if [ -d $ZRAM_PATH ]; then
+         ZRAM_RATIO=25
+         ZRAM_MIN_DISKSIZE=350
+         BASE_FREE=1536
+-        # get pagesize
+-        MAPPED_SIZE=`grep '^Mapped:' /proc/meminfo | awk '{print $2}'`
+-        MAPPED_COUNT=`grep '^nr_mapped ' /proc/vmstat | awk '{print $2}'`
+-        if [ -n "$MAPPED_SIZE" ] && [ -n "$MAPPED_COUNT" ] && [ "$MAPPED_COUNT" -gt 0 ] 2>/dev/null; then
+-            PAGE_SIZE=$(($MAPPED_SIZE*1024/$MAPPED_COUNT))
+-        else
+-            PAGE_SIZE=`getconf PAGESIZE 2>/dev/null || echo 4096`
+-        fi
+-
+-        # get total free
+-        # Pages in the Normal and HighMem zones: "managed" where the kernel prints it, "present" where it
+-        # does not. The loop that stood here waited for a "managed" line and never ended on a 3.4 kernel,
+-        # which prints none: zram-on.sh spun for ever, the disk size was never set and swap never came on.
+-        TOTAL_FREE=`awk '/^Node/ { zone = $4; next }
+-                         (zone == "Normal" || zone == "HighMem") && $1 == "present" { present[zone] = $2 }
+-                         (zone == "Normal" || zone == "HighMem") && $1 == "managed" { managed[zone] = $2 }
+-                         END { for (z in present) total += (z in managed) ? managed[z] : present[z]; print total + 0 }' /proc/zoneinfo`
+-        TOTAL_FREE=$(($TOTAL_FREE*$PAGE_SIZE/1024/1024))
++        # The device's memory in MiB: MemTotal, every zone's managed pages. This added up only the
++        # Normal and HighMem zones of /proc/zoneinfo, which on 32-bit ARM hold all of the memory; on
++        # arm64 (and x86-64) the memory below 4 GiB is in the DMA and DMA32 zones and Normal has only
++        # what lies above it, so a 4 GiB arm64 VM (RAM from 1 GiB) counted 0.9 GiB and got 375 MiB of
++        # zram instead of a quarter of its memory, and a 3 GiB one counted none and got the 350 MiB
++        # floor ("33333 DISKSIZE/TOTAL_FREE :  350 / 0").
++        TOTAL_FREE=`awk '/^MemTotal:/ { print int($2 / 1024); exit }' /proc/meminfo`
++        TOTAL_FREE=${TOTAL_FREE:-0}
+ 
+         if [ $TOTAL_FREE -lt $BASE_FREE ]; then
+             ZRAM_RATIO=40
