@@ -3,6 +3,7 @@
 
 #include "deviceconfig.h"
 
+#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -80,4 +81,21 @@ QVariantList DeviceConfig::displayCutouts() const
 bool DeviceConfig::hasRingerSwitch() const
 {
     return m_values.value(QStringLiteral("ringerSwitch")).isObject();
+}
+
+bool DeviceConfig::hasBacklight() const
+{
+    // As phoenix-devices finds it (services/devices hardware.cpp Backlight:
+    // the one named, else any under /sys/class/backlight with a
+    // max_brightness above 0).
+    const QString base = qEnvironmentVariable("PHOENIX_SYSFS_ROOT") + QStringLiteral("/sys/class/backlight/");
+    const QString name = m_values.value(QStringLiteral("backlight")).toString();
+    const QStringList names = !name.isEmpty() ? QStringList { name }
+        : QDir(base).entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::System);
+    for (const QString &n : names) {
+        QFile max(base + n + QStringLiteral("/max_brightness"));
+        if (max.open(QIODevice::ReadOnly) && max.readAll().trimmed().toInt() > 0)
+            return true;
+    }
+    return false;
 }

@@ -496,6 +496,23 @@ there are no libinput settings (tap-to-click, natural scrolling) to set
 the keyboard shortcuts in card view and with an app maximized
 ([BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm), step 5).
 
+**Brightness and volume on a device** (27 November 2026, Revision 22: the
+Settings brightness slider did not move, and neither it nor the volume
+sliders changed anything the shell showed). The user's brightness is
+settingsservice's `picture.backlight` (1-100) on a device as in the
+simulator: Settings > Screen & Lock writes it, and the shell's
+`LsmSystemStatus` now reads it (it was a placeholder at 100%) and writes
+the system menu's and control center's changes back. OSE's settingsservice
+has no default for the key, so on a new device its get answers `errorKey`
+and subscribes nothing; the shell sets its own level once and asks again,
+and Settings' slider no longer waits for an answer before it moves. A
+machine with no backlight (`DeviceConfig.hasBacklight`: none under
+`/sys/class/backlight`, as in QEMU) gets the level drawn by the compositor,
+a black veil over everything (`PhoenixViewsRoot.qml`), as phoenix-sim does;
+dimming shows the same way. The shell's master volume is read with
+`master/getVolume {}`: audiod-pro refuses `{soundOutput: "alsa"}` there
+(error 204), though `master/setVolume` takes it.
+
 In every case the VM has no ringer switch, vibrator, light sensor or
 backlight to drive (phoenix-devices finds none and says so), no Wi-Fi or
 Bluetooth radio (virtio-net is wired networking to connman), and no
