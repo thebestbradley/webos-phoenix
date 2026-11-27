@@ -6,7 +6,8 @@ docs/DEV-PUSH.md 6.2) against a pretend configfs, a pretend USB device
 controller and stand-ins for ip and udhcpd that record their calls: the
 gadget it makes (CDC NCM, stable addresses, bound to the controller), the
 addresses and the DHCP server's one lease, another gadget on the port left
-alone, no controller, down taking away what up made."""
+alone, no controller, down taking away what up made, a failed network setup
+undone so the next up tries again."""
 
 import os
 import subprocess
@@ -70,6 +71,24 @@ with tempfile.TemporaryDirectory() as tmp:
     check(r.returncode == 0 and read("UDC") == "" and not os.path.lexists(os.path.join(g, "configs/c.1/ncm.usb0"))
           and not os.path.exists(os.path.join(tmp, "run", "usb-debug-udhcpd.pid")), "down: unbound, the function out, the DHCP server stopped")
     check(run(env, "status").stdout.strip() == "down", "status down")
+
+# The network setup failing after the bind (ip refused once): up undoes the
+# bind, so the next up does it all again instead of saying "already up".
+with tempfile.TemporaryDirectory() as tmp:
+    cfs, env, log = world(tmp)
+    flag = os.path.join(tmp, "ip-fails-once")
+    open(flag, "w").close()
+    with open(os.path.join(tmp, "bin", "ip"), "w") as f:
+        f.write('#!/bin/sh\nif [ "$2" = add ] && [ -f "%s" ]; then rm -f "%s"; exit 1; fi\necho "ip $*" >> "%s"\n' % (flag, flag, log))
+    g = os.path.join(cfs, "usb_gadget", "phoenix-debug")
+    r = run(env, "up")
+    check(r.returncode == 1 and run(env, "status").stdout.strip() == "down" and "could not set" in r.stdout,
+          "the network setup failing: up fails and leaves the gadget unbound")
+    r = run(env, "up")
+    calls = open(log).read() if os.path.exists(log) else ""
+    check(r.returncode == 0 and "up on usb0" in r.stdout and "ip addr add 172.16.42.1/24 dev usb0" in calls
+          and os.path.exists(os.path.join(tmp, "run", "usb-debug-udhcpd.conf")),
+          "the next up sets it all up: " + r.stdout.strip())
 
 with tempfile.TemporaryDirectory() as tmp:
     cfs, env, log = world(tmp)

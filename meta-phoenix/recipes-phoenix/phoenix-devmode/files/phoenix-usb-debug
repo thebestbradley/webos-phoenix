@@ -67,7 +67,13 @@ up() {
     echo "$udc" > "$G/UDC" || { say "could not bind to $udc"; return 1; }
     dev=$(ifname)
     ip addr flush dev "$dev" 2>/dev/null
-    ip addr add "$ADDR/24" dev "$dev" && ip link set "$dev" up || return 1
+    # A bound gadget is what "already up" goes by, so a failure from here
+    # undoes the bind: the next "up" (novad's, a minute on) does it all again.
+    if ! { ip addr add "$ADDR/24" dev "$dev" && ip link set "$dev" up; }; then
+        say "could not set $ADDR on $dev"
+        down >/dev/null 2>&1
+        return 1
+    fi
     mkdir -p "$RUN"
     cat > "$RUN/usb-debug-udhcpd.conf" <<CONF
 interface $dev
