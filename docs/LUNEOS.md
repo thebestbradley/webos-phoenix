@@ -65,6 +65,105 @@ search-engine snippets or press, it says so.
   option on LuneOS, and contribute Apache-2.0 service work upstream to them.
   See [Recommendation](#9-recommendation).
 
+## Phoenix first
+
+**The golden rule** (the owner, 27 November 2026; [DECISIONS.md](DECISIONS.md)):
+where a Phoenix service, app or component exists, it is always the one used,
+never LuneOS's. LuneOS's layers fill gaps Phoenix has not built; they do not
+replace what Phoenix built. This section is the list that rule works from:
+what of LuneOS's is kept out because Phoenix has its own, what LuneOS fills
+for Phoenix, and **everything LuneOS has that Phoenix has nothing like**,
+used or not, so each can be reviewed: does Phoenix want or need its own?
+
+Read from `meta-webos-ports` at `01a50c1` (26 November 2026):
+`meta-luneos/recipes-core/packagegroups/` (`packagegroup-webos-extended`,
+LuneOS's platform, which both Phoenix stacks install;
+`packagegroup-luneos-extended`, LuneOS's own image, which 1.0's image takes
+out whole and 2.0's keeps minus what Phoenix replaces;
+`packagegroup-webos-telephony`, `-luneos-audiod`, `-luneos-development`).
+Generic libraries and tools (tzdata, GStreamer, Qt plugins, ALSA, bash) are
+left out. **Uses** says whether Phoenix's code calls it today.
+
+### Kept out: Phoenix has its own
+
+| LuneOS | What it is | Phoenix's own | Where it is taken out |
+| --- | --- | --- | --- |
+| `org.webosports.service.devmode` | Developer Mode (flag `/var/luna/dev-mode-enabled`, adbd for USB debugging) | `com.webos.service.devmode` (`services/devmode`, OSE's flag) | 1.0: `luneos-extended` removed. **2.0: kept and listed as "platform" in `image-contract.json`: to remove** |
+| `org.webosports.service.update`, `webos-system-update` | System updates | `com.palm.update` (`services/updates`, RAUC) | 1.0: `luneos-extended`. **2.0: still installed (`image-bus-recorded.json`): to remove** |
+| `luna-appmanager` | `com.palm.applicationManager`, `com.palm.appinstaller` | `services/appmanager` | 1.0: `luneos-extended`; 2.0: its bbappend |
+| `luna-authmanager` | Device lock, EAS policy (`com.palm.systemmanager`) | `services/systemmanager` | as above |
+| `luna-displaymanager`, `luna-haptics` | Display states, light sensor, suspend blocking; vibration | `phoenix-devices` (`services/devices`) | as above |
+| `luna-next-cardshell`, `luneos-components`, `org.webosports.tweaks` | LuneOS's shell, its QML components, tweaks | `phoenix-shell` | as above |
+| `luna-sysmgr-conf` | luna-sysmgr's machine configuration | `phoenix-device-config` | 1.0: `luneos-extended` |
+| `luneos-device-config` | One rootfs, per-device configuration at boot | `phoenix-device-config` (`phoenix-device-select` on the VM) | 1.0: `luneos-extended` |
+| `luneos-system-sounds`, `webos-systemsounds` | System sounds | Phoenix's sounds (`/usr/palm/sounds`, `/usr/share/phoenix/sounds`) | 1.0: `luneos-extended`; 2.0: its bbappend (opkg refused the clash) |
+| `luneos-default-wallpapers` | Wallpapers | Phoenix's (`tools/wallpapers`) | 1.0: `luneos-extended` |
+| `org.webosports.app.settings-qml` and its pages | Settings | `apps/settings` | 1.0: `luneos-extended`; 2.0: its bbappend |
+| `com.palm.app.preware2`, `org.webosports.service.ipkg` | Homebrew installer and its package service | Marketplace, `org.webosphoenix.service.packages` | 1.0: `luneos-extended`. **2.0: Preware removed, `ipkg` kept: to review** |
+| `org.webosports.app.atlas` | Web browser | Isis (`third_party/isis`) on 1.0; 2.0's own browser | **1.0: removed from webos-extended now** (`VIRTUAL-RUNTIME_com.webos.app.browser`). **2.0: kept "as webos-extended's browser": to remove** |
+| `luna-systemui`, `luna-applauncher`, `core-apps`, `app-services`, `enyo-1.0`, `foundation-frameworks`, `loadable-frameworks`, `underscore` | The originals: system UI, Just Type, core apps, app services, frameworks | phoenix-apps installs the same originals from Phoenix's submodules, with Phoenix's overlays, at the same paths | **1.0: taken out of webos-extended on LuneOS now** (`packagegroup-webos-extended.bbappend`). **2.0: not yet: to remove**. LuneOS's copies add only `com.palm.service.photos` and `phonenumberlib`, which nothing in Phoenix calls |
+| `org.webosports.cdav` | CardDAV/CalDAV sync (GPL-3.0) | `org.webosphoenix.service.dav` | 1.0: `luneos-extended` |
+| `org.webosports.service.communityaccount` | webOS Community Account identity | `org.webosphoenix.service.account` | 1.0: `luneos-extended` |
+| `com.palm.stark.files` | File manager, archives, editor, network folders | `apps/files`, `org.webosphoenix.filemanager`, Drives | 1.0: `luneos-extended` |
+| Apps: calculator, contacts, memos, messaging, phone, photos, music, videoplayer, weather, maps, pdf, documents, authenticator, firstuse, terminal, fingerterm, soundrecorder, camera, torch | LuneOS's apps | The originals (Calculator, Contacts, Memos) and Phoenix's apps (Messaging, Phone, Photos, Music, Videos, Weather, Maps, PDF View, Doc View, Authenticator, First Use, Terminal, Voice Memos, Camera, Flashlight) | 1.0: `luneos-extended`; 2.0: its bbappend |
+
+### Filled by LuneOS: Phoenix uses it, has none of its own
+
+| LuneOS | What it is for | Uses |
+| --- | --- | --- |
+| `org.webosports.service.torch` | Flashlight hardware | Flashlight, the system menu |
+| `org.webosports.service.messaging` | SMS/MMS and chat storage and sending | Messaging, the connectors |
+| `webos-telephonyd`, oFono, `packagegroup-webos-telephony` | Calls, SIM, network (`com.palm.telephony`) | Phone, Phone Preferences |
+| `audiod` and its PulseAudio modules, `com.webos.service.audiofocusmanager`, `.audiooutput` | Sound, volume, routing, Bluetooth audio | the shell, every app |
+| `luneos-vpn-adapter` | VPN (`com.webos.service.vpn`) | Settings > VPN |
+| `luneos-print-adapter`, CUPS, Avahi | Printing (`com.palm.printmgr`) | Print Manager |
+| `certmgrd`, `pmcertificatemgr` | Certificate store (`com.palm.certificatemanager`) | Settings > Certificates |
+| `com.palm.keymanager` | Keys and secrets | one call site |
+| `storaged` | USB mass storage mode (`com.palm.storage`) | Settings > USB, erase |
+| `mediaindexer`, `media-permission-service` | Media library index | Music, Photos, Videos |
+| `mojomail-imap`, `-pop`, `-smtp`, `mojoservice-frameworks` | Email transports and their frameworks | the original Email app |
+| `luna-universalsearchmgr` | Just Type's daemon (`com.palm.universalsearch`) | the runtime, the app manager |
+| `imlibpurpleservice`, `imaccountvalidator`, `messaging-accounts` | IM over libpurple | two references (review: Phoenix's connectors may cover it) |
+| `com.palm.app.backup` | Backup and restore app; serves `com.palm.service.backup` | 2.0 keeps it (Phoenix has `org.webosphoenix.service.backup` but no app of its own) |
+| `novacomd` | Palm's device link | kept for vintage tools behind a switch (DEV-PUSH.md 9.6) |
+
+### LuneOS has, Phoenix has nothing like it: to review
+
+Phoenix calls none of these today. For each: do we want it, need our own,
+or leave it? (1.0's image has none of them; 2.0's has those its machines
+enable.)
+
+| LuneOS | What it is for |
+| --- | --- |
+| `sensorfw`, `qtsensors-sensorfw-plugin`, `waydroid-sensors` | Sensor framework: accelerometer, compass, proximity, light for apps and Android |
+| `biomd`, `webos-fingerprint-adapter` | Fingerprint unlock (machine feature `fingerprint`) |
+| `luneos-faced` | Face unlock |
+| `nfcd`, `nfcd-binder-plugin`, `webos-nfc-adapter` | NFC |
+| `lpac`, `luneos-esim-adapter` | eSIM profiles (SGP.22) |
+| settings pages `-cellbroadcast`, `-networksettings` | Emergency cell broadcasts; carrier network selection |
+| `org.webosports.app.simtoolkit` | The SIM card's own menus (STK) |
+| `org.webosports.service.ir`, `org.webosports.app.remote` | IR blaster remote control |
+| `org.webosports.service.fmradio` | FM radio |
+| `org.webosports.service.killswitch` | Hardware kill switches (PinePhone) |
+| `kbdscroll` | Scrolling on a keyboard's touch surface or trackpad |
+| `wireless-regdb-static`, `cfg80211-regdb-reload` | Wi-Fi regulatory database (legal channels and power) |
+| `umtprd` | USB MTP: the device's files on a computer |
+| `speech-dispatcher` | System speech synthesis interface |
+| `synergy-cloud-*` (Box, Dropbox, Flickr, Google Drive, HiDrive, Immich, kDrive, Koofr, MEGA, OneDrive, pCloud, PhotoPrism, PiGallery2, S3, SmugMug, WebDAV, Yandex), `synergy-video` | Cloud storage and photo Synergy connectors (Phoenix's Drives covers some) |
+| `org.webosports.service.office` | Office document conversion (LibreOfficeKit) |
+| `org.webosports.service.licenses` | Licence management |
+| `org.webosports.service.lumberjack`, `org.webosports.app.sysmonitor` | Log viewer; system monitor (processor, memory, storage, network, battery) |
+| `org.webosports.app.messwerk` | Sensor reader app |
+| `luneos-power-report`, `luneos-wake-report`, `luneos-remote-wakelock`, `powertop` | Power audits and wake latency; stay awake during a remote shell |
+| `luna-backupagent` | System preferences backup agent |
+| `bluebinder`, `waydroid` | Bluetooth on Android-based (Halium) phones; Android apps (2.0's LX/Android work) |
+| fonts `ttf-noto-emoji-color`, `ttf-vlgothic`, `ttf-wqy-zenhei`, `ttf-droid-sans-*` | Emoji and CJK, Arabic, Hebrew fallbacks (2.0 uses LuneOS's emoji) |
+| `luneos-kernel-log-quirks`, `wcnss-filter-fixup`, `rmtfs`, `qrtr`, `rpmsgexport` | Quiet vendor drivers; Qualcomm modem and Wi-Fi plumbing |
+| development: `org.webosports.app.testr`, `nyx-utils`, `serial-forward`, `evtest`, `strace`, `gdb`, `powerstat`, `smemstat` | Developer and debugging tools |
+
+When Phoenix builds one of these, the LuneOS piece moves to "Kept out" in
+the same change.
+
 ## 1. What LuneOS is today
 
 ### History and releases

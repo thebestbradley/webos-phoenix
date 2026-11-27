@@ -16,3 +16,31 @@ RDEPENDS:${PN}:remove:phoenix-mobile = "g-media-pipeline"
 # is not shipped (docs/LEGAL.md); Phoenix runs no Mojo apps. (OSE's
 # packagegroup has no such set; this is empty there either way.)
 WEBOS_PACKAGESET_MOJO_1 = ""
+
+# Phoenix first (docs/DECISIONS.md, 27 November 2026; docs/LUNEOS.md
+# "Phoenix first"): LuneOS's packagegroup also installs its own copies of
+# what Phoenix ships itself, at the same paths. phoenix-apps installs the
+# originals from Phoenix's submodules with Phoenix's compat overlays
+# (its install plan, runtime/rootfs.json: luna-systemui and luna-applauncher under
+# /usr/lib/luna/system, the core apps, Isis, Enyo 1.0, the foundations,
+# the loadable frameworks, underscore, the app services), so LuneOS's
+# would clash with them or put the unpatched copy in their place. Kept:
+# what Phoenix has none of: mojoservice-frameworks, luna-init-fonts, the
+# Just Type daemon (luna-universalsearchmgr) and the mail transports
+# (mojomail-*). LuneOS's copies add only com.palm.service.photos and the
+# phonenumberlib framework, which nothing in Phoenix calls.
+# (meta-luneos packagegroup-webos-extended.bb, WEBOS_PACKAGESET_ENYO_1,
+# _SYSTEMAPPS and the browser at 01a50c1.)
+WEBOS_PACKAGESET_ENYO_1:luneos = " \
+    mojoservice-frameworks \
+    luna-init-fonts \
+"
+WEBOS_PACKAGESET_SYSTEMAPPS:luneos = " \
+    luna-universalsearchmgr \
+    mojomail-imap \
+    mojomail-pop \
+    mojomail-smtp \
+"
+# LuneOS's browser, Atlas: Phoenix's is Isis (third_party/isis, on the
+# Phoenix runtime).
+VIRTUAL-RUNTIME_com.webos.app.browser:luneos = ""
