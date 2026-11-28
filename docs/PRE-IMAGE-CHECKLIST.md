@@ -36,16 +36,16 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | I. Input | 0 | 2 | 2 | 1 | 5 |
 | A. Audio | 0 | 1 | 2 | 0 | 3 |
 | N. Networking | 1 | 1 | 1 | 1 | 4 |
-| S. Storage | 0 | 1 | 2 | 0 | 3 |
-| U. Updates | 0 | 1 | 4 | 0 | 5 |
-| R. Recovery and factory reset | 0 | 0 | 2 | 1 | 3 |
+| S. Storage | 1 | 1 | 1 | 0 | 3 |
+| U. Updates | 2 | 2 | 1 | 0 | 5 |
+| R. Recovery and factory reset | 0 | 1 | 1 | 1 | 3 |
 | G. Debugging a device | 1 | 3 | 1 | 0 | 5 |
 | P. Performance on a Pi 4 | 0 | 0 | 3 | 0 | 3 |
 | X. Security | 1 | 2 | 3 | 1 | 7 |
 | L. Licences | 1 | 2 | 1 | 0 | 4 |
-| Q. What the platform needs on the device (PLATFORM.md 12) | 2 | 1 | 4 | 1 | 8 |
+| Q. What the platform needs on the device (PLATFORM.md 12) | 2 | 2 | 3 | 1 | 8 |
 | H. Per device | 0 | 2 | 2 | 5 | 9 |
-| **Total** | **15** | **30** | **40** | **11** | **96** |
+| **Total** | **18** | **33** | **34** | **11** | **96** |
 
 **The few that would stop the first image outright**, all fixed here:
 phoenix-apps' `FILES` left 580 installed files unpackaged (do_package's
@@ -183,7 +183,7 @@ its owner. Counts are on 10 October 2026.
 
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| S1 | The media partition | ⬜ | platform | Phoenix installs ringtones and sample media into `/media/internal` (phoenix-apps). If the image mounts a separate media partition there (OSE images have none by default; a RAUC layout would, U1), the mount hides them: install the seed under `/usr/share/phoenix/media-seed` and copy on first boot instead |
+| S1 | The media partition | ✅ | platform | Phoenix installs ringtones and sample media into `/media/internal` (phoenix-apps). The A/B layout (U1) has no media partition: `/media` is an overlay whose lower layer is the running slot's and whose upper layer is on the data partition (`/data/overlay/media`, phoenix-slots), so the image's seed shows through and what the user adds outlives an update (seen on the VM's slot B after the first update, 28 November 2026: `downloads`, `ringtones`, `samples`, `screencaptures`). A layout with a separate media partition would hide them: then install the seed under `/usr/share/phoenix/media-seed` and copy on first boot |
 | S2 | User data and permissions | ⬜ | platform | Services run as root (Node services under the hub) or the device user (phoenix-pty, uid 1000 `user`, group `media`); `/media/internal` must be writable by both (the group `media`); db8's data in `/var/db` |
 | S3 | Read-only root | 🟡 | platform | The plan is EROFS/squashfs with `/var` and `/home` on the data partition (HARDWARE.md, OTA); code that writes outside them fails then: `check-image.py` checks that nothing reads paths nothing installs; writes are the device audit's |
 
@@ -191,10 +191,10 @@ its owner. Counts are on 10 October 2026.
 
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| U1 | RAUC on the image | ⬜ | platform | **No RAUC recipe, keyring, `system.conf` or partition layout in meta-phoenix yet** (PLATFORM.md 12). The `com.palm.update` service calls `rauc` and answers that it is missing; add meta-rauc (scarthgap) to the layers, a `rauc-conf` bbappend per machine with the slots, and the wic layout with two root slots |
-| U2 | Slots per target | ⬜ | platform | Pi 4: the firmware's `tryboot` or U-Boot (RAUC documents both); qemux86-64: GRUB or systemd-boot EFI |
-| U3 | The keyring | ⬜ | platform, owner decision | The signing key's public half in the image; LGPL-3.0 (Qt) and GPL-3.0 (bash) need the owner able to install modified versions (LEGAL.md, Source offer): Developer Mode accepting the owner's key, or unsigned bundles in Developer Mode |
-| U4 | The first OTA and rollback | 🟡 | updates service | `services/updates` reads the feed (servers.json `updates`: signed format 2, the root's delegated key, channels stable/beta/dev, staged rollout, revoked builds), downloads with resume, `rauc install`, and marks the running slot good (`rauc status mark-good`) when it first starts after the System UI is up, so a system that does not get there is reverted by the boot counter (PLATFORM-CLIENT.md, System updates). Waits on U1-U3 (RAUC in the image) |
+| U1 | RAUC on the image | ✅ | platform | meta-rauc (wrynose, LuneOS's pin `38da0e58`) in the layers and meta-phoenix `dynamic-layers/rauc` (read only with meta-rauc): `rauc-conf` (the machine's `system.conf` and the keyring in `/etc/rauc`), RAUC's kernel options, GRUB's `regexp`/`echo`, `phoenix-grubenv`, `phoenix-slots` (the data partition and its overlays at boot, `phoenix-update-wake`), `phoenix-bundle` (the image's root as a signed verity bundle, its build the image's `BUILD_ID`) and the A/B disk (`files/wic/phoenix-ab-efi.wks.in`: ESP, root A, root B, data). `rauc.service` runs only on a boot from a slot (`rauc.slot=`), so the ext4 still boots straight (`-kernel`: UTM, the regression suite; #141). Parse, dry run and PACKAGECONFIG check pass for phoenix-vm-arm64, pinetab2 and pinephonepro (28 November 2026); first image with it: 2.0 Revision 42 (PLATFORM-CLIENT.md, System updates) |
+| U2 | Slots per target | 🟡 | platform | **phoenix-vm-arm64: done.** GRUB EFI with RAUC's grub backend: `phoenix-ab-grub.cfg` takes the first slot in `ORDER` marked OK and tried fewer than three times, and passes `rauc.slot=`; `EFI/BOOT/grubenv` on the ESP. Booted under QEMU (edk2, `acpi=off`: the VM kernel has no ACPI) and Apple Virtualization (ACPI, the hypervisor drivers). **To do:** PineTab2 and PinePhone Pro (U-Boot or Tow-Boot: a boot script with RAUC's uboot backend); Pi 4 (the firmware's `tryboot` or U-Boot) |
+| U3 | The keyring | 🟡 | platform, owner decision | **Test keys: done.** `meta-phoenix/files/rauc/test` (a public CA and signing key, `scripts/rauc-test-keys.sh`; test images only) is the default `PHOENIX_RAUC_KEYRING`; every bundle so far is signed with it and RAUC checks it against `/etc/rauc/keyring.pem`. **Owner decision, open:** the release CA and where its key lives (a release image sets `PHOENIX_RAUC_KEYRING`); LGPL-3.0 (Qt) and GPL-3.0 (bash) need the owner able to install modified versions (LEGAL.md, Source offer): Developer Mode accepting the owner's key, or unsigned bundles in Developer Mode |
+| U4 | The first OTA and rollback | ✅ | updates service | **Proven on phoenix-vm-arm64 (2.0 Revision 42's A/B disk, QEMU, 28 November 2026).** Slot A saw the update in staging's signed `dev` feed (format 2, the root's delegated key), downloaded it (resumed after staging cut the response at about 1 GiB: #134) and wrote slot B with `rauc install`, keeping A primary. Install Now restarted into B, which phoenix-update-wake marked good once the System UI was up: `rauc.slot=B`, the new BUILD_ID, the toast "Updated to webOS Phoenix 2.0.0", `/home` and `/var/lib/phoenix` kept. Then a signed bundle with no init went into A: three starts panicked ("No working init found", `panic=10`), GRUB went back to B (`A_TRY` 3), B was marked good, and the service said "The update to 0.0.0-broken did not start. Your device went back to 2.0.0."; revoking the build in the feed dropped it from the device. Fixes found on the way: #134 (download retries), #141 (a boot without a slot stays quiet), #143 (RAUC's slot status asked once, not at every progress tick). Code: `services/updates`, meta-phoenix `dynamic-layers/rauc` (PLATFORM-CLIENT.md, System updates). Hardware targets: U2 |
 | U5 | Firmware and driver updates | ⬜ | platform | **Decided (owner, 27 November 2026): drivers and firmware the Hardware app installs live on the data partition, which updates never touch, and load from there; the A/B root stays the image's** (read-only later, S3). Today the Hardware app installs the driver feed's opkg packages (DRIVERS.md: `lib/modules/<kernel>/updates/`, `lib/firmware/updates/`, `etc/modprobe.d/`) into the root, which an update replaces. To do after the first OTA proof (U4): opkg installs them under `/var/lib/phoenix/drivers` (on the data partition with the A/B layout: phoenix-slots) with their own package database, never the image's; firmware from there through the kernel's extra search path (`firmware_class.path`, set at boot); modules through an overlay on `/lib/modules/<kernel>/updates` (its upper layer there), then `depmod`, before udev's coldplug; `etc/modprobe.d` files from there into `/run/modprobe.d`. Modules are per kernel: after an update to a new kernel the Hardware app offers the same drivers built for it, from the feed, and removes the old kernel's once the new slot is marked good. Without the A/B layout (the plain ext4) the same folder is on the root |
 
 ## R. Recovery and factory reset
@@ -202,7 +202,7 @@ its owner. Counts are on 10 October 2026.
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | R1 | Factory reset | ⬜ | device audit, platform | Settings' Erase calls `org.webosphoenix.service.reset` (the simulator's) and Security's erase calls `com.palm.storage/erase/Wipe`: neither exists on OSE (C1, C3, Q20). A device needs a reset service that wipes the data partition and reboots. The shell's Full Erase and the system manager's Wipe first call `org.webosphoenix.service.oauth/wipe` (the sealed OAuth tokens and their key, `/var/lib/phoenix/oauth`); the reset service must also clear `/var/lib/phoenix` and WebAppMgr's profile of `org.webosphoenix.signin` (the providers' sign-in cookies) |
-| R2 | Recovery boot | ⬜ | platform | With RAUC: the other slot. Without it, the Pi's SD card is the recovery. A recovery image (fastboot devices) later |
+| R2 | Recovery boot | 🟡 | platform | **With RAUC: the other slot, proven on the VM** (U4: a system that does not start is left after three tries and the slot that worked starts). Without RAUC, the Pi's SD card is the recovery. A recovery image (fastboot devices) later |
 | R3 | A boot that never finishes | 🚫 | hardware | bootd's boot-done never comes: the animation ends after 90 s (Q19) and the shell comes up; ssh (Developer Mode) and phoenix-diag are the way in |
 
 ## G. Debugging a device
@@ -251,7 +251,7 @@ its owner. Counts are on 10 October 2026.
 | Q1 | Real URLs and pinned keys | 🟡 | platform, owner | One file: `/etc/palm/phoenix/servers.json`, written by `phoenix-apps_git.bb` from `PHOENIX_FEEDS_URL`, `PHOENIX_API_URL`, `PHOENIX_ACCOUNT_ISSUER`, `PHOENIX_PUSH_URL`, `PHOENIX_PROBE_URL`, `PHOENIX_UPDATE_CHANNEL(S)` and the keys `PHOENIX_CATALOG_ROOT_KEY`, `PHOENIX_UPDATES_ROOT_KEY`, `PHOENIX_DRIVERS_KEY`, `PHOENIX_API_KEY` (`tools/servers-json.py`; PLATFORM-CLIENT.md). The hosts are the recipe's defaults (Q1 of OPEN-QUESTIONS still open); the keys are empty until the owner's key ceremony: set them for the first handed-out image |
 | Q2 | Third-party catalogs | 🚫 | owner decision (Q65) | Both off by default; the App Museum's address is `sources.json`'s; the Marketplace now marks a plain-HTTP source (PreCentral) as not secure (`getSources` `insecure`); whether images keep them is the owner's (X4) |
 | Q3 | The `dev` update channel and `rollout` | ✅ | updates service | stable, beta, dev and staged rollouts for system and app updates, a signed update feed (format 2) and the signed revocation list (Q56; PLATFORM-CLIENT.md) |
-| Q4 | RAUC keyring | ⬜ | platform | U1, U3 |
+| Q4 | RAUC keyring | 🟡 | platform, owner | The test keyring is in the image (`/etc/rauc/keyring.pem`, U3); the release keyring is the owner's decision (U3) |
 | Q8 | The platform conformance suite against staging | ⬜ | platform | `node tools/test-platform-client.cjs --api <staging api> --token <t> --ui` passes against the Laravel platform's staging before the first image points at production (PLATFORM-CLIENT.md, Conformance) |
 | Q5 | Connectivity probe and NTP vendor zone | ⬜ | platform | meta-phoenix configuration (connman's online check URL, timesyncd's servers) |
 | Q6 | Device Info links to the release's source | ⬜ | Settings | With the source offer (L2) |
