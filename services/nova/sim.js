@@ -156,6 +156,13 @@ function start(opts) {
     }
 
     log("developer overlay: " + boot(data).why);
+    // The account nova term logs in as: an image has its home
+    // (phoenix-pty_git.bb USERADD_PARAM: --home-dir /home/user
+    // --create-home), so novaservice's authorizedKeys() makes ~/.ssh 0700
+    // and authorized_keys 0600, owned by the home's owner, here as there
+    // (docs/SIM-PARITY.md). Without it the simulator wrote nothing and
+    // never ran that code.
+    fs.mkdirSync(D("/home/user"), { recursive: true, mode: 0o755 });
 
     var core = nova.createNova({
         root: data, build: BUILD, manifest: manifest, readFile: readFile, restart: restart,

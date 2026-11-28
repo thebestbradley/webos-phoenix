@@ -7487,6 +7487,18 @@
 
         register(["com.webos.settingsservice"], {
             "/getSystemSettings": function (p, reply, ctx) {
+                // Keys asked for, none of them set: OSE's settingsservice
+                // answers {returnValue: false, errorKey: [the keys]} and
+                // subscribes nothing (PrefsDb8Get::sendResultReply: a
+                // subscription only for the keys it found), so a page that
+                // waits for a later set never hears it, as on a device's
+                // first boot (#91: picture.backlight; shell/qml/Phoenix/Lsm/
+                // LsmStatus.js backlightUnset; docs/SIM-PARITY.md).
+                if (Array.isArray(p.keys) && p.keys.length && !Object.keys(settingsFor(load(), p.category, p.keys)).length) {
+                    var missing = { returnValue: false, errorKey: p.keys.slice(), method: "getSystemSettings" };
+                    if (p.category) missing.category = p.category;
+                    return reply(missing);
+                }
                 watch(p, reply, ctx, function () {
                     var r = ok({ method: "getSystemSettings", settings: settingsFor(load(), p.category, p.keys) });
                     if (p.category) r.category = p.category;
@@ -7519,7 +7531,18 @@
         }
 
         register(["com.webos.service.audio"], {
-            "/master/getVolume": function (p, reply, ctx) { watch(p, reply, ctx, volumeStatus); },
+            // Asked with no soundOutput: the active output's. audiod-pro
+            // refuses a soundOutput here (OSEMasterVolumeManager::getVolume,
+            // OSEMasterVolumeManager.cpp:1045-1057, isValidSoundDevice: error
+            // 204), though master/setVolume takes "alsa"; the device's shell
+            // read no volume until it stopped passing one (#91,
+            // shell/qml/Phoenix/Lsm/LsmStatus.js masterVolumeQuery;
+            // docs/SIM-PARITY.md).
+            "/master/getVolume": function (p, reply, ctx) {
+                if (p.soundOutput !== undefined)
+                    return reply(fail(204, "Volume control is not supported"));
+                watch(p, reply, ctx, volumeStatus);
+            },
             "/master/setVolume": function (p, reply) {
                 var s = load();
                 s.audio.volume = Math.max(0, Math.min(100, p.volume | 0));
@@ -8136,9 +8159,18 @@
 
         // ---- Developer Mode (com.webos.service.devmode, OSE's API) ------------------
         //
-        //   getDevMode {}                 -> {status: "enabled" | "disabled"}
-        //   setDevMode {status}           OSE restarts the device for it; the
+        //   getDevMode {subscribe}        -> {status: "enabled" | "disabled", enabled}
+        //   setDevMode {status} | {enabled} -> {status, enabled, restarting}:
+        //                                 OSE restarts the device for it; the
         //                                 simulator applies it at once
+        //
+        // As the device's provider answers (services/devmode/devmode.js
+        // answer() and setDevMode; docs/SIM-PARITY.md): both forms in every
+        // answer, Phoenix's {status} and OSE's {enabled}, which callers read;
+        // either form taken; a set to what it is already changes nothing,
+        // tells no watcher and says {restarting: false}. A change says
+        // {restarting: true}, as the device's does; the simulator does not
+        // restart for it (docs/SIM-PARITY.md, follow-ups).
         //
         // Settings > Developer Mode asks for the device passcode first
         // (matchDevicePasscode); with Developer Mode on, the Marketplace
@@ -8146,20 +8178,25 @@
         // Terminal's sudo and SSH become possible (docs/TERMINAL.md T4).
         // Wiping the device (erase) turns it off.
         function devMode() { return store.get("devMode", false) ? "enabled" : "disabled"; }
+        function devModeAnswer(r) { r.status = devMode(); r.enabled = r.status === "enabled"; return ok(r); }
         var devModeWatchers = [];
         register(["com.webos.service.devmode"], {
             "/getDevMode": function (p, reply, ctx) {
-                reply(ok({ status: devMode(), subscribed: !!p.subscribe }));
+                reply(devModeAnswer({ subscribed: !!p.subscribe }));
                 if (p.subscribe) devModeWatchers.push({ reply: reply, ctx: ctx });
             },
             "/setDevMode": function (p, reply) {
-                if (p.status !== "enabled" && p.status !== "disabled")
-                    return reply(fail(-1, "status: \"enabled\" or \"disabled\""));
-                store.set("devMode", p.status === "enabled");
+                var want;
+                if (p.status === "enabled" || p.status === "disabled") want = p.status === "enabled";
+                else if (typeof p.enabled === "boolean") want = p.enabled;
+                else return reply(fail("BAD_PARAMS", "status: \"enabled\" or \"disabled\""));
+                if (want === (devMode() === "enabled"))
+                    return reply(devModeAnswer({ restarting: false }));
+                store.set("devMode", want);
                 if (runtime.novaDevModeChanged) runtime.novaDevModeChanged();
-                reply(ok({ status: devMode() }));
+                reply(devModeAnswer({ restarting: true }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
-                devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
+                devModeWatchers.forEach(function (w) { w.reply(devModeAnswer({ subscribed: true })); });
                 // The developer apps come and go (launchPointChanges, and
                 // the shell's launcher: systemStatus devMode).
                 if (runtime.developerGateChanged) runtime.developerGateChanged();
