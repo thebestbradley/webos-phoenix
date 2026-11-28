@@ -12,6 +12,7 @@
 // off and deleting the account leave nothing behind.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -72,11 +73,16 @@ describe("Todoist", () => {
         expect(junk.errorCode).toBe("401_UNAUTHORIZED");
     });
 
-    it("says Sign In with Todoist is not available without Phoenix's registration, and signs in with OAuth with it", async () => {
+    it("without Phoenix's registration offers the API token alone, no warning; signs in with OAuth with it", async () => {
         const w0 = await world({ dir: DIR, def, config: config(false), kindParents });
         const info = await w0.methods.providerInfo({});
-        expect(info.oauth).toMatchObject({ available: false });
-        expect(info.oauth.reason).toMatch(/not available in this build/);
+        expect(info.oauth).toBeNull();
+        expect(JSON.stringify(info)).not.toMatch(/not available|Todoist's page/);
+        expect(info.fields.map((f: any) => f.name)).toEqual(["password"]);
+        // Nor does the catalog promise it: no build has Phoenix's Todoist app yet (OPEN-QUESTIONS Q123).
+        const summaries = [join(DIR, "catalog.json"), join(DIR, "../../../server/marketplace/catalog/accounts.json")].map((f) =>
+            (JSON.parse(readFileSync(f, "utf8")).accountTypes || JSON.parse(readFileSync(f, "utf8")).accounts).find((t: any) => t.templateId === TEMPLATE).summary);
+        summaries.forEach((s: string) => expect(s).not.toMatch(/Todoist's own page/));
         const refused = await w0.methods.signIn({});
         expect(refused).toMatchObject({ returnValue: false, errorCode: "NOT_AVAILABLE" });
 

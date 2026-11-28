@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import * as memdb from "@phoenix/synckit/src/test/memdb.js";
 import { alarmBefore, alarmMinutes, allDayDates, allDaySpan, joinUrlOf, meetingNote, plainText, rruleOf, rruleText, syncContainers } from "./pim";
-import { notAvailable, oauthSignIn, registeredClient, restApi, viaRelay } from "./registered";
+import { notAvailable, oauthOption, oauthSignIn, registeredClient, restApi, viaRelay } from "./registered";
 
 describe("pim", () => {
     it("reads an RRULE into the Calendar app's rrule, and writes it back", () => {
@@ -79,6 +79,15 @@ describe("registered providers", () => {
         const e = notAvailable("Todoist", "Sign In with Todoist") as any;
         expect(e.errorCode).toBe("NOT_AVAILABLE");
         expect(e.message).toBe("Sign In with Todoist is not available in this build: Phoenix's app is not registered with Todoist here (docs/DEVELOPER-APPS.md)");
+    });
+
+    it("offer Sign In with the provider when registered; without it, say so only where the page has no other way in", () => {
+        expect(oauthOption({ available: true, label: "Sign In with Todoist" }, true)).toEqual({ available: true, label: "Sign In with Todoist" });
+        // A token or an app password signs in: no warning, no Sign In with the provider.
+        expect(oauthOption({ available: false, reason: "Sign In with Todoist is not available in this build" }, true)).toBeNull();
+        // Nothing else signs in: the reason, as before.
+        expect(oauthOption({ available: false, reason: "Google is not available in this build" }, false))
+            .toEqual({ available: false, reason: "Google is not available in this build" });
     });
 
     it("go through Phoenix's token relay only when the OAuth service has its broker", async () => {

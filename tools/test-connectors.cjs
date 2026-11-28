@@ -12,14 +12,14 @@
 //   1. Connections lists Todoist (Tasks & Notes) and Bluesky (Social &
 //      Feeds); each package, Phoenix's own from the catalog the device
 //      ships with, installs without Developer Mode;
-//   2. Todoist in Accounts: "Sign In with Todoist is not available in this
-//      build", the API token instead (a wrong one refused, saying so); the
-//      account is made;
+//   2. Todoist in Accounts: the API token, no warning and no Sign In with
+//      Todoist (not registered in this build); a wrong token refused,
+//      saying so; the account is made;
 //   3. Tasks: Todoist's projects are lists under the account, with their
 //      tasks; a task added in Tasks and one ticked off reach Todoist;
 //   4. the share sheet's Add to Todoist makes a task of a link;
-//   5. Bluesky in Accounts: "not available in this build" for Sign In with
-//      Bluesky, the handle and app password instead; the account is made;
+//   5. Bluesky in Accounts: the handle and app password, no warning and no
+//      Sign In with Bluesky; the account is made;
 //   6. the people followed are contacts; a direct message is a Messaging
 //      conversation labelled not end-to-end encrypted, and a reply goes
 //      back; a new follower is a notification;
@@ -405,7 +405,8 @@ async function main() {
                 throw new Error("no sign-in page for " + templateId);
             }
             await w.waitForSelector(".connector-wizard", { timeout: 10000 }).catch(async (e) => { await shot(accounts, "wizard-failed"); console.log("errors: " + JSON.stringify(errors)); throw e; });
-            await w.waitForSelector(".connector-unavailable", { state: "visible", timeout: 8000 }).catch(() => {});
+            // The page as the connector's service has it (providerInfo answered: ConnectorWizard.gotInfo).
+            await w.waitForFunction(() => !!(window.enyo && enyo.$.connectorWizard && enyo.$.connectorWizard.info), null, { timeout: 10000 });
             return w;
         };
         // Sign In ends the form, inside Enyo 1.0's scroller, below the fold on
@@ -442,8 +443,9 @@ async function main() {
             return account;
         };
         let w = await wizardOf(TODOIST, "org.webosphoenix.todoist");
-        check(/Sign In with Todoist is not available in this build/.test(await w.locator(".connector-unavailable").textContent().catch(() => "")),
-              "Todoist: Sign In with Todoist is not available in this build (no registration)");
+        check(!(await w.locator(".connector-unavailable").isVisible().catch(() => false))
+              && await w.evaluate(() => enyo.$.connectorWizard_signInButton.getCaption() === "Sign In" && !enyo.$.connectorWizard_fieldsInstead.getShowing()),
+              "Todoist, not registered in this build: the API token, no warning, no Sign In with Todoist");
         check(/Don't have an account\? Sign up/.test(await w.locator(".accounts-signup").textContent().catch(() => "")), "and a sign-up link");
         // A token that is not the account's: Todoist refuses it, and the page says so.
         await w.locator("input[type=password]").first().fill(td.token.split("").reverse().join(""));
@@ -522,8 +524,9 @@ async function main() {
 
         // ---- 5. Bluesky in Accounts: an app password ------------------------------------------------------------
         w = await wizardOf(BLUESKY, "org.webosphoenix.bluesky");
-        check(/Sign In with Bluesky is not available in this build/.test(await w.locator(".connector-unavailable").textContent().catch(() => "")),
-              "Bluesky: Sign In with Bluesky is not available in this build");
+        check(!(await w.locator(".connector-unavailable").isVisible().catch(() => false))
+              && await w.evaluate(() => enyo.$.connectorWizard_signInButton.getCaption() === "Sign In" && !enyo.$.connectorWizard_fieldsInstead.getShowing()),
+              "Bluesky, not registered in this build: the app password, no warning, no Sign In with Bluesky");
         await w.locator("input").first().fill(bs.handle);
         await w.locator("input[type=password]").first().fill(bs.appPassword);
         await w.locator("input[type=password]").first().press("Tab");

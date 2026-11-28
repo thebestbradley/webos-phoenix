@@ -95,7 +95,8 @@ describe("SSH keys", () => {
         expect(() => ssh.keys.parsePrivateKey("hello")).toThrow(/Not a private key/);
     });
 
-    it.skipIf(!which("ssh-keygen"))("reads what ssh-keygen writes, with ssh-keygen's fingerprints, and ssh-keygen reads Phoenix's", () => {
+    // Without ssh-keygen it is skipped on a computer, never in CI (CI=true), where it fails instead.
+    it.skipIf(!which("ssh-keygen") && !process.env.CI)("reads what ssh-keygen writes, with ssh-keygen's fingerprints, and ssh-keygen reads Phoenix's", () => {
         const dir = mkdtempSync(join(tmpdir(), "phoenix-keys-"));
         try {
             for (const [t, bits] of [["ed25519", ""], ["rsa", "3072"], ["ecdsa", "256"]]) {

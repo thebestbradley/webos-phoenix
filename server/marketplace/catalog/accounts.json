@@ -255,7 +255,7 @@
             "provider": "Todoist",
             "icon": "icons/accounts/com.webosphoenix.todoist.png",
             "iconFrom": "apps/connectors/todoist/public/accounts/com.webosphoenix.todoist/images/todoist-48x48@2x.png",
-            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings, or on Todoist's own page.",
+            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings.",
             "capabilities": [
                 { "capability": "TASKS", "direction": "two-way" }
             ],

@@ -5,7 +5,7 @@
             "templateId": "com.webosphoenix.todoist",
             "title": "Todoist",
             "provider": "Todoist",
-            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings, or on Todoist's own page.",
+            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings.",
             "capabilities": [
                 { "capability": "TASKS", "direction": "two-way" }
             ],

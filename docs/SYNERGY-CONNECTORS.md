@@ -944,15 +944,18 @@ its data gone with it.
 | **Matrix** | vitest; `test-matrix.cjs` | Yes: wrong password "The homeserver did not accept that Matrix ID and password.", rooms, a chat both ways, pictures, removed | `beta` (kept) |
 | **Delta Chat** | vitest; `test-deltachat.cjs` | Yes, on the simulator's demo core, whose page says it takes any password at chatmail.example (a wrong password is refused by the real core: vitest) | `beta` (kept) |
 
+Fixed in this pass: Todoist's and Bluesky's sign-in pages opened on an
+orange "Sign In with &lt;Provider&gt; is not available in this build ...
+(docs/DEVELOPER-APPS.md)" above the field that works. The kit's
+`oauthOption` now leaves an unregistered Sign In out where the page has
+another way in (the token, the app password) and keeps the box only where
+there is none (Google, Microsoft, LinkedIn, Zoom, Slack; the drives' OAuth
+ones, Box, Dropbox, OneDrive, Google Drive, in their own page). Todoist's
+catalog summary no longer offers "or on Todoist's own page". (The
+screenshot of Bluesky's sign-in below predates this.)
+
 Open, by severity:
 
-- **Medium.** Todoist's and Bluesky's sign-in pages open with an orange
-  "Sign In with &lt;Provider&gt; is not available in this build: Phoenix's app is
-  not registered ... (docs/DEVELOPER-APPS.md)" above the field that works: a
-  repository path in a user's page, and a warning first where the token or
-  app password is the way in. The kit's `notAvailable` text, shared with
-  every registered connector; Todoist's catalog summary also offers "or on
-  Todoist's own page", which this build does not have.
 - **Medium.** A change made on the device reaches the provider at the next
   sync, not at once ("Known limits" above).
 - **Low.** "Connection failed" for a server that is not there (the
