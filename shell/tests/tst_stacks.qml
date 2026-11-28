@@ -299,12 +299,21 @@ Item {
         // place in the fan before the neighbouring stacks are.
         function test_minimizeFansTheStackOnItsOwnClock() {
             var s = makeStacks();
-            cv.maximize(s.c1);
-            tryVerify(function () { return shell.maximized; }, 2000);
+            // The stack is in its fan from 200 ms until the slide ends at
+            // 300 ms: a window of about 100 ms. Qt's animations follow the
+            // wall clock, so a main thread that stalls longer than that (a
+            // garbage collection on a loaded CI machine) has no frame in it.
+            // That is seen (a gap between frames as long as the window) and
+            // the minimize is made again, up to five times, as below.
             var settledEarly = false, ahead = true, frames = 0;
+            var lastFrame = 0, longestGap = 0, stalls = 0;
             var check = function () {
                 if (!cv._stackOwn)
                     return;
+                var now = Date.now();
+                if (lastFrame > 0)
+                    longestGap = Math.max(longestGap, now - lastFrame);
+                lastFrame = now;
                 frames++;
                 // OutCubic over 200 ms is ahead of OutQuart over 300 ms all
                 // the way (the same start): never further from card view.
@@ -318,13 +327,24 @@ Item {
                     fuzzyCompare(cv.layout.cards[s.c1].cy, cv.cardOriginY + Math.max(0, (cv.layout.cards[s.c1].cx - cv.width / 2)) / 15, 1);
                 }
             };
-            root.onProgress = check;
-            cv.minimize();
-            tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
-            root.onProgress = null;
-            verify(frames > 0, "frames of the minimize");
-            verify(ahead, "the stack's cards ahead of the slide");
-            verify(settledEarly, "the stack in its fan while the slide goes on");
+            for (var tries = 0; tries < 5 && !settledEarly; tries++) {
+                cv.maximize(s.c1);
+                tryVerify(function () { return shell.maximized; }, 2000);
+                lastFrame = 0;
+                longestGap = 0;
+                root.onProgress = check;
+                cv.minimize();
+                tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+                root.onProgress = null;
+                verify(frames > 0, "frames of the minimize");
+                verify(ahead, "the stack's cards ahead of the slide");
+                if (settledEarly || longestGap < 90)
+                    break;
+                stalls++;
+                console.log("tst_stacks: a " + longestGap + " ms stall jumped over the stack's fan; again (" + stalls + ")");
+                tryCompare(cv, "_stackOwn", false, 1000);
+            }
+            verify(settledEarly, "the stack in its fan while the slide goes on (" + stalls + " stalls jumped over it)");
             tryCompare(cv, "_stackOwn", false, 1000);
             // A maximize that takes over a minimize carries the stack on
             // from where it is (no jump back to the slide's progress).
