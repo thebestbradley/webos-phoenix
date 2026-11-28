@@ -386,6 +386,66 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.listInstalled()).apps).toEqual([]);
     });
 
+    // The publisher rules (packagesservice.js "Who may update an installed
+    // app"): a catalog's package never replaces another publisher's app.
+    it("never replaces another publisher's app: a developer's sideload, one put there another way, a built-in app from a catalog the user added", async () => {
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Pat", email: "pat@example.com", role: "developer" });
+        for (const [id, v] of [["com.example.ledger", "1.0.0"], ["com.example.atlas", "1.0.0"], ["com.example.dial", "3.0.0"]]) {
+            const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp(id, v), dev.token);
+            await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        }
+        const spool = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-sideload-"));
+        const sideload = { read: (n: string) => new Uint8Array(fs.readFileSync(path.join(spool, n))), remove: (n: string) => fs.rmSync(path.join(spool, n), { force: true }) };
+        const { service, world } = makeService(defaults(), undefined, { sideload });
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        // A developer's sideload of com.example.ledger (nova install): the catalog's is another publisher's.
+        world.devMode = true;
+        fs.writeFileSync(path.join(spool, "a.ipk"), await servers.webApp("com.example.ledger", "0.9.0"));
+        expect(await service.sideload({ file: "a.ipk", signer: "ed25519:DEV" })).toMatchObject({ returnValue: true, appId: "com.example.ledger" });
+        const other = await service.install({ sourceId: "phoenix", id: "com.example.ledger" });
+        expect(other).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER", errorText: "This app is already installed from another publisher; remove it first" });
+        expect(world.installs.filter((i: Any) => i.id === "com.example.ledger")).toHaveLength(1);
+        // Removed, the catalog's installs.
+        expect(await service.remove({ id: "com.example.ledger" })).toMatchObject({ returnValue: true });
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.ledger" })).toMatchObject({ returnValue: true, appId: "com.example.ledger" });
+        // ... and a sideload no longer replaces it.
+        fs.writeFileSync(path.join(spool, "b.ipk"), await servers.webApp("com.example.ledger", "2.0.0"));
+        expect(await service.sideload({ file: "b.ipk", signer: "ed25519:DEV" })).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER" });
+        expect(world.installs.at(-1).pkg.control.Version).toBe("1.0.0");
+
+        // An app on the device the Marketplace did not install (put there another way): not replaced.
+        world.installed["com.example.atlas"] = {};
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.atlas" })).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER" });
+        expect(world.installs.some((i: Any) => i.id === "com.example.atlas")).toBe(false);
+
+        // A built-in app from a catalog the user added (not one the device ships with): offered as nothing, refused.
+        const added = makeService([], undefined, { sideload });
+        added.world.builtins = { "com.example.dial": "2.0.0" };
+        await added.service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const src = (await added.service.getSources()).sources[0];
+        expect(src).toMatchObject({ builtin: false });
+        const entry = (await added.service.getApp({ sourceId: src.id, id: "com.example.dial" })).app;
+        expect(entry).toMatchObject({ update: null, verdict: { ok: false, text: "com.example.dial is built into this device and can't be replaced" } });
+        expect(await added.service.install({ sourceId: src.id, id: "com.example.dial" })).toMatchObject({ returnValue: false, errorCode: "BUILT_IN" });
+        expect(added.world.installs).toHaveLength(0);
+    });
+
+    it("keeps an app with the catalog it came from: an update signed with another key the user trusted since is another publisher's", async () => {
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Kim", email: "kim@example.com", role: "developer" });
+        const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.tally", "1.0.0"), dev.token);
+        await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        const { service, world } = makeService(defaults());
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.tally" })).toMatchObject({ returnValue: true });
+        expect(world.state.installed["com.example.tally"].signer).toBe(catalog.key);
+        // The record says another key signed it (the source re-keyed by the user since).
+        world.state.installed["com.example.tally"].signer = "OLDKEY";
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.tally" })).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER" });
+        // A record from before signers were kept: its catalog's still.
+        delete world.state.installed["com.example.tally"].signer;
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.tally" })).toMatchObject({ returnValue: true });
+    });
+
     it("tells of updates once a day", async () => {
         const { service, world } = makeService(defaults());
         await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
@@ -667,6 +727,102 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         world.formFactor = "";
         expect(await ids("apps")).toContain("com.example.sketchpad");
         await catalog.api("POST", "/api/admin/availability", { off: {} }, catalog.admin);
+    });
+});
+
+// ---- Sideloads: nova install (packagesservice.js sideload, "Who may update an installed app") ----
+//
+// novad writes a paired computer's package to the sideload folder and names
+// it with that computer's key (signer). Android's and iOS's rule: an update
+// only from the installed app's own key; a built-in app never.
+describe("a developer's sideload (nova install)", () => {
+    const phoenix = { id: "phoenix", name: "Phoenix Marketplace", kind: "phoenix", url: "https://catalog.example/v1/", key: "KEY", enabled: true };
+    function device() {
+        const spool = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-sideload-"));
+        const sideload = { read: (n: string) => new Uint8Array(fs.readFileSync(path.join(spool, n))), remove: (n: string) => fs.rmSync(path.join(spool, n), { force: true }) };
+        const made = makeService([phoenix], undefined, { sideload });
+        made.world.devMode = true;
+        // The image's apps (not removable).
+        made.world.builtins = { "org.webosphoenix.email": "4.0.0", "com.example.calc": "1.5.0" };
+        let n = 0;
+        const put = async (id: string, v: string, extra?: Any) => {
+            const name = "p" + (++n) + ".ipk";
+            fs.writeFileSync(path.join(spool, name), await servers.webApp(id, v, extra));
+            return name;
+        };
+        return { ...made, put, spool };
+    }
+    const A = "ed25519:AAAA", B = "ed25519:BBBB";
+
+    it("installs a new app in Developer Mode, and the same key's update", async () => {
+        const { service, world, put, spool } = device();
+        const file = await put("com.example.mine", "1.0.0");
+        expect(await service.sideload({ file, signer: A, signerName: "Dana's Mac" })).toEqual({ returnValue: true, appId: "com.example.mine", version: "1.0.0" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "com.example.mine", developerMode: false });
+        expect(world.state.sideloaded["com.example.mine"]).toMatchObject({ signer: A, signerName: "Dana's Mac", version: "1.0.0" });
+        // The folder's copy is gone once read.
+        expect(fs.readdirSync(spool)).toEqual([]);
+        expect(await service.sideload({ file: await put("com.example.mine", "1.1.0"), signer: A })).toMatchObject({ returnValue: true, version: "1.1.0" });
+        expect(world.installs.at(-1).pkg.control.Version).toBe("1.1.0");
+        // A package with install scripts: Developer Mode's installer path.
+        expect(await service.sideload({ file: await put("com.example.hooks", "1.0.0", { scripts: { postinst: "#!/bin/sh\n" } }), signer: A }))
+            .toMatchObject({ returnValue: true });
+        expect(world.installs.at(-1)).toMatchObject({ id: "com.example.hooks", developerMode: true });
+    });
+
+    it("refuses an update from another key, and says to remove the app first", async () => {
+        const { service, world, put } = device();
+        await service.sideload({ file: await put("com.example.mine", "1.0.0"), signer: A });
+        const r = await service.sideload({ file: await put("com.example.mine", "9.0.0"), signer: B });
+        expect(r).toEqual({ returnValue: false, errorCode: "OTHER_PUBLISHER", errorText: "This app is already installed from another publisher; remove it first",
+                            appId: "com.example.mine" });
+        expect(world.installs.map((i: Any) => i.pkg.control.Version)).toEqual(["1.0.0"]);
+        // Removed, the other key's installs.
+        expect(await service.remove({ id: "com.example.mine" })).toMatchObject({ returnValue: true });
+        expect(await service.sideload({ file: await put("com.example.mine", "9.0.0"), signer: B })).toMatchObject({ returnValue: true });
+    });
+
+    it("never replaces a built-in app, or an installed update of one", async () => {
+        const { service, world, put } = device();
+        for (const id of ["org.webosphoenix.email", "com.example.calc"]) {
+            expect(await service.sideload({ file: await put(id, "99.0.0"), signer: A }))
+                .toMatchObject({ returnValue: false, errorCode: "BUILT_IN", errorText: id + " is built into this device and can't be replaced" });
+        }
+        // The Marketplace's update of a built-in app (its record says so): still the image's app.
+        world.installed["com.example.calc"] = {};
+        world.state = Object.assign(world.state || {}, { installed: { "com.example.calc": { sourceId: "phoenix", catalogId: "com.example.calc", kind: "ipk", version: "2.0.0", builtin: "1.5.0" } } });
+        expect(await service.sideload({ file: await put("com.example.calc", "99.0.0"), signer: A })).toMatchObject({ returnValue: false, errorCode: "BUILT_IN" });
+        expect(world.installs).toHaveLength(0);
+    });
+
+    it("never replaces an app from a catalog, or one put on the device another way", async () => {
+        const { service, world, put } = device();
+        world.installed["com.example.notes"] = {};
+        world.state = { installed: { "com.example.notes": { sourceId: "phoenix", catalogId: "com.example.notes", kind: "ipk", version: "1.0.0" } } };
+        expect(await service.sideload({ file: await put("com.example.notes", "2.0.0"), signer: A })).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER" });
+        world.installed["com.example.other"] = {};
+        expect(await service.sideload({ file: await put("com.example.other", "2.0.0"), signer: A })).toMatchObject({ returnValue: false, errorCode: "OTHER_PUBLISHER" });
+        expect(world.installs).toHaveLength(0);
+    });
+
+    it("needs Developer Mode, a file in the folder and a signer; the catalogs' checks still apply", async () => {
+        const { service, world, put } = device();
+        world.devMode = false;
+        expect(await service.sideload({ file: await put("com.example.mine", "1.0.0"), signer: A })).toMatchObject({ returnValue: false, errorCode: "NEEDS_DEVMODE" });
+        world.devMode = true;
+        expect(await service.sideload({ file: "../state.json", signer: A })).toMatchObject({ returnValue: false, errorCode: "BAD_PARAMS" });
+        expect(await service.sideload({ file: await put("com.example.mine", "1.0.0") })).toMatchObject({ returnValue: false, errorCode: "BAD_PARAMS" });
+        // A native app, as from a catalog.
+        expect(await service.sideload({ file: await put("com.example.native", "1.0.0", { type: "native" }), signer: A })).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });
+        // Its own sign-in page: C17, Developer Mode or not.
+        const page = { path: "usr/palm/applications/com.example.chat/public/accounts/com.example.chat/com.example.chat.json",
+                       data: JSON.stringify({ templateId: "com.example.chat", validator: { address: "palm://com.example.chat.service/check",
+                                                                                          customUI: { appId: "com.example.chat", name: "signin.html" } } }) };
+        expect(await service.sideload({ file: await put("com.example.chat", "1.0.0", { files: [page] }), signer: A })).toMatchObject({ returnValue: false, errorCode: "THIRD_PARTY_SIGNIN" });
+        expect(world.installs).toHaveLength(0);
+        // Not wired (the simulator): not available.
+        const bare = makeService([phoenix]);
+        expect(await bare.service.sideload({ file: "x.ipk", signer: A })).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });
     });
 });
 
