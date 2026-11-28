@@ -1,0 +1,41 @@
+#!/bin/sh
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Wakes com.palm.update once the System UI is up (phoenix-update-wake.service).
+#
+# The service marks the running slot good on its first call (`rauc status
+# mark-good`, updatesservice.js startup), which is what keeps the boot
+# counter (phoenix-ab-grub.cfg) from going back to the other slot after
+# three starts. It starts on demand, and luna-systemui (com.palm.systemui),
+# whose GetStatus subscription was to be that first call, only subscribes
+# once the bus says the service is already running (SysUpdateService.js:
+# registerServerStatus), as Palm's update daemon always was. Nothing else
+# called it, so no slot was ever marked good (found on Revision 39's A/B
+# disk, 28 November 2026). This makes the first call once SAM lists the
+# System UI as running: the shell, WebAppMgr and SAM are up. A system that
+# never gets there is never marked good, and the counter takes the device
+# back, as intended. The first call also creates the daily update check.
+#
+# The environment variables are for the tests (tools/test-rauc-slots.py).
+
+LUNA_SEND=${PHOENIX_LUNA_SEND:-luna-send}
+TRIES=${PHOENIX_UPDATE_WAKE_TRIES:-360}   # 10 s apart: up to an hour (a VM without KVM is slow)
+PAUSE=${PHOENIX_UPDATE_WAKE_PAUSE:-10}
+
+i=0
+while [ "$i" -lt "$TRIES" ]; do
+    if "$LUNA_SEND" -n 1 -w 10000 luna://com.webos.service.applicationmanager/running '{}' 2>/dev/null |
+            grep -q '"com.palm.systemui"'; then
+        if "$LUNA_SEND" -n 1 -w 120000 luna://com.palm.update/getStatus '{}' 2>/dev/null |
+                grep -q '"returnValue": *true'; then
+            echo "phoenix-update-wake: the System UI is up; com.palm.update started (the running slot is marked good)"
+            exit 0
+        fi
+        echo "phoenix-update-wake: the System UI is up but com.palm.update did not answer; trying again" >&2
+    fi
+    i=$((i + 1))
+    sleep "$PAUSE"
+done
+echo "phoenix-update-wake: the System UI did not start; the running slot is not marked good" >&2
+exit 1

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.join(LAYER, "lib"))
 from phoenix import devpush, slots  # noqa: E402
 
 GENERATOR = os.path.join(DYN, "recipes-core", "phoenix-slots", "files", "phoenix-slots-generator")
+WAKE = os.path.join(DYN, "recipes-core", "phoenix-slots", "files", "phoenix-update-wake")
 WKS = os.path.join(LAYER, "files", "wic", "phoenix-ab-efi.wks.in")
 GRUB = os.path.join(LAYER, "files", "wic", "phoenix-ab-grub.cfg")
 SYSTEM_CONF = os.path.join(DYN, "recipes-core", "rauc", "files", "phoenix-vm-arm64", "system.conf")
@@ -109,6 +110,51 @@ class Generator(unittest.TestCase):
         out, err = self.run_generator("phoenix.data=nonsense")
         self.assertEqual(os.listdir(out), [])
         self.assertIn("not a device", err)
+
+
+class UpdateWake(unittest.TestCase):
+    """phoenix-update-wake: com.palm.update's first call (which marks the
+    slot good) only once SAM lists the System UI as running."""
+
+    def run_wake(self, systemui_after, update_ok=True, tries=5):
+        d = tempfile.mkdtemp(prefix="wake-")
+        fake = os.path.join(d, "luna-send")
+        # Answers SAM's running list with the System UI after N asks, and
+        # com.palm.update's getStatus; logs every call.
+        with open(fake, "w") as f:
+            f.write("""#!/bin/sh
+echo "$*" >> %(d)s/calls
+case "$*" in
+  *applicationmanager/running*)
+    n=$(cat %(d)s/n 2>/dev/null || echo 0); n=$((n + 1)); echo $n > %(d)s/n
+    if [ $n -gt %(after)d ]; then echo '{"returnValue": true, "running": [{"id": "com.palm.systemui"}]}'
+    else echo '{"returnValue": true, "running": [{"id": "com.palm.launcher"}]}'; fi ;;
+  *com.palm.update/getStatus*)
+    echo '{"returnValue": %(ok)s, "state": "idle"}' ;;
+esac
+""" % {"d": d, "after": systemui_after, "ok": "true" if update_ok else "false"})
+        os.chmod(fake, 0o755)
+        env = dict(os.environ, PHOENIX_LUNA_SEND=fake, PHOENIX_UPDATE_WAKE_TRIES=str(tries), PHOENIX_UPDATE_WAKE_PAUSE="0")
+        p = subprocess.run(["sh", WAKE], env=env, capture_output=True, text=True)
+        calls = read(os.path.join(d, "calls")).splitlines() if os.path.exists(os.path.join(d, "calls")) else []
+        return p.returncode, calls
+
+    def test_waits_for_the_system_ui(self):
+        rc, calls = self.run_wake(systemui_after=2)
+        self.assertEqual(rc, 0)
+        self.assertEqual(sum("applicationmanager/running" in c for c in calls), 3)
+        self.assertEqual(sum("com.palm.update/getStatus" in c for c in calls), 1)
+        self.assertTrue(calls[-1].endswith("luna://com.palm.update/getStatus {}"))
+
+    def test_never_without_the_system_ui(self):
+        rc, calls = self.run_wake(systemui_after=99, tries=4)
+        self.assertEqual(rc, 1)
+        self.assertFalse(any("com.palm.update" in c for c in calls))
+
+    def test_retries_when_the_service_does_not_answer(self):
+        rc, calls = self.run_wake(systemui_after=0, update_ok=False, tries=3)
+        self.assertEqual(rc, 1)
+        self.assertEqual(sum("com.palm.update/getStatus" in c for c in calls), 3)
 
 
 class BuildInfo(unittest.TestCase):

@@ -1,0 +1,20 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# com.palm.update's first call once the System UI is up, which marks the
+# running slot good (phoenix-update-wake). Not ordered on any Phoenix unit:
+# it waits by asking SAM, so a shell that never comes up never confirms the
+# slot.
+
+[Unit]
+Description=webOS Phoenix: confirm the running system once the System UI is up
+After=ls-hubd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/phoenix-slots/phoenix-update-wake
+TimeoutStartSec=infinity
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
