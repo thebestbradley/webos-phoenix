@@ -145,9 +145,15 @@ handler answers it alone.
 **No keys.** LG's Google Maps key (LuneOS's location sources ship it in
 `wsp.conf`) and LuneOS's Google key for GeoClue (its
 `0001-Use-Google-as-default-and-add-API-key.patch`) are not in the image:
-meta-phoenix replaces `wsp.conf` and drops the patch, and GeoClue's Wi-Fi
-and IP lookups go to the platform too (Qt Positioning still depends on
-GeoClue; webOS's own clients do not use it).
+meta-phoenix replaces `wsp.conf` and drops the patch.
+
+**Only the location service gives out the position.** GeoClue (which Qt
+Positioning depends on) is installed but never runs: its D-Bus activation and
+systemd unit are removed and every source in its configuration is off, so it
+cannot answer past Settings > Location Services or the per-app permission.
+Qt's own clients, among them the Browser's pages (QtWebEngine), get LuneOS's
+Qt Positioning plugin, which asks `com.webos.service.location` (its priority
+raised above GeoClue's: `qtlocation-luneos-plugin_git.bbappend`).
 
 ### Another device's position (location sharing)
 
