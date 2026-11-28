@@ -185,9 +185,9 @@
         },
         "brokerTokens": {
             "type": "object",
-            "description": "POST /v1/oauth-broker/{provider}/redeem {handle, code_verifier} and /refresh {refresh_token}: the provider's tokens (nothing kept on the broker after redeem)",
+            "description": "POST /v1/oauth-broker/{provider}/exchange {code, code_verifier, redirect_uri} (the token relay: a device's loopback redirect), /redeem {handle, code_verifier} (the broker's callback) and /refresh {refresh_token}: the provider's tokens (nothing kept on the server)",
             "required": ["access_token"],
-            "properties": { "access_token": { "type": "string" }, "refresh_token": { "type": "string" }, "token_type": { "type": "string" }, "expires_in": { "type": "integer" }, "scope": { "type": "string" } }
+            "properties": { "access_token": { "type": "string" }, "refresh_token": { "type": "string" }, "token_type": { "type": "string" }, "expires_in": { "type": "integer" }, "scope": { "type": "string" }, "id_token": { "type": "string" } }
         },
         "chatCompletion": {
             "type": "object",

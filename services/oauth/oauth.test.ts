@@ -96,7 +96,8 @@ function makeWorld(opts: any = {}) {
         mayWipe: (c: string) => c === "com.palm.systemmanager",
         now: () => w.now,
         timeoutMs: opts.timeoutMs,
-        fixedPort: opts.fixedPort
+        fixedPort: opts.fixedPort,
+        relay: opts.relay
     });
     w.m = w.device.methods;
     return w;
@@ -334,6 +335,65 @@ describe("tokens", () => {
         expect((await world.m.client({ name: "mastodon.example" }, OWNER)).value.clientSecret).toBe("very-secret-value");
         expect((await world.m.client({ name: "mastodon.example", owner: OWNER }, "com.example.page")).errorCode).toBe("PERMISSION_DENIED");
         expect(fs.readFileSync(path.join(dir, "keys.enc"), "utf8")).not.toContain("very-secret-value");
+    });
+});
+
+describe("Phoenix's token relay", () => {
+    // The relay as the account service and the server do it: the code and
+    // verifier from the device, the client secret added there.
+    const SECRET = "box-secret-only-on-the-server";
+    function relayTo(calls: any[]) {
+        return async (p: any) => {
+            calls.push(p);
+            const form = p.step === "exchange"
+                ? { grant_type: "authorization_code", code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri }
+                : { grant_type: "refresh_token", refresh_token: p.refreshToken };
+            const res = await get(provider.tokenEndpoint, { method: "POST", body: new URLSearchParams({ ...form, client_id: provider.clientId, client_secret: SECRET }).toString() });
+            const b = JSON.parse(res.body);
+            if (res.status !== 200) return { returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." };
+            return { returnValue: true, accessToken: b.access_token, refreshToken: b.refresh_token || null, tokenType: b.token_type, expiresIn: b.expires_in, scope: b.scope };
+        };
+    }
+
+    it("signs in with the device's PKCE and loopback redirect, the secret only on the relay, and refreshes there", async () => {
+        await provider.stop();
+        provider = await createFakeProvider({ clientSecret: SECRET, expiresIn: 120 }).start(0);
+        const calls: any[] = [];
+        world = makeWorld({ relay: relayTo(calls) });
+        expect((await world.m.redirectUri({}, OWNER)).relay).toBe(true);
+        const r = await world.m.authorize(authorizeParams({ tokenEndpoint: undefined, relay: "box" }), OWNER);
+        expect(r).toMatchObject({ returnValue: true, keyId: expect.any(String) });
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ provider: "box", step: "exchange", code: expect.stringMatching(/^code-/),
+                                         codeVerifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), redirectUri: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/) });
+        // The challenge the page was given is the verifier the relay was handed.
+        const challenge = provider.state().authorizeRequests[0].code_challenge;
+        expect(crypto.createHash("sha256").update(calls[0].codeVerifier).digest("base64url")).toBe(challenge);
+        expect(JSON.stringify(calls)).not.toContain(SECRET);
+        const first = await world.m.token({ keyId: r.keyId }, OWNER);
+        world.now += 3600 * 1000;
+        const second = await world.m.token({ keyId: r.keyId }, OWNER);
+        expect(second.accessToken).not.toBe(first.accessToken);
+        expect(calls[1]).toMatchObject({ provider: "box", step: "refresh", refreshToken: expect.stringMatching(/^rt-/) });
+        expect(provider.state().refreshed).toBe(1);
+        // Nothing to revoke without the secret: the key goes, the provider is not asked.
+        expect((await world.m.forget({ keyId: r.keyId }, OWNER)).returnValue).toBe(true);
+        expect(provider.state().revoked).toEqual([]);
+    });
+
+    it("a refusal there is 401_UNAUTHORIZED; no relay in this build is NOT_AVAILABLE; no secret is sent from the device", async () => {
+        await provider.stop();
+        provider = await createFakeProvider({ clientSecret: SECRET }).start(0);
+        const refused = makeWorld({ relay: async () => ({ returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." }) });
+        expect((await refused.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("401_UNAUTHORIZED");
+        const unknown = makeWorld({ relay: async () => ({ returnValue: false, errorCode: "UNKNOWN_PROVIDER", errorText: "no" }) });
+        expect((await unknown.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("NOT_AVAILABLE");
+        const none = makeWorld();
+        expect((await none.m.redirectUri({}, OWNER)).relay).toBe(false);
+        expect((await none.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("NOT_AVAILABLE");
+        expect((await none.m.authorize(authorizeParams({ relay: "https://evil.example/" }), OWNER)).errorCode).toBe("BAD_PARAMS");
+        // Without the relay the provider refuses the device's own exchange (it has no secret).
+        expect((await none.m.authorize(authorizeParams(), OWNER)).errorCode).toBe("401_UNAUTHORIZED");
     });
 });
 

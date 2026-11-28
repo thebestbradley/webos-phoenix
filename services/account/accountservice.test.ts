@@ -233,6 +233,18 @@ describe("cloud services", () => {
         expect(tok).toMatchObject({ returnValue: true, accessToken: expect.stringMatching(/^provider_at_/) });
         expect(mock.state.broker.size).toBe(0);
 
+        // The token relay's exchange and refresh, for the OAuth service only.
+        const loopback = "http://127.0.0.1:47613/oauth/callback";
+        const ex = { provider: "box", step: "exchange", code: "c1", codeVerifier: verifier, redirectUri: loopback };
+        expect(await svc.tokenRelay(ex, "org.webosphoenix.settings")).toMatchObject({ errorCode: "NOT_ALLOWED" });
+        expect(await svc.tokenRelay(ex, "org.webosphoenix.service.oauth"))
+            .toMatchObject({ returnValue: true, accessToken: expect.stringMatching(/^provider_at_/), refreshToken: expect.stringMatching(/^provider_rt_/), expiresIn: 3600 });
+        expect(await svc.tokenRelay({ ...ex, code: "refused" }, "org.webosphoenix.service.oauth")).toMatchObject({ returnValue: false, errorCode: "PROVIDER_REFUSED" });
+        expect(await svc.tokenRelay({ ...ex, provider: "evil" }, "org.webosphoenix.service.oauth")).toMatchObject({ returnValue: false, errorCode: "UNKNOWN_PROVIDER" });
+        expect(await svc.tokenRelay({ ...ex, codeVerifier: undefined }, "org.webosphoenix.service.oauth")).toMatchObject({ errorCode: "BAD_PARAMS" });
+        expect(await svc.tokenRelay({ provider: "box", step: "refresh", refreshToken: "provider_rt_1" }, "org.webosphoenix.service.oauth"))
+            .toMatchObject({ returnValue: true, accessToken: expect.stringMatching(/^provider_at_/) });
+
         expect(await svc.assistantProvider({}, "org.webosphoenix.settings")).toMatchObject({ errorCode: "NOT_ALLOWED" });
         const ap = await svc.assistantProvider({}, "org.webosphoenix.assistant");
         expect(ap).toMatchObject({ baseUrl: mock.api + "v1/assistant/", entitled: true });

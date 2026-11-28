@@ -81,29 +81,36 @@ describe("registered providers", () => {
         expect(e.message).toBe("Sign In with Todoist is not available in this build: Phoenix's app is not registered with Todoist here (docs/DEVELOPER-APPS.md)");
     });
 
-    it("go through Phoenix's token relay only when the OAuth service has its broker", async () => {
-        const reg = { clientId: "id1", clientSecret: "s", authorizationEndpoint: "https://zoom.example/authorize", tokenEndpoint: "https://zoom.example/token",
-                      scope: "a", relay: "https://relay.example/v1/oauth-broker/zoom/" };
+    it("go through Phoenix's token relay when the setting says \"relay\": true and the OAuth service has one", async () => {
         const asked: any[] = [];
-        const withBroker = (answer: any): any => ({ luna: { call: async (uri: string, p: any) => {
-            asked.push([uri, p]);
-            if (uri.endsWith("/broker")) { if (answer instanceof Error) throw answer; return answer; }
-            if (uri.endsWith("/redirectUri")) return { returnValue: true, redirectUri: "http://127.0.0.1/oauth/callback" };
-            return { returnValue: true, keyId: "k1" };
-        } } });
-        expect(await viaRelay(withBroker(new Error("no such method")), reg)).toBeNull();
-        expect(await viaRelay(withBroker({ returnValue: false }), reg)).toBeNull();
-        expect(await viaRelay(withBroker({ returnValue: true }), null)).toBeNull();
-        expect(await viaRelay(withBroker({ returnValue: true }), { ...reg, relay: undefined })).toBeNull();
-        const ctx = withBroker({ returnValue: true });
-        const c = await viaRelay(ctx, reg);
-        expect(c).toMatchObject({ clientId: "id1", scope: "a", broker: "https://relay.example/v1/oauth-broker/zoom",
-                                  authorizationEndpoint: "https://relay.example/v1/oauth-broker/zoom/authorize", tokenEndpoint: "https://relay.example/v1/oauth-broker/zoom/redeem" });
+        const world = (relay: any, setting: any): any => ({
+            systemConfig: async () => setting,
+            http: { allowHost: () => {} },
+            luna: { call: async (uri: string, p: any) => {
+                asked.push([uri, p]);
+                if (uri.endsWith("/redirectUri")) { if (relay instanceof Error) throw relay; return { returnValue: true, redirectUri: "http://127.0.0.1/oauth/callback", relay }; }
+                return { returnValue: true, keyId: "k1" };
+            } }
+        });
+        const defaults = { authorizationEndpoint: "https://account.box.com/api/oauth2/authorize", tokenEndpoint: "https://api.box.com/oauth2/token", scope: "root_readwrite" };
+        const relayed = { box: { clientId: "id1", relay: true } };
+        const reg = async (ctx: any) => registeredClient(ctx, "drives/clients.json", "box", defaults);
+        // No relay asked for, a relay named some other way, or none in this OAuth service: null.
+        expect(await viaRelay(world(true, null), await reg(world(true, { box: { clientId: "id1" } })))).toBeNull();
+        expect(await viaRelay(world(true, null), await reg(world(true, { box: { clientId: "id1", relay: "https://relay.example/v1/oauth-broker/box" } })))).toBeNull();
+        expect(await viaRelay(world(false, null), await reg(world(false, relayed)))).toBeNull();
+        expect(await viaRelay(world(undefined, null), await reg(world(undefined, relayed)))).toBeNull();
+        expect(await viaRelay(world(new Error("no such method"), null), await reg(world(true, relayed)))).toBeNull();
+        expect(await viaRelay(world(true, null), null)).toBeNull();
+        // A secret left in the setting is not sent.
+        const ctx = world(true, { box: { clientId: "id1", relay: true, clientSecret: "must-not-leave" } });
+        const c = await viaRelay(ctx, await reg(ctx));
+        expect(c).toMatchObject({ clientId: "id1", relay: "box", scope: "root_readwrite" });
         expect(c!.clientSecret).toBeUndefined();
         expect(await oauthSignIn(ctx, c!)).toBe("k1");
-        expect(asked[asked.length - 1]).toEqual(["luna://org.webosphoenix.service.oauth/authorize", expect.objectContaining({ broker: "https://relay.example/v1/oauth-broker/zoom",
-            tokenEndpoint: "https://relay.example/v1/oauth-broker/zoom/redeem", redirectUri: "http://127.0.0.1/oauth/callback" })]);
-        expect(asked[asked.length - 1][1].clientSecret).toBeUndefined();
+        const req = asked[asked.length - 1];
+        expect(req).toEqual(["luna://org.webosphoenix.service.oauth/authorize", expect.objectContaining({ relay: "box", clientId: "id1", redirectUri: "http://127.0.0.1/oauth/callback" })]);
+        expect(JSON.stringify(req)).not.toContain("must-not-leave");
     });
 
     it("call REST APIs with the token", async () => {
