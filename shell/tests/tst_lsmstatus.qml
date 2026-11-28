@@ -94,6 +94,19 @@ TestCase {
         verify(LsmStatus.masterVolumeQuery() !== LsmStatus.masterVolumeQuery());
     }
 
+    // localeInfo from the settings service (getSystemSettings {keys:
+    // ["localeInfo"]}), as LunaSysMgr took it (LocalePreferences.cpp:550-651).
+    function test_localeInfo() {
+        var info = { locales: { UI: "de-DE", FMT: "de-DE" }, clock: "locale", timezone: "Europe/Berlin" };
+        compare(LsmStatus.localeInfo({ returnValue: true, method: "getSystemSettings", settings: { localeInfo: info } }), info);
+        compare(LsmStatus.localeInfo({ returnValue: true, settings: { localeInfo: { locales: { FMT: "en-GB" } } } }).locales.FMT, "en-GB");
+        compare(LsmStatus.localeInfo({ returnValue: true, settings: {} }), null);
+        compare(LsmStatus.localeInfo({ returnValue: true, settings: { localeInfo: { locales: {} } } }), null);
+        compare(LsmStatus.localeInfo({ returnValue: true, settings: { localeInfo: "de-DE" } }), null);
+        compare(LsmStatus.localeInfo({ returnValue: false, errorKey: ["localeInfo"] }), null);
+        compare(LsmStatus.localeInfo(null), null);
+    }
+
     function test_backlight() {
         compare(LsmStatus.backlight({ returnValue: true, category: "picture", settings: { backlight: 42 } }), 42);
         compare(LsmStatus.backlight({ returnValue: true, settings: { backlight: "80" } }), 80);

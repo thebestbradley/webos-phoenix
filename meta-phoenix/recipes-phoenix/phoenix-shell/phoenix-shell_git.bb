@@ -31,7 +31,9 @@ inherit qt6-cmake
 # (shell/native/CMakeLists.txt): OSE's qtmultimedia is skipped, it fails to
 # build against its Qt (OPEN-QUESTIONS Q35).
 # The keyboard's Maliit plugin (services/keyboard) is phoenix-keyboard's.
-DEPENDS = "qtbase qtdeclarative qtdeclarative-native"
+# qttools-native: lrelease, for the shell's translations (shell/i18n, built
+# into Phoenix.Native's resources).
+DEPENDS = "qtbase qtdeclarative qtdeclarative-native qttools-native"
 EXTRA_OECMAKE = "-DPHOENIX_BUILD_SIM=OFF -DPHOENIX_BUILD_KEYBOARD=OFF -DPHOENIX_DATA_DIR=${datadir}/phoenix \
                  -DPHOENIX_NATIVE_QML_DIR=${QT6_INSTALL_QMLDIR}"
 

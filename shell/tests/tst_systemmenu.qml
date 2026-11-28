@@ -102,8 +102,8 @@ Item {
         }
 
         function test_dateAndBattery() {
-            compare(findChild(menu, "systemMenuDate").label,
-                    new Date(2009, 5, 6).toLocaleDateString(Qt.locale(), Locale.LongFormat));
+            // The device's locale's long date (en-US without localeInfo; tst_locale).
+            compare(findChild(menu, "systemMenuDate").label, "Saturday, June 6, 2009");
             compare(findChild(menu, "systemMenuBattery").label, "Battery: 76%");
             status.batteryPercent = 42;
             compare(findChild(menu, "systemMenuBattery").label, "Battery: 42%");

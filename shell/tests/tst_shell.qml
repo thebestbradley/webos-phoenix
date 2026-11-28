@@ -1210,7 +1210,9 @@ Item {
             verify(!findChild(shell, "systemMenu") || !findChild(shell, "systemMenu").open);
             var bar = findChild(shell, "statusBar");
             verify(bar.lockScreen);
-            compare(bar.clockText, Qt.formatDate(bar.shownTime, Qt.locale().dateFormat(Locale.ShortFormat)));
+            // The device's locale's short date (en-US without localeInfo),
+            // never the host's (tst_locale).
+            compare(bar.clockText, bar.shownTime.toLocaleDateString(Qt.locale("en_US"), "M/d/yy"));
             shell.unlock();
             verify(!bar.lockScreen);
             verify(/^\d+:\d\d$/.test(bar.clockText));

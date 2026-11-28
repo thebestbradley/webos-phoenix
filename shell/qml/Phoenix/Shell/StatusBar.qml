@@ -9,6 +9,7 @@
 
 import QtQuick
 import Phoenix.Native
+import "LocaleFormat.js" as LocaleFormat
 
 Item {
     id: bar
@@ -78,15 +79,16 @@ Item {
         onTriggered: bar.now = new Date()
     }
     readonly property date shownTime: system && system.fixedTime ? system.fixedTime : now
+    // The device's region for dates and times (localeInfo; LocaleFormat.js).
+    readonly property string formatLocale: LocaleFormat.formatTag(system ? system.localeInfo : null)
     readonly property string clockText: {
-        // StatusBarClock::setDisplayDate: the locale's short date.
+        // StatusBarClock::setDisplayDate: the locale's short date
+        // (Qt::DefaultLocaleShortDate, StatusBarClock.cpp:223).
         if (lockScreen)
-            return Qt.formatDate(shownTime, Qt.locale().dateFormat(Locale.ShortFormat));
-        // 12 h without a leading zero, or 24 h (StatusBarClock::tick).
-        if (system && system.twentyFourHour)
-            return pad(shownTime.getHours()) + ":" + pad(shownTime.getMinutes());
-        var h = shownTime.getHours() % 12;
-        return (h === 0 ? 12 : h) + ":" + pad(shownTime.getMinutes());
+            return LocaleFormat.shortDate(shownTime, formatLocale);
+        // 12 h without a leading zero, or 24 h (StatusBarClock::tick,
+        // StatusBarClock.cpp:195-210), in the locale's separator and digits.
+        return LocaleFormat.clock(shownTime, formatLocale, !!(system && system.twentyFourHour));
     }
 
     // Phones: solid black. Tablets: #515558 under the tiled art, faded in

@@ -16,7 +16,8 @@
 //   com.palm.telephony, com.palm.wan  a modem's (OSE has none): TTY, HAC,
 //                                   roaming, call forwarding, mobile data
 //   com.webos.service.audio         master/getVolume, master/setVolume
-//   com.webos.settingsservice       picture.backlight: the user's brightness
+//   com.webos.settingsservice       picture.backlight: the user's brightness;
+//                                   localeInfo: the language and region
 //   com.webos.service.systemservice the preferences: the tones, system and
 //                                   keyboard sounds, the time format, alerts
 //                                   when locked, airplane mode, the rotation
@@ -108,6 +109,9 @@ QtObject {
     property string notificationtone: "/usr/palm/sounds/notification.wav"
     // timeFormat "HH24" (luna-sysservice's TimePrefsHandler).
     property bool twentyFourHour: false
+    // The language and region: the settings service's localeInfo
+    // (LsmStatus.localeInfo), followed as it changes.
+    property var localeInfo: null
     property bool showAlertsWhenLocked: true
     // The user's brightness, 0.10-1 (Theme.minimumBrightness up): the system
     // menu's slider and the control center's set it, an app's com.palm.display
@@ -576,6 +580,11 @@ QtObject {
                 status.show3GForEvdo = r.show3GForEvdo;
         }, true);
         _brightnessSubscribe();
+        _call("luna://com.webos.settingsservice/getSystemSettings", { keys: ["localeInfo"] }, function(r) {
+            var info = LsmStatus.localeInfo(r);
+            if (info && JSON.stringify(info) !== JSON.stringify(status.localeInfo))
+                status.localeInfo = info;
+        }, true);
         // The active output's volume (LsmStatus.masterVolumeQuery: not "alsa").
         _call("luna://com.webos.service.audio/master/getVolume", LsmStatus.masterVolumeQuery(), function(r) {
             var v = LsmStatus.masterVolume(r);

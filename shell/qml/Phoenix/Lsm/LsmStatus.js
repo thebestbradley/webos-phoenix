@@ -195,6 +195,24 @@ function backlightUnset(reply) {
     return Array.isArray(keys) ? keys.indexOf("backlight") >= 0 : reply.returnValue === false && !reply.errorCode;
 }
 
+// ---- Language and region (com.webos.settingsservice localeInfo) -----------------
+// LunaSysMgr subscribed to com.palm.systemservice getPreferences {keys:
+// ["localeInfo"]} (luna-sysmgr-common LocalePreferences.cpp:404-407) and
+// took its locales (getLocaleInfoCallback, :550-651); OSE keeps localeInfo
+// in the settings service (luna-surfacemanager's SystemSettings.qml
+// subscribes to getSystemSettings {keys: ["localeInfo"]}), as Phoenix's
+// Settings and First Use write it. The answer's {settings: {localeInfo:
+// {locales: {UI, FMT, ...}, clock, timezone}}}: the localeInfo when its
+// locales has a string UI or FMT, else null.
+function localeInfo(reply) {
+    var info = reply && typeof reply === "object" && reply.settings && typeof reply.settings === "object"
+        ? reply.settings.localeInfo : null;
+    if (!info || typeof info !== "object" || !info.locales || typeof info.locales !== "object")
+        return null;
+    var l = info.locales;
+    return typeof l.UI === "string" && l.UI || typeof l.FMT === "string" && l.FMT ? info : null;
+}
+
 // ---- Wi-Fi (OSE's com.webos.service.wifi, webos-connman-adapter) ----------------
 // getstatus {subscribe}: status "serviceDisabled", "serviceEnabled" or
 // "connectionStateChanged" with networkInfo {ssid, connectState, signalBars}

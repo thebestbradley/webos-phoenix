@@ -1375,6 +1375,12 @@ Links between apps: web, mailto:, tel:, sms:
 NODE_PATH="$(npm root -g)" node tools/test-links.cjs
 ```
 
+The system UI in the device's language in phoenix-sim: German, Arabic:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-locale-sim.cjs
+```
+
 Location Services and permissions:
 
 ```sh

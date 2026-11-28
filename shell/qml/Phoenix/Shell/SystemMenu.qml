@@ -27,6 +27,7 @@
 
 import QtQuick
 import "Earbuds.js" as EarbudsLogic
+import "LocaleFormat.js" as LocaleFormat
 
 Item {
     id: menu
@@ -717,7 +718,8 @@ Item {
                         objectName: "systemMenuDate"
                         selectable: false
                         property date now: new Date()
-                        readonly property string label: now.toLocaleDateString(Qt.locale(), Locale.LongFormat)
+                        // The long date in the device's locale (localeInfo).
+                        readonly property string label: LocaleFormat.longDate(now, LocaleFormat.formatTag(menu.sys ? menu.sys.localeInfo : null))
                         function refresh() {
                             now = menu.sys && menu.sys.fixedTime ? menu.sys.fixedTime : new Date();
                         }
