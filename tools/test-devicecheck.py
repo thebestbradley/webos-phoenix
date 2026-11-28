@@ -281,6 +281,25 @@ def main():
     fake = luna.Client("org.example.k", "service", [], groups=set())
     ok(luna.kit_charges(fake, kit) == [], "a service that does not run on the kit is charged nothing")
 
+    # Messaging's presence, typing and read markers on each IM transport:
+    # a group of those methods alone (not the transport's other account
+    # methods: sign-in, push, availability), defined where the service is.
+    for name, d, methods in (("xmpp", "apps/connectors/xmpp", ["chatState", "markRead", "setPresence"]),
+                             ("matrix", "apps/connectors/matrix", ["markRead", "setPresence"]),
+                             ("deltachat", "apps/connectors/deltachat", ["markRead", "setPresence"]),
+                             ("telegram", "apps/telegram", ["markRead", "setPresence"])):
+        svc = "org.webosphoenix.service." + name
+        group = "phoenix.%s.messaging" % name
+        base = os.path.join(REPO, d, "service", "sysbus", svc)
+        with open(base + ".api.json", encoding="utf-8") as f:
+            api = json.load(f)
+        with open(base + ".groups.json", encoding="utf-8") as f:
+            trust = json.load(f)
+        ok(sorted(api.get(group) or []) == [svc + "/" + m for m in methods],
+           "%s is %s alone: %s" % (group, ", ".join(methods), api.get(group)))
+        ok(trust.get(group) == ["oem"], "%s is defined for oem callers: %s" % (group, trust.get(group)))
+        ok(group not in accounts, "Accounts does not hold %s" % group)
+
     # OSE's installer checks no signature, so only the Marketplace's service
     # may reach it: it checks who publishes each package (nova install comes
     # to it too, packagesservice.js "Who may update an installed app"). No
