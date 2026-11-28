@@ -298,6 +298,14 @@ over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
   re-signed with the owner's (`rauc resign`, PLATFORM.md 7.2). Test
   releases go on a channel with Phoenix-Web-Services'
   `platform:publish-testing-update`.
+- **What an update does not change: the EFI system partition.** A bundle
+  writes one root slot (and so its kernel). GRUB's binary, its script
+  (`phoenix-ab-grub.cfg`) and the environment's defaults (`PHOENIX_ARGS`,
+  from `PHOENIX_GRUB_ARGS`) stay as the disk was first written, so a change
+  to them reaches new disks only, or a device where someone runs
+  `grub-editenv /boot/efi/EFI/BOOT/grubenv set ...`. Changing them on devices
+  in use needs a boot slot in the bundle or a RAUC post-install hook: to
+  design when the first such change comes.
 
 ## The account and cloud services
 
