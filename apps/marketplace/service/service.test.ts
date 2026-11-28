@@ -200,6 +200,18 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.listInstalled()).apps).toEqual([]);
     });
 
+    // RESERVED_NAME's exception: a catalog's web apps are named under
+    // org.webosphoenix.pwa. by the catalog service, a catalog the user adds
+    // too, and packaged here from the site's manifest.
+    it("installs a web app from a catalog the user added, though its id is under org.webosphoenix.pwa.", async () => {
+        const { service } = makeService([{ ...defaults()[0], key: catalog.key }]);
+        await service.removeSource({ id: "phoenix" });
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const added = (await service.getSources()).sources.find((x: Any) => x.url === catalog.catalogUrl);
+        expect(added.id).not.toBe("phoenix");
+        expect(await service.install({ sourceId: added.id, id: "org.webosphoenix.pwa.tides" })).toMatchObject({ returnValue: true, appId: "org.webosphoenix.pwa.tides" });
+    });
+
     it("installs a web app whose icons are all broken with the icon the catalog made", async () => {
         const { service, world } = makeService(defaults());
         await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
