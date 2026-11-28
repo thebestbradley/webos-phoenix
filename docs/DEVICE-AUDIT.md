@@ -145,6 +145,20 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | com.palm.telephony, com.palm.wan, org.webosports.service.messaging | phone, data, SMS | runtime | needs a modem (oFono) | 🚫 (3) | runtime |
 | org.webosphoenix.service.reset, org.webosphoenix.simulator | the simulator's reset and controls | runtime | not on a device | ✅ | runtime |
 
+The activity manager's replies (decided by Bradley, 27 November 2026: "Allow
+replies"). OSE's and LuneOS's role for it
+(`com.webos.service.activitymanager.role.json`) let its main name reach only
+the power service and its `.client` name only the platform services it calls
+itself, so ls-hubd refused every connection back toward the apps and services
+that create activities (LSHUB_NO_OUT_PERMS: systemmanager, gamepads, the
+assistant, Hardware, the account service, Calendar, Clock, Contacts,
+Accounts, ...): their replies, subscriptions and callbacks never arrived.
+meta-phoenix's `activitymanager.bbappend` now gives every permission in the
+role the outbound list `["*"]` (`PHOENIX_ACTIVITYMANAGER_OUTBOUND`), as
+webOS normally has it and as the platform's other services that answer any
+caller do (power, battery, alarm, settings, the application manager). Each
+caller still needs the method's group.
+
 ## 3. The page features WAM lacks or drops
 
 WAM's injection defines `setWindowOrientation`, `enableFullScreenMode`,
