@@ -200,10 +200,18 @@ async function main() {
     } catch (e) {
         check(false, "ran to the end: " + e.message);
     } finally {
-        sim.kill();
-        await sleep(500);
+        // Its own way out first, so its web engine's processes go with it:
+        // killed at once, phoenix-sim leaves them running, writing to the
+        // HOME being removed (ENOTEMPTY on .cache); then forced. As
+        // tools/test-useragent-sim.cjs.
+        if (sim.exitCode === null && sim.signalCode === null) {
+            const exited = new Promise((resolve) => sim.once("exit", resolve));
+            sim.kill("SIGTERM");
+            if (!(await Promise.race([exited.then(() => true), sleep(10000).then(() => false)])))
+                sim.kill("SIGKILL");
+        }
         fs.writeFileSync(path.join(outDir, form + "-sim.log"), simLog);
-        fs.rmSync(home, { recursive: true, force: true });
+        fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
     }
     console.log(failures ? `\n${failures} check(s) failed` : "\nall passed");
     process.exit(failures ? 1 : 0);
