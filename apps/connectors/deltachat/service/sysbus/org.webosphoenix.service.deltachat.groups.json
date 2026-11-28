@@ -10,5 +10,8 @@
     ],
     "phoenix.deltachat.signin": [
         "oem"
+    ],
+    "phoenix.deltachat.messaging": [
+        "oem"
     ]
 }

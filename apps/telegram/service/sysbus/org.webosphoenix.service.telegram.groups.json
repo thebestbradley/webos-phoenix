@@ -10,5 +10,8 @@
     ],
     "phoenix.telegram.signin": [
         "oem"
+    ],
+    "phoenix.telegram.messaging": [
+        "oem"
     ]
 }

@@ -4,9 +4,11 @@
         "activity.operation",
         "accounts.operation",
         "accounts.transport",
+        "notification.operation",
         "oauth.signin",
         "phoenix.ongoing",
         "phoenix.accounts.list",
-        "phoenix.accounts.read-credentials"
+        "phoenix.accounts.read-credentials",
+        "phoenix.accounts.info"
     ]
 }
