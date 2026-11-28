@@ -15,7 +15,9 @@
         "bluetooth.management",
         "systemsettings.query",
         "systemsettings.management",
+        "settings.management",
         "vpn.management",
-        "telephony.query"
+        "telephony.query",
+        "phoenix.devmode.query"
     ]
 }

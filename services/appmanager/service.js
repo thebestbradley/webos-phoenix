@@ -27,9 +27,49 @@ function samCall(method, params) {
     });
 }
 
+// Developer Mode for searchApps and listLaunchPoints: com.webos.service.devmode
+// getDevMode (Phoenix's provider answers {status, enabled}, OSE's {enabled}).
+// A slow answer is not given up on but kept for the next call (lastDevMode),
+// which until then has the last one known (off at first).
+var lastDevMode = false;
+function devModeOf(r) {
+    if (!r || r.returnValue === false) return undefined;
+    if (typeof r.enabled === "boolean") return r.enabled;
+    if (r.status === "enabled" || r.status === "disabled") return r.status === "enabled";
+    return undefined;
+}
+function askDevMode(uri) {
+    return new Promise(function (resolve) {
+        try {
+            service.call(uri, {}, function (m) {
+                var on = devModeOf(m.payload);
+                if (on !== undefined) lastDevMode = on;
+                resolve(on);
+            });
+        } catch (e) { resolve(undefined); }
+    });
+}
+
 var manager = am.createAppManager({
     sam: samCall,
+    developerMode: function () {
+        var asked = askDevMode("luna://com.webos.service.devmode/getDevMode");
+        return Promise.race([asked, new Promise(function (resolve) { setTimeout(resolve, 1500); })])
+            .then(function () { return lastDevMode === true; });
+    },
     readFile: function (p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return null; } },
+    // The installed apps: the system's and the user's (SAM's two folders).
+    appFolders: function () {
+        var out = [];
+        ["/usr/palm/applications", "/media/cryptofs/apps/usr/palm/applications"].forEach(function (d) {
+            var names = [];
+            try { names = fs.readdirSync(d); } catch (e) { /* none */ }
+            names.forEach(function (n) {
+                if (out.indexOf(n) < 0 && fs.existsSync(path.join(d, n, "appinfo.json"))) out.push(n);
+            });
+        });
+        return out;
+    },
     registry: {
         load: function () { try { return JSON.parse(fs.readFileSync(FILE, "utf8")); } catch (e) { return null; } },
         save: function (obj) {

@@ -63,6 +63,37 @@ Item {
         appId: LS.appId
     }
 
+    // What SAM's launch points do not carry: each app's appinfo.json, from
+    // SAM's listApps (its "phoenix" metadata and "visible"), by id. An app
+    // whose appinfo.json says "phoenix": {"developer": true} (Notification
+    // Lab, the framework demos, Terminal; the image's other test apps,
+    // meta-phoenix/conf/developer-apps.json) is a developer app: its entry's
+    // developer "devmode" keeps it out of the launcher, the dock and Just
+    // Type while Developer Mode is off (Shell.developerShown; docs/
+    // APP-RUNTIME.md "Developer apps"). One whose appinfo.json says
+    // "visible": false or "phoenix": {"hidden": true} (a connector, an
+    // account's sign-in page, First Use) is not in the launcher (tab -1).
+    // Asked again whenever the launch points change (an install).
+    property var _appMetadata: ({})
+    function refreshAppMetadata() {
+        lunaCall("luna://com.webos.applicationManager/listApps", {}, function(reply) {
+            if (!reply || reply.returnValue === false || !Array.isArray(reply.apps))
+                return;
+            var byId = {};
+            reply.apps.forEach(function(a) { if (a && a.id) byId[a.id] = a; });
+            source._appMetadata = byId;
+            rebuildApps.restart();
+        });
+    }
+    function developerRequirement(value) {
+        return value === "unlock" ? "unlock" : (value ? "devmode" : "");
+    }
+    Timer {
+        id: refreshMetadata
+        interval: 0
+        onTriggered: source.refreshAppMetadata()
+    }
+
     // Copy launch points into a plain ListModel the shell can read with get().
     Instantiator {
         id: launchPointCopies
@@ -72,7 +103,7 @@ Item {
             required property string title
             required property string icon
         }
-        onObjectAdded: rebuildApps.restart()
+        onObjectAdded: { rebuildApps.restart(); refreshMetadata.restart(); }
         onObjectRemoved: rebuildApps.restart()
     }
 
@@ -85,10 +116,14 @@ Item {
                 var lp = launchPointCopies.objectAt(i);
                 if (!lp)
                     continue;
+                var info = source._appMetadata[lp.id] || {};
+                var phoenix = info.phoenix || {};
                 source.apps.append({
                     appId: lp.id, title: lp.title, icon: lp.icon, largeIcon: "",
                     color: "#666666", glyph: lp.title.charAt(0),
-                    tab: 0, quickLaunch: i < 4 ? i + 1 : 0
+                    tab: phoenix.hidden || info.visible === false ? -1 : 0,
+                    quickLaunch: i < 4 ? i + 1 : 0,
+                    developer: source.developerRequirement(phoenix.developer)
                 });
             }
         }
@@ -1128,12 +1163,61 @@ Item {
 
     function startBootApps() {
         for (var b = 0; b < bootApps.length; ++b)
-            lunaCall("luna://com.webos.applicationManager/launch",
-                     { id: bootApps[b], preload: "partial", params: { launchedAtBoot: true } }, function() {});
+            startBootApp(bootApps[b]);
+    }
+    function startBootApp(appId) {
+        lunaCall("luna://com.webos.applicationManager/launch",
+                 { id: appId, preload: "partial", params: { launchedAtBoot: true } }, function() {});
+    }
+
+    // Started again when closed (Revision 34: under memory pressure OSE's
+    // memorymanager closes the hidden system UI as an idle background app,
+    // and nothing started it again until a reboot, so no dashboard or
+    // download notice showed). The life event "stop" (or "close") of a boot
+    // app starts it again after bootAppRestartMs, then at most once per
+    // bootAppRestartGapMs, so a device short of memory is not kept busy. A
+    // start that is closed again at once (Revision 37: still under pressure,
+    // memorymanager closed it before it was up) is tried again when the gap
+    // has passed, not dropped.
+    property int bootAppRestartMs: 5000
+    property int bootAppRestartGapMs: 60000
+    property var _bootAppRestarted: ({})
+    property var _bootAppsDue: []
+    function bootAppEvent(r) {
+        if (!r || r.returnValue === false || bootApps.indexOf(r.appId) < 0)
+            return;
+        if (r.event !== "stop" && r.event !== "close")
+            return;
+        if (_bootAppsDue.indexOf(r.appId) >= 0)
+            return;
+        _bootAppsDue.push(r.appId);
+        var since = Date.now() - (_bootAppRestarted[r.appId] || 0);
+        var wait = Math.max(bootAppRestartMs, bootAppRestartGapMs - since);
+        if (!bootAppTimer.running || wait < bootAppTimer.interval) {
+            bootAppTimer.interval = wait;
+            bootAppTimer.restart();
+        }
+    }
+    function restartDueBootApps() {
+        var due = _bootAppsDue;
+        _bootAppsDue = [];
+        for (var i = 0; i < due.length; ++i) {
+            _bootAppRestarted[due[i]] = Date.now();
+            startBootApp(due[i]);
+        }
+    }
+    Timer {
+        id: bootAppTimer
+        interval: 5000
+        repeat: false
+        onTriggered: source.restartDueBootApps()
     }
 
     Component.onCompleted: {
+        refreshAppMetadata();
         startBootApps();
+        lunaSubscribe("luna://com.webos.applicationManager/getAppLifeEvents", { subscribe: true },
+                      function(r) { source.bootAppEvent(r); });
         _listenToPages();
         lunaSubscribe("luna://com.webos.notification/getToastNotification", { subscribe: true }, function(r) {
             if (r && r.returnValue !== false && typeof r.message === "string")

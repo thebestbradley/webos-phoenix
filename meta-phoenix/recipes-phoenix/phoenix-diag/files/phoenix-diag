@@ -140,7 +140,9 @@ have connmanctl && run system/connman.txt sh -c 'connmanctl state; connmanctl te
 copy /etc/resolv.conf
 
 # Updates.
-have rauc && run system/rauc.txt rauc status --detailed
+# Only on a boot from an update slot: elsewhere RAUC's daemon does not start
+# (rauc.service.d/phoenix-slot.conf) and `rauc status` waits 25 s for D-Bus.
+have rauc && grep -qE '(^|[[:space:]])rauc\.slot=' /proc/cmdline && run system/rauc.txt rauc status --detailed
 
 # The Luna bus: which roles and permissions are installed (names), and a few answers.
 run luna/installed.txt sh -c 'for d in roles.d client-permissions.d api-permissions.d services.d manifests.d groups.d; do echo "== /usr/share/luna-service2/$d"; ls /usr/share/luna-service2/$d 2>/dev/null; done'

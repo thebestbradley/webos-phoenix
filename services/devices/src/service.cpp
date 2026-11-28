@@ -503,7 +503,9 @@ bool DeviceService::onShellReport(LSHandle *sh, LSMessage *msg, void *ctx)
         self->m_hw.backlight->setPercent(next.state == "off" ? 0 : next.brightness);
     if (next.state != before.state)
         self->alsFollowDisplay();
-        self->accelFollowDisplay();
+    // On every report, not only a change of state (as it has always run): it
+    // does nothing unless the accelerometer should start or stop.
+    self->accelFollowDisplay();
     // A media key the system pressed for the user (the Assistant's "pause",
     // "next song": org.webosphoenix.system/mediaKey through the shell), as
     // the hardware key's /media events, down then up (the simulator's

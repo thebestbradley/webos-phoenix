@@ -15,7 +15,7 @@
 //   com.palm.systemmanager getDeviceLockMode / setDevicePasscode (legacy webOS;
 //       Phoenix will provide it on OSE)
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deviceLock, LunaError, settings, system, systemStatus, type LockMode, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import {
@@ -56,9 +56,20 @@ export function ScreenPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(PREF_KEYS, cb, err), []).value ?? {};
     // Advanced gestures need a gesture area (the TouchPad's Screen & Lock had none).
     const gestureArea = useLuna<SystemStatus>((cb, err) => systemStatus.watch(cb, err), []).value?.gestureArea === true;
+    // picture.backlight. Not there yet, the slider still moves and sets it (27 November 2026): OSE's
+    // settingsservice has no default for it, so on a device's first boot its get answers errorKey
+    // ["backlight"] (PrefsDb8Get::sendResultReply), and the slider, disabled until an answer with a value,
+    // never moved (Revision 22 in UTM). A set of a key with no description is kept all the same
+    // (PrefsDb8Set: keys with no description go to the base kind), and the shell takes it from there
+    // (LsmSystemStatus.brightness).
     const backlight = useLuna<number | undefined>(
-        (cb, err) => settings.watch("picture", ["backlight"], (s) => cb(s.backlight), err), []).value;
+        (cb, err) => settings.watch("picture", ["backlight"], (s) => cb(s?.backlight as number | undefined), err), []).value;
+    // The value set here, shown until the service says what it is now: cleared on its next answer, not when
+    // the drag ends (with no answer, the slider went back to where it was). Not while a drag goes on: its
+    // own answers would pull the knob back under the finger.
     const [dragging, setDragging] = useState<number | null>(null);
+    const held = useRef(false);
+    useEffect(() => { if (!held.current) setDragging(null); }, [backlight]);
     const [lockMode, setLockMode] = useState<LockMode | null>(null);
     const [lockFlow, setLockFlow] = useState<LockMode | null>(null);
     const [picking, setPicking] = useState(false);
@@ -91,9 +102,8 @@ export function ScreenPage() {
                 <div className="pui-slider-row">
                     <span className="pui-slider-end brightness-less" />
                     <Slider value={dragging ?? backlight ?? 70} min={5} max={100} label="Brightness" testId="brightness"
-                            disabled={backlight === undefined}
-                            onChange={(v) => { setDragging(v); void settings.set("picture", { backlight: v }); }}
-                            onChangeComplete={(v) => { setDragging(null); void settings.set("picture", { backlight: v }); }} />
+                            onChange={(v) => { held.current = true; setDragging(v); void settings.set("picture", { backlight: v }).catch(() => {}); }}
+                            onChangeComplete={(v) => { held.current = false; setDragging(v); void settings.set("picture", { backlight: v }).catch(() => {}); }} />
                     <span className="pui-slider-end brightness-more" />
                 </div>
             </Group>

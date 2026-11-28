@@ -32,9 +32,13 @@ beforeAll(() => {
     };
     // The installer reads the package with the Marketplace service's modules
     // (PalmSystem.getResource) and gzip streams, which jsdom lacks.
+    // Its lib/ipk.js is @phoenix/platform's (/usr/lib/phoenix/node_modules/@phoenix/platform/).
     const PACKAGES = "/usr/palm/services/org.webosphoenix.service.packages/";
+    const PLATFORM = "/usr/lib/phoenix/node_modules/@phoenix/platform/";
+    const read = (f: string) => (existsSync(f) ? readFileSync(f, "utf8") : undefined);
     (w.PalmSystem as { getResource: (p: string) => string | undefined }).getResource = (p: string) =>
-        p.startsWith(PACKAGES) ? readFileSync(resolve(REPO, "apps/marketplace/service", p.slice(PACKAGES.length)), "utf8") : files[p];
+        p.startsWith(PACKAGES) ? read(resolve(REPO, "apps/marketplace/service", p.slice(PACKAGES.length)))
+            : p.startsWith(PLATFORM) ? read(resolve(REPO, "apps/shared/platform", p.slice(PLATFORM.length))) : files[p];
     w.CompressionStream = CompressionStream;
     w.DecompressionStream = DecompressionStream;
     // Sample files on the device are fetched from the rootfs (the demo media).

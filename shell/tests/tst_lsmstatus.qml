@@ -88,6 +88,25 @@ TestCase {
         var v = LsmStatus.masterVolume({ returnValue: true, volumeStatus: { muted: false, volume: 42, soundOutput: "pcm_output" } });
         compare(v.volume, 42);
         compare(LsmStatus.masterVolume({ returnValue: false }), null);
+        // The active output's: audiod refuses getVolume {soundOutput: "alsa"} (error 204).
+        compare(LsmStatus.masterVolumeQuery().soundOutput, undefined);
+        // A fresh object each time (the bus call adds subscribe to it).
+        verify(LsmStatus.masterVolumeQuery() !== LsmStatus.masterVolumeQuery());
+    }
+
+    function test_backlight() {
+        compare(LsmStatus.backlight({ returnValue: true, category: "picture", settings: { backlight: 42 } }), 42);
+        compare(LsmStatus.backlight({ returnValue: true, settings: { backlight: "80" } }), 80);
+        compare(LsmStatus.backlight({ returnValue: true, settings: { backlight: 140 } }), 100);
+        compare(LsmStatus.backlight({ returnValue: true, settings: { backlight: 0 } }), 1);
+        compare(LsmStatus.backlight({ returnValue: true, settings: {} }), null);
+        compare(LsmStatus.backlight(null), null);
+        // Not set yet on a new device: OSE's settingsservice has no default for it.
+        var unset = { returnValue: false, subscribed: false, category: "picture", errorKey: ["backlight"], method: "getSystemSettings" };
+        compare(LsmStatus.backlight(unset), null);
+        verify(LsmStatus.backlightUnset(unset));
+        verify(!LsmStatus.backlightUnset({ returnValue: true, settings: { backlight: 50 } }));
+        verify(!LsmStatus.backlightUnset({ returnValue: false, errorCode: -1, errorText: "Access denied" }));
     }
 
     function test_wifiStatus() {

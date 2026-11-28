@@ -1,0 +1,8 @@
+{
+    "phoenix.devmode.query": [
+        "com.webos.service.devmode/getDevMode"
+    ],
+    "phoenix.devmode.management": [
+        "com.webos.service.devmode/setDevMode"
+    ]
+}

@@ -14,5 +14,8 @@
     ],
     "phoenix.connector.share": [
         "org.webosphoenix.service.fediverse/share"
+    ],
+    "phoenix.fediverse.signin": [
+        "org.webosphoenix.service.fediverse/signIn"
     ]
 }

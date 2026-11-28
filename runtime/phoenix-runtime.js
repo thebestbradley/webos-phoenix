@@ -3077,6 +3077,12 @@
             var m = urlMatches(String(url || ""))[0];
             return m ? m.active.appId : null;
         };
+        // The handler of the address's scheme alone ("^https?:" the browser),
+        // for getResourceInfo's last try.
+        runtime.schemeHandlerFor = function (url) {
+            var m = urlMatches(String(url || "")).filter(function (x) { return x.active.schemeForm; })[0];
+            return m ? m.active.appId : null;
+        };
         am["/addRedirectHandler"] = function (p, reply) {
             if (typeof p.appId !== "string" || !p.appId) return reply({ subscribed: false, returnValue: false, errorCode: "Missing appId parameter" });
             if (typeof p.urlPattern !== "string" || !p.urlPattern) return reply({ subscribed: false, returnValue: false, errorCode: "Missing urlPattern parameter" });
@@ -4269,6 +4275,24 @@
             return clone(list);
         }
         runtime.accountTemplates = allTemplates;
+        // The system image's templates (the folders under
+        // /usr/palm/public/accounts), each with its sign-in page's app
+        // (validator.customUI.appId, or null): the Marketplace's service
+        // checks a sign-in page against them (packagesservice.js
+        // checkSignInPage, deps.systemTemplates).
+        runtime.systemAccountTemplates = function () {
+            var out = [];
+            builtinFiles().forEach(function (file) {
+                var parsed;
+                try { parsed = JSON.parse(PalmSystem.getResource(file) || "null"); } catch (e) { return; }
+                (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId) return;
+                    var v = t.validator && typeof t.validator === "object" ? t.validator : null;
+                    out.push({ templateId: String(t.templateId), appId: v && v.customUI && v.customUI.appId ? String(v.customUI.appId) : null });
+                });
+            });
+            return out;
+        };
 
         // A template the transport block serves: one whose capabilities are
         // implemented by a service on the simulated bus. The original
@@ -8150,6 +8174,7 @@
                 if (p.status !== "enabled" && p.status !== "disabled")
                     return reply(fail(-1, "status: \"enabled\" or \"disabled\""));
                 store.set("devMode", p.status === "enabled");
+                if (runtime.novaDevModeChanged) runtime.novaDevModeChanged();
                 reply(ok({ status: devMode() }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
                 devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
@@ -11645,7 +11670,15 @@
                 try { path = decodeURIComponent(path); } catch (e) { /* keep */ }
                 var mime = MIME[extOf(path)] || p.mime || "application/octet-stream";
                 var h = handlersFor(mime, extOf(path))[0] || (p.mime ? handlersFor(p.mime)[0] : null);
-                if (!h) return reply(fail(-1, "No handler for " + mime));
+                if (!h) {
+                    // No app for the type: the handler of the address's scheme, as
+                    // LunaSysMgr's last try (luna-sysmgr ApplicationManagerService.cpp
+                    // :558-567): a web address's is the browser, which then downloads
+                    // the file (isis-browser BrowserApp.js:391-394).
+                    var scheme = runtime.schemeHandlerFor ? runtime.schemeHandlerFor(uri) : null;
+                    if (!scheme) return reply(fail(-1, "No handler for " + mime));
+                    return reply(ok({ uri: uri, appIdByExtension: scheme, mimeByExtension: mime, canStream: false }));
+                }
                 // stream: the app plays a web address itself (Videos); else it is downloaded first.
                 var ext = extOf(path);
                 var streams = registeredTypes().some(function (r) {
@@ -14883,6 +14916,29 @@
         accounts["/listAccounts"] = listWithDav("listAccounts");
         accounts["/listAccountsPublic"] = listWithDav("listAccountsPublic");
 
+        // listMyAccounts (Phoenix's addition, compat/app-services/
+        // com.palm.service.accounts/handlers/list-my-accounts.js): listAccounts
+        // less the accounts the caller may not read, by the check the
+        // service's getAccountInfo and readCredentials make (utils.js
+        // hasPermission): the caller against the template's readPermissions
+        // (globs: * and ?), Accounts and the service itself reading all; no
+        // readPermissions, no one else.
+        function mayRead(account, caller) {
+            caller = String(caller || "").split(" ")[0];
+            if (caller === "com.palm.app.accounts" || caller === "com.palm.service.accounts") return true;
+            return (account.readPermissions || []).some(function (glob) {
+                var re = "^" + String(glob).replace(/[.\\+^$|(){}\[\]]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+                return new RegExp(re).test(caller);
+            });
+        }
+        accounts["/listMyAccounts"] = function (p, reply, ctx) {
+            var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            accounts["/listAccounts"](p, function (r) {
+                if (!r.returnValue) return reply(r);
+                reply(ok({ results: (r.results || []).filter(function (a) { return mayRead(a, caller); }) }));
+            }, ctx);
+        };
+
         accounts["/getAccountInfo"] = function (p, reply, ctx) {
             var a = getAccount(p.accountId);
             if (a && isDav(a.templateId)) return reply(ok({ result: annotate(a) }));
@@ -15748,8 +15804,11 @@
                 device: function () {
                     var slots = runtime.updateSlots ? runtime.updateSlots.get() : null;
                     var booted = slots && slots.slots[slots.booted];
+                    // The slot's version, else the product's (a slot stored before
+                    // product.json was there has ""); accountservice.js leaves out
+                    // what is still empty.
                     return Promise.resolve({ name: "Phoenix Simulator", model: "phoenix-sim", compatible: (slots && slots.compatible) || "phoenix-sim",
-                                             osVersion: (booted && booted.version) || "", build: (booted && booted.build) || 0 });
+                                             osVersion: (booted && booted.version) || runtime.product().version, build: (booted && booted.build) || 0 });
                 },
                 log: function (m) { console.info("[account] " + m); }
             });
@@ -15860,23 +15919,23 @@
                     // appinfo.json is read once per page: the service asks at
                     // every call, and only uses the version the first time it
                     // counts the package as installed.
-                    firstParty: function () {
-                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
-                    },
                     preinstalled: function () {
                         if (!preinstalledInfo) {
                             preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
                                 var info = {};
                                 try { info = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + p.id + "/appinfo.json") || "{}"); }
                                 catch (e) { info = {}; }
-                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id,
+                                         templates: p.templates || [] };
                             });
                         }
                         return preinstalledInfo;
                     },
                     firstParty: function () {
-                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix", templates: p.templates || [] }; });
                     },
+                    // The image's own account templates (checkSignInPage).
+                    systemTemplates: function () { return runtime.systemAccountTemplates ? runtime.systemAccountTemplates() : []; },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page
                     // in the Marketplace meanwhile; a failed one tries the
@@ -16994,6 +17053,105 @@
                 else host.postToHost("reboot", { reason: p.reason || "" });
             }, 0);
         };
+    })();
+
+    // ================================================================================
+    // Dev push (org.webosphoenix.nova; services/nova, docs/DEV-PUSH.md)
+    // ================================================================================
+    //
+    // The simulator runs the device's novad over its own data folder
+    // (services/nova/sim.js: phoenix-sim starts it; the tests start it for
+    // tools/serve-rootfs.py), so `nova pair -d sim` and `nova push -d sim`
+    // work as with a device. This is its Luna side for the pages (Settings >
+    // Developer Mode: Pushed Changes, Pair a Computer, Trusted Developers):
+    // each call goes to sim.js's HTTP server on 127.0.0.1, whose port and
+    // token it writes to /var/luna/nova/sim.json, through the host's proxy
+    // (proxiedRequest). Developer Mode is the simulator's (the store's
+    // "devMode"): sim.js is told it when it changes and before each call,
+    // as a device's novad reads the provider's flag file. getStatus {subscribe} is polled
+    // while subscribed. Apply asks the simulated passcode here, as novad
+    // asks com.palm.systemmanager on a device. Without sim.js (no Node.js),
+    // getStatus says {available: false} and the rest fail NOT_RUNNING.
+    (function developerPush() {
+        var METHODS = ["getStatus", "listWaiting", "apply", "decline", "revert", "restartNow", "pairStart", "pairCancel", "listKeys",
+                       "removeKey", "addGrant", "setRevocations", "setOptions", "restart", "rescan"];
+        var bridge = null, synced = null;
+        function readBridge() {
+            var text = null;
+            try { text = PalmSystem.getResource("/var/luna/nova/sim.json"); } catch (e) { text = null; }
+            try { bridge = text ? JSON.parse(text) : null; } catch (e) { bridge = null; }
+            return bridge;
+        }
+        function post(path, body) {
+            return proxiedRequest({ method: "POST", url: "http://127.0.0.1:" + bridge.lunaPort + path,
+                                    headers: { "Content-Type": "application/json", "X-Nova-Token": bridge.token }, body: toJson(body || {}) })
+                .then(function (r) {
+                    if (r.status !== 200) throw new Error("novad answered " + r.status);
+                    return JSON.parse(r.body);
+                });
+        }
+        function call(method, params) {
+            if (!(bridge || readBridge())) return Promise.resolve(null);
+            var on = !!store.get("devMode", false);
+            var sync = synced === on ? Promise.resolve() : post("/sim/devmode", { on: on }).then(function () { synced = on; });
+            return sync.then(function () { return post("/luna/" + method, params); }).then(null, function () {
+                // sim.js restarted (a new port): read where it is now, once.
+                synced = null;
+                if (!readBridge()) return null;
+                return post("/sim/devmode", { on: on }).then(function () { synced = on; return post("/luna/" + method, params); })
+                    .then(null, function () { return null; });
+            });
+        }
+        // Told at once (setDevMode), not at the next call: Settings stops
+        // asking once Developer Mode is off, and a paired computer must not
+        // go on pushing, nor the overlay load at the next start.
+        runtime.novaDevModeChanged = function () {
+            synced = null;
+            if (!(bridge || readBridge())) return;
+            var on = !!store.get("devMode", false);
+            post("/sim/devmode", { on: on }).then(null, function () {
+                // sim.js restarted (a new port): read where it is now, once.
+                if (!readBridge()) throw new Error("gone");
+                return post("/sim/devmode", { on: on });
+            }).then(function () { if (!!store.get("devMode", false) === on) synced = on; }, function () { /* told at the next call */ });
+        };
+        var NOT_RUNNING = "The simulator's developer tools are not running (services/nova/sim.js needs Node.js)";
+        var methods = {};
+        METHODS.forEach(function (name) {
+            methods["/" + name] = function (p, reply, ctx) {
+                var params = clone(p || {});
+                var subscribe = name === "getStatus" && params.subscribe;
+                delete params.subscribe;
+                var check = name === "apply"
+                    ? new Promise(function (resolve) {
+                        dispatch("luna://com.palm.systemmanager/matchDevicePasscode", { passCode: String(params.passCode || "") },
+                                 function (r) { resolve(!!(r && r.succeeded)); }, { cancelled: function () { return false; } });
+                    }) : Promise.resolve(true);
+                check.then(function (good) {
+                    if (!good) return fail("BAD_PASSCODE", "That passcode is not correct");
+                    return call(name, params).then(function (r) {
+                        if (r) return r;
+                        return name === "getStatus" ? ok({ available: false, devMode: !!store.get("devMode", false), files: [], removed: [],
+                                                           bundles: [], waiting: 0, paired: 0, pairing: null, options: {} })
+                                                    : fail("NOT_RUNNING", NOT_RUNNING);
+                    });
+                }).then(function (r) {
+                    if (r.returnValue && subscribe) r.subscribed = true;
+                    reply(r);
+                    if (!subscribe || !r.returnValue) return;
+                    var last = toJson(r);
+                    var timer = setInterval(function () {
+                        if (ctx.cancelled()) { clearInterval(timer); return; }
+                        call("getStatus", {}).then(function (x) {
+                            if (!x || ctx.cancelled()) return;
+                            var t = toJson(x);
+                            if (t !== last) { last = t; reply(x); }
+                        });
+                    }, 1500);
+                });
+            };
+        });
+        register(["org.webosphoenix.nova"], methods);
     })();
 
     // ================================================================================

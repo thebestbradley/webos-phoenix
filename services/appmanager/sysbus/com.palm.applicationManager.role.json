@@ -9,7 +9,8 @@
         {
             "service": "com.palm.applicationManager",
             "outbound": [
-                "com.webos.applicationManager"
+                "com.webos.applicationManager",
+                "com.webos.service.devmode"
             ]
         }
     ]

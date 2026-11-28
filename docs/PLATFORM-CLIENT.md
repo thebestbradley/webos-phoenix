@@ -141,8 +141,9 @@ servers.json's `feeds` (F) or `api` (A).
   its pinned key and hand-over, [DRIVERS.md](DRIVERS.md)).
 - **What is pinned where.** servers.json: `catalog.root` (or `.key`),
   `updates.root` (or `.key`), `drivers.key`, `account.key` (entitlements).
-  The RAUC keyring is the image's (`/etc/rauc/`, not yet in meta-phoenix:
-  [Still to do](#still-to-do)).
+  The RAUC keyring is the image's (`/etc/rauc/keyring.pem`, meta-phoenix
+  `rauc-conf`'s `PHOENIX_RAUC_KEYRING`): the public test CA in test images,
+  the owner's release CA in release images (PLATFORM.md 7.2).
 - **Revoked keys.** The signed revocation list's `keys` are never trusted
   again, whatever signs them: a leaked online key is answered by a new
   delegation plus this entry.
@@ -211,22 +212,100 @@ alerts.
 3. **Download**: to `/var/lib/phoenix/updates/phoenix-<build>.raucb`; a
    stopped download is kept and continued with `Range: bytes=<n>-` (206
    appends, 200 restarts, 416 = complete); the whole is checked against
-   `size` and `sha256` (`lib/node.js` `download`).
+   `size` and `sha256` (`lib/node.js` `download`). A response cut off, a
+   connection that stalls for a minute or fails and a 5xx answer are taken
+   up again by themselves after a pause (5 s, doubling to a minute), until
+   five tries in a row bring nothing (`DOWNLOAD_FAILED`, the part kept): a
+   bundle is a few GB and staging ended every response at about 1 GiB
+   (28 November 2026). What the file holds is hashed before the request,
+   in chunks, so the service keeps answering (hashed inside the response,
+   a 2 GB part held it for over a minute and its socket timed out).
 4. **Prepare**: `rauc info` (RAUC verifies the bundle's signature against
    the image's keyring), `compatible`, newer build, the feed's build; `rauc
-   install` writes the other slot; the running slot stays primary.
+   install` writes the other slot; the running slot stays primary. Only a
+   bundle RAUC refuses is thrown away: when RAUC's daemon does not answer
+   (`UPDATER_BUSY`) the download is kept and the next download prepares it
+   without fetching it. RAUC's view of the slots is asked once and kept
+   until the service changes it (install, mark-active, mark-good): while
+   RAUC writes a slot it answers nothing, and a status at every progress
+   tick waited 25 s each for D-Bus.
 5. **Install**: "Install Now" (battery at least 20% or charging) marks the
    prepared slot active and restarts; "Install Later" waits for the charger.
 6. **After the restart**: the service marks the running slot good (`rauc
    status mark-good`, what meta-rauc's `rauc-mark-good.service` does) when
-   it first starts, which luna-systemui's GetStatus subscription causes
-   once the System UI is up; a system that never gets there is not marked
-   good, so the bootloader's counter takes the device back, and the service
-   then says "The update to X did not start".
+   it first starts. On an A/B device that first call is
+   `phoenix-update-wake.service` (meta-phoenix `phoenix-slots`), once SAM
+   lists the System UI (`com.palm.systemui`) as running: luna-systemui's own
+   GetStatus subscription waits for the bus to report the service running
+   (`registerServerStatus`), and the service starts only on demand, so
+   without it nothing would start it and no slot would ever be marked good
+   (found on Revision 39's A/B disk, 28 November 2026). A system that never
+   gets to the System UI is not marked good, so the boot loader's counter
+   takes the device back, and the service then says "The update to X did
+   not start". The wake never holds up the start (`Type=exec`, so
+   multi-user.target and "Startup finished" do not wait for it) and gives
+   up by itself: the System UI is asked for up to an hour, then
+   `com.palm.update` three times.
+
+**A boot without an update slot** (no `rauc.slot=` on the kernel's command
+line: a VM started straight from the image's ext4 with `-kernel`, as UTM
+and the regression suite do, or a device without A/B slots): RAUC finds no
+booted slot there, so nothing asks it anything. `rauc.service` does not
+start (`ConditionKernelCommandLine=rauc.slot`, meta-phoenix's
+`rauc_%.bbappend`), nor does `phoenix-update-wake.service`.
+`com.palm.update` answers at once: `getStatus` with the running version
+and `error` `NOT_AVAILABLE` ("System updates are not available on this
+boot", `configured: false`), every other method with that error, and it
+schedules nothing. Before
+this, each call waited 25 s for D-Bus to give up on the RAUC daemon and
+the wake held up the start for an hour (Revision 42's regression VM, 28
+November 2026).
 
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
 (`runtime.updateSlots`); in tests `services/updates/test/fake-rauc.cjs`.
+
+**The image side** (meta-phoenix `dynamic-layers/rauc`, on LuneOS's layers;
+`phoenix-vm-arm64` first, PRE-IMAGE-CHECKLIST.md U1-U4):
+
+- **The disk** (`files/wic/phoenix-ab-efi.wks.in`, the `.wic` beside the
+  image): GPT, 1 `phoenix-boot` (the EFI system partition: GRUB, its A/B
+  script `phoenix-ab-grub.cfg` and `EFI/BOOT/grubenv`), 2 `phoenix-root-a`,
+  3 `phoenix-root-b` (empty until the first update), 4 `phoenix-data`. Each
+  slot carries its kernel (`/boot/Image`), so an update brings its kernel.
+- **The boot counter**: RAUC's GRUB variables (`ORDER`, `A_OK`/`B_OK`,
+  `A_TRY`/`B_TRY`). GRUB takes the first slot in `ORDER` that is marked OK
+  and has been tried fewer than three times, counts the try, and boots it
+  with `rauc.slot=`; `rauc status mark-good` (step 6) sets the count back to
+  0. A slot whose system never reaches the System UI is skipped after its
+  third start (a kernel panic restarts by itself, `panic=10`; a hang needs
+  the power button), and the slot that worked before starts.
+- **What outlives an update** (`phoenix-slots`, a systemd generator, only
+  on a boot with `phoenix.data=` from GRUB): `/var`, `/home` and `/media` are
+  overlays whose upper layers are on the data partition and whose lower
+  layers are the running slot's, so what the user changed stays and what
+  they did not is always the running system's; `/var/lib/phoenix` (this
+  service's downloads and state, dev push's overlays) is on the data
+  partition itself; RAUC's own records are `/data/rauc`. `/etc` is the
+  slot's: what is written there at run time (`/etc/machine-id`) starts again
+  after an update.
+- **The bundle** (`phoenix-bundle`): the image's ext4 root as a verity
+  bundle (RAUC checks each block as it reads it; `system.conf` refuses plain
+  bundles) for the device type (`phoenix-<MACHINE>`, `phoenix-vm-arm64` for
+  the VM), whose build and version are the rootfs's own (`BUILD_ID`, the
+  product's version), so step 4's checks and step 6's comparison hold.
+  Signed with the test development certificate; a release bundle is
+  re-signed with the owner's (`rauc resign`, PLATFORM.md 7.2). Test
+  releases go on a channel with Phoenix-Web-Services'
+  `platform:publish-testing-update`.
+- **What an update does not change: the EFI system partition.** A bundle
+  writes one root slot (and so its kernel). GRUB's binary, its script
+  (`phoenix-ab-grub.cfg`) and the environment's defaults (`PHOENIX_ARGS`,
+  from `PHOENIX_GRUB_ARGS`) stay as the disk was first written, so a change
+  to them reaches new disks only, or a device where someone runs
+  `grub-editenv /boot/efi/EFI/BOOT/grubenv set ...`. Changing them on devices
+  in use needs a boot slot in the bundle or a RAUC post-install hook: to
+  design when the first such change comes.
 
 ## The account and cloud services
 
@@ -363,9 +442,10 @@ tools/test-install-rootfs.py` checks the image layout and `servers-json.py`.
 
 ## Still to do
 
-- **RAUC in meta-phoenix**: no RAUC recipe, `system.conf` or keyring yet
-  (PLATFORM.md 7.2; PRE-IMAGE-CHECKLIST U-rows). The update service calls
-  the CLI and needs `rauc` and its daemon in the image.
+- **RAUC on the phones and tablets**: the VM has its slots, keyring and
+  boot counter (above); the PINE64 devices (U-Boot or Tow-Boot reading
+  `extlinux.conf`) and the Fairphone (Android's boot loader) have none yet
+  (PRE-IMAGE-CHECKLIST U2). The production keyring is the owner's (U3).
 - **The connectivity probe** is configured (`connectivity.probe`) but
   OSE's network stack still uses its own; pointing it there is
   meta-phoenix configuration.

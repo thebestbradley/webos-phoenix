@@ -67,6 +67,15 @@ SKIP_NAMES = {".git", ".gitignore", ".gitmodules", "node_modules", "spec", "spec
               "eris_config.json", "runner.html", "jasminerunner.html", ".DS_Store"}
 
 
+def macos_file(name):
+    """A file macOS's Finder leaves in a folder a Mac has shown: .DS_Store
+    (the folder's view), AppleDouble ._* files (metadata, on a disk that is
+    not APFS or HFS+) and .localized. Never installed: a stray one stopped
+    phoenix-apps' do_package (installed-vs-shipped) twice on 28 November
+    2026 (meta-phoenix's phoenix-no-macos-files.bbclass deletes them too)."""
+    return name in (".DS_Store", ".localized") or name.startswith("._")
+
+
 def load_config():
     with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
         return json.load(f)
@@ -201,7 +210,9 @@ def shared_packages():
 
 def npm_package_dir(name, start):
     """Where Node would find npm package `name` from folder `start` (its
-    node_modules, then each folder up), or None."""
+    node_modules, then each folder up), or None. The system's own services
+    (services/*) are outside the apps' npm workspace: their packages are
+    apps/node_modules', as their tests find them (NODE_PATH)."""
     d = os.path.realpath(start)
     while True:
         cand = os.path.join(d, "node_modules", name)
@@ -209,8 +220,10 @@ def npm_package_dir(name, start):
             return os.path.realpath(cand)
         up = os.path.dirname(d)
         if up == d:
-            return None
+            break
         d = up
+    cand = os.path.join(REPO, "apps", "node_modules", name)
+    return os.path.realpath(cand) if os.path.isfile(os.path.join(cand, "package.json")) else None
 
 
 def plan_npm_package(name, start, dest, plan, seen):
@@ -336,6 +349,15 @@ def plan_app_services(plan):
                 copy_tree(path, "/etc/palm/activities/services", plan)
                 continue
             copy_tree(path, dest + "/" + fn, plan)
+        # Phoenix's additions to the service's code (accounts'
+        # listMyAccounts: its services.json and sources.json, with the
+        # original's entries, and the new handler), beside the bus files in
+        # compat/app-services/<id>/: later entries win, as overlays do.
+        overlay = os.path.dirname(sysbus)
+        for fn in sorted(os.listdir(overlay)):
+            if fn in ("sysbus", "README.md") or fn in SKIP_NAMES:
+                continue
+            copy_tree(os.path.join(overlay, fn), dest + "/" + fn, plan, skip_tests=True)
         for fn in sorted(os.listdir(sysbus)):
             for suffix, sub in SYSBUS_DIRS:
                 if fn.endswith(suffix):
@@ -502,9 +524,11 @@ def build_plan():
                 s = os.path.join(root, fn)
                 plan.append((s, "/" + os.path.relpath(s, base)))
 
-    # Later entries (overlays) win.
+    # Later entries (overlays) win. No Finder files, from any tree.
     final = {}
     for src, dev in plan:
+        if macos_file(os.path.basename(dev)):
+            continue
         final[dev] = src
     # Files of the original apps we do not redistribute (docs/LEGAL.md).
     for dev in cfg.get("exclude", []):
@@ -606,7 +630,17 @@ def content(dev, src):
 # ---- The image's manifest (docs/DEV-PUSH.md 8) ------------------------------------------
 
 DEVPUSH_PATHS = os.path.join("apps", "shared", "platform", "src", "devpush-paths.json")
-MANIFEST = "/usr/share/phoenix/manifest.json"
+# The manifest's format and the image-time stamp: meta-phoenix's library,
+# which the image's class (phoenix-devpush.bbclass) uses too.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "meta-phoenix", "lib"))
+from phoenix.devpush import MANIFEST, dump_manifest, file_mode, stamp as _stamp  # noqa: E402
+
+
+def stamp(rootfs, build=None, compatible=None):
+    try:
+        return _stamp(rootfs, build, compatible)
+    except ValueError as e:
+        sys.exit("install-rootfs --stamp: %s (or give --build)" % e)
 
 
 def devpush_rules():
@@ -638,7 +672,7 @@ def shell_plan(repo=None):
         for root, dirs, files in os.walk(base):
             dirs[:] = sorted(d for d in dirs if d not in skip)
             for fn in sorted(files):
-                if fn in skip:
+                if fn in skip or macos_file(fn):
                     continue
                 full = os.path.join(root, fn)
                 out["/usr/share/phoenix/%s/%s" % (sub, os.path.relpath(full, base).replace(os.sep, "/"))] = full
@@ -646,11 +680,6 @@ def shell_plan(repo=None):
     if os.path.isfile(perm):
         out["/usr/share/luna-service2/client-permissions.d/com.webos.surfacemanager.phoenix.perm.json"] = perm
     return out
-
-
-def file_mode(st_mode):
-    """0755 for an executable, else 0644: the only two a bundle carries."""
-    return "0755" if st_mode & 0o111 else "0644"
 
 
 def product_info(repo=None):
@@ -701,56 +730,6 @@ def make_manifest(final, build="unstamped", compatible=None, repo=None):
         out["source"] = src
     out["files"] = files
     return out
-
-
-def dump_manifest(m):
-    return (json.dumps(m, indent=1, sort_keys=False) + "\n").encode("utf-8")
-
-
-def os_release_build(rootfs):
-    """BUILD_ID from ROOTFS's /etc/os-release (or /usr/lib/os-release), or None."""
-    for rel in ("etc/os-release", "usr/lib/os-release"):
-        try:
-            with open(os.path.join(rootfs, rel), encoding="utf-8") as f:
-                for line in f:
-                    k, _, v = line.strip().partition("=")
-                    if k == "BUILD_ID" and v.strip().strip("\"'"):
-                        return v.strip().strip("\"'")
-        except OSError:
-            continue
-    return None
-
-
-def stamp(rootfs, build=None, compatible=None):
-    """At image time: ROOTFS's manifest.json with each file's size, hash and
-    mode read from the image's own copy (what other recipes changed after
-    phoenix-apps installed it shows as it is; a file no longer there is
-    dropped), and the image's build id."""
-    path = os.path.join(rootfs, MANIFEST.lstrip("/"))
-    try:
-        with open(path, encoding="utf-8") as f:
-            m = json.load(f)
-    except (OSError, ValueError) as e:
-        sys.exit("install-rootfs --stamp: %s: %s" % (path, e))
-    build = build or os_release_build(rootfs)
-    if not build:
-        sys.exit("install-rootfs --stamp: no BUILD_ID in %s/etc/os-release (or give --build)" % rootfs)
-    files = []
-    for f in m.get("files", []):
-        full = os.path.join(rootfs, f["path"].lstrip("/"))
-        if os.path.islink(full) or not os.path.isfile(full):
-            continue
-        with open(full, "rb") as fh:
-            data = fh.read()
-        files.append({"path": f["path"], "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-                      "mode": file_mode(os.stat(full).st_mode)})
-    m["build"] = build
-    if compatible is not None:
-        m["compatible"] = compatible
-    m["files"] = files
-    with open(path, "wb") as f:
-        f.write(dump_manifest(m))
-    return m
 
 
 def main():

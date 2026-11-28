@@ -49,3 +49,21 @@
 .accounts-signup-servers {
     margin-top: 4px;
 }
+
+/* A template's own sign-in page that is not Phoenix's own
+   (source/cross-app.js, rule C17 on the device): why it is not shown,
+   in the library's error box look, and Back. */
+.accounts-signin-refused {
+    margin: 24px 16px 0 16px;
+}
+
+.accounts-signin-refused-text {
+    font-size: 16px;
+    line-height: 1.4;
+    color: #333;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    border: 1px solid #c9c9c9;
+    border-radius: 8px;
+    background: #f6f6f6;
+}

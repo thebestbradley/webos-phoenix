@@ -14,5 +14,10 @@
     ],
     "phoenix.connector.share": [
         "org.webosphoenix.service.todoist/share"
+    ],
+    "phoenix.todoist.signin": [
+        "org.webosphoenix.service.todoist/providerInfo",
+        "org.webosphoenix.service.todoist/checkCredentials",
+        "org.webosphoenix.service.todoist/signIn"
     ]
 }

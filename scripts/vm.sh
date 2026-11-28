@@ -37,6 +37,12 @@
 #   --accel hvf|kvm|tcg  default: hvf on Apple silicon, kvm on an arm64
 #                    Linux host with /dev/kvm, tcg (emulation) otherwise
 #   --ssh-port N     the host port forwarded to the VM's ssh (default 2222)
+#   --gps PORT|off   the VM's GPS: a virtio serial port (org.webosphoenix.gps.0)
+#                    that reads NMEA from 127.0.0.1:PORT (default 45570), where
+#                    tools/vm-location serves this computer's position (a Mac's
+#                    "Phoenix VM Location" app) or a fixed one (nmea-feed.py).
+#                    With nothing there the VM has no GPS fix, and its network
+#                    position (by IP address) answers instead
 #   --fresh          start from the image as built: the device's own disk
 #                    (a copy-on-write overlay, one per device) is made anew
 #   --dry-run        print the QEMU command and exit (nothing is needed)
@@ -58,7 +64,7 @@ HOST_OS=${PHOENIX_VM_HOST_OS:-$(uname -s)}
 HOST_ARCH=${PHOENIX_VM_HOST_ARCH:-$(uname -m)}
 
 die() { echo "vm.sh: $*" >&2; exit 2; }
-usage() { sed -n '11,49p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '11,55p' "$0" | sed 's/^# \{0,1\}//'; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is needed (to read the device profiles)"
 profile() { python3 "$PROFILES" get "$DEVICE" "$1"; }
@@ -73,7 +79,7 @@ DEVICE=$1; shift
 python3 "$PROFILES" get "$DEVICE" name >/dev/null 2>&1 || die "no device \"$DEVICE\"; there are: $(python3 "$PROFILES" list | tr '\n' ' ')"
 
 IMAGE=$REPO_DIR/out/phoenix-vm-arm64
-KERNEL='' CPUS='' MEMORY='' CAP='' GL='' AUDIO=virtio DISPLAY_SPEC='' ACCEL='' SSH_PORT=2222 FRESH='' DRY='' UTM=''
+KERNEL='' CPUS='' MEMORY='' CAP='' GL='' AUDIO=virtio DISPLAY_SPEC='' ACCEL='' SSH_PORT=2222 GPS=45570 FRESH='' DRY='' UTM=''
 need() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"; }
 num() { case $2 in ''|*[!0-9]*) die "$1 takes a whole number, not \"$2\"" ;; esac; [ "$2" -gt 0 ] || die "$1 must be more than 0"; }
 while [ $# -gt 0 ]; do
@@ -88,6 +94,7 @@ while [ $# -gt 0 ]; do
         --display) need "$@"; DISPLAY_SPEC=$2; shift ;;
         --accel) need "$@"; case $2 in hvf|kvm|tcg) ACCEL=$2 ;; *) die "--accel hvf, kvm or tcg" ;; esac; shift ;;
         --ssh-port) need "$@"; num "$1" "$2"; SSH_PORT=$2; shift ;;
+        --gps) need "$@"; if [ "$2" = off ]; then GPS=off; else num "$1" "$2"; GPS=$2; fi; shift ;;
         --fresh) FRESH=1 ;;
         --dry-run) DRY=1 ;;
         --utm) UTM=1 ;;
@@ -184,6 +191,10 @@ scripts/make-utm.sh $DEVICE --for mac make the VM):
     Sound: Intel HD Audio (or virtio-sound-pci)
     Network: Emulated VLAN, virtio-net-pci; Port Forward: TCP, host
       127.0.0.1 port $SSH_PORT, guest port 22
+    The Mac's position as the VM's GPS (tools/vm-location): QEMU > Arguments, add:
+      -device virtio-serial-pci,id=phoenixgps
+      -chardev socket,id=phoenixgps0,host=127.0.0.1,port=45570,reconnect-ms=2000
+      -device virtserialport,bus=phoenixgps.0,chardev=phoenixgps0,name=org.webosphoenix.gps.0
 EOF
     exit 0
 fi
@@ -219,6 +230,19 @@ case $AUDIO in
     virtio) set -- "$@" -audiodev "$AUDIODEV,id=snd0" -device virtio-sound-pci,audiodev=snd0 ;;
     hda) set -- "$@" -audiodev "$AUDIODEV,id=snd0" -device intel-hda -device hda-duplex,audiodev=snd0 ;;
 esac
+# The GPS: QEMU connects to the feed (and keeps trying: it may start later).
+# reconnect-ms is QEMU 9.2's name for what was reconnect (seconds).
+if [ "$GPS" != off ]; then
+    reconnect=reconnect-ms=2000
+    if [ -z "$DRY" ] && command -v "$QEMU" >/dev/null 2>&1; then
+        case $("$QEMU" --version 2>/dev/null | sed -n '1s/.*version \([0-9]*\)\.\([0-9]*\).*/\1 \2/p') in
+            [1-8]\ *|9\ [01]) reconnect=reconnect=2 ;;
+        esac
+    fi
+    set -- "$@" -device virtio-serial-pci,id=phoenixgps \
+        -chardev "socket,id=phoenixgps0,host=127.0.0.1,port=$GPS,$reconnect" \
+        -device virtserialport,bus=phoenixgps.0,chardev=phoenixgps0,name=org.webosphoenix.gps.0
+fi
 set -- "$QEMU" "$@"
 if [ -n "$CAP" ]; then
     if [ "$HOST_OS" = Darwin ]; then

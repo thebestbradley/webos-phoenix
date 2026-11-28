@@ -46,6 +46,12 @@
 #                    raw copy. qcow2 is the smaller one to copy to an iPad
 #   --ssh-port N     the port forwarded to the VM's ssh, on the host's
 #                    127.0.0.1 (default 2222)
+#   --gps PORT|off   the VM's GPS: a virtio serial port (org.webosphoenix.gps.0)
+#                    whose QEMU end connects to 127.0.0.1:PORT, where
+#                    tools/vm-location's "Phoenix VM Location" app serves the
+#                    Mac's position as NMEA (default: 45570 for mac, off for
+#                    an iPad, which has no such helper and gets a network or
+#                    manual position instead)
 #   --force          replace a bundle that is already there
 #   --dry-run        print the plan and config.plist; copy nothing
 #
@@ -63,12 +69,12 @@ PROFILES="$REPO_DIR/meta-phoenix/recipes-phoenix/phoenix-device-config/files/dev
 QEMU_IMG=${PHOENIX_UTM_QEMU_IMG:-qemu-img}
 
 die() { echo "make-utm.sh: $*" >&2; exit 2; }
-usage() { sed -n '11,52p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '11,58p' "$0" | sed 's/^# \{0,1\}//'; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is needed (to read the device profiles and write config.plist)"
 
 DEVICE='' FOR=ipad IMAGE=$REPO_DIR/out/phoenix-vm-arm64 KERNEL='' INITRD='' OUT=$REPO_DIR/out
-CPUS='' MEMORY='' GL=on AUDIO=hda DISK='' SSH_PORT=2222 FORCE='' DRY=''
+CPUS='' MEMORY='' GL=on AUDIO=hda DISK='' SSH_PORT=2222 GPS='' FORCE='' DRY=''
 need() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value"; }
 num() { case $2 in ''|*[!0-9]*) die "$1 takes a whole number, not \"$2\"" ;; esac; [ "$2" -gt 0 ] || die "$1 must be more than 0"; }
 while [ $# -gt 0 ]; do
@@ -84,6 +90,7 @@ while [ $# -gt 0 ]; do
         --audio) need "$@"; case $2 in hda|virtio|none) AUDIO=$2 ;; *) die "--audio hda, virtio or none" ;; esac; shift ;;
         --disk) need "$@"; case $2 in qcow2|raw) DISK=$2 ;; *) die "--disk qcow2 or raw" ;; esac; shift ;;
         --ssh-port) need "$@"; num "$1" "$2"; [ "$2" -le 65535 ] || die "--ssh-port is a port, 1 to 65535"; SSH_PORT=$2; shift ;;
+        --gps) need "$@"; if [ "$2" = off ]; then GPS=off; else num "$1" "$2"; [ "$2" -le 65535 ] || die "--gps is a port, 1 to 65535"; GPS=$2; fi; shift ;;
         --force) FORCE=1 ;;
         --dry-run) DRY=1 ;;
         -h|--help) usage; exit 0 ;;
@@ -136,6 +143,7 @@ case $FOR in
         JIT_CACHE=384 ;;
 esac
 [ -z "$TIMEOUT" ] || APPEND="$APPEND systemd.default_timeout_start_sec=$TIMEOUT systemd.default_device_timeout_sec=$TIMEOUT systemd.setenv=SAM_TRANSITION_TIMEOUT_MS=${TIMEOUT}000"
+[ -n "$GPS" ] || { if [ "$FOR" = mac ]; then GPS=45570; else GPS=off; fi; }
 if [ "$GL" = on ]; then GPU=virtio-gpu-gl-pci; else GPU=virtio-gpu-pci; fi
 case $AUDIO in hda) SOUND=intel-hda ;; virtio) SOUND=virtio-sound-pci ;; none) SOUND='' ;; esac
 
@@ -216,7 +224,7 @@ write_config() {
     UTM_NAME="webOS Phoenix: $NAME$LABEL" UTM_DEVICE=$DEVICE UTM_FOR=$FOR UTM_CPUS=$CPUS UTM_MEMORY=$MEMORY \
     UTM_JIT_CACHE=$JIT_CACHE UTM_GPU=$GPU UTM_WIDTH=$WIDTH UTM_HEIGHT=$HEIGHT UTM_SOUND=$SOUND \
     UTM_APPEND=$APPEND UTM_KERNEL=$KERNEL_NAME UTM_INITRD=$INITRD_NAME UTM_ROOT=$ROOT_NAME \
-    UTM_SSH_PORT=$SSH_PORT python3 - "$1" <<'EOF'
+    UTM_SSH_PORT=$SSH_PORT UTM_GPS=$GPS python3 - "$1" <<'EOF'
 import os
 import plistlib
 import random
@@ -248,6 +256,13 @@ if e["UTM_INITRD"]:
     drives.append(drive(e["UTM_INITRD"], "LinuxInitrd"))
 drives.append(drive(e["UTM_ROOT"], "Disk", "VirtIO"))
 port = int(e["UTM_SSH_PORT"])
+# The GPS (tools/vm-location): QEMU connects to the Mac's feed and keeps
+# trying (reconnect-ms: QEMU 9.2 and later; UTM 4.7 has QEMU 10).
+gps_arguments = []
+if e["UTM_GPS"] != "off":
+    gps_arguments = ["-device", "virtio-serial-pci,id=phoenixgps",
+                     "-chardev", "socket,id=phoenixgps0,host=127.0.0.1,port=%s,reconnect-ms=2000" % e["UTM_GPS"],
+                     "-device", "virtserialport,bus=phoenixgps.0,chardev=phoenixgps0,name=org.webosphoenix.gps.0"]
 config = {
     "Backend": "QEMU",
     "ConfigurationVersion": 4,
@@ -257,8 +272,11 @@ config = {
         "IconCustom": False,
         "UUID": ident(),
         "Notes": "Made by webOS Phoenix's scripts/make-utm.sh (--for %s): phoenix.device=%s, %sx%s. "
-                 "The console: the Display menu's Serial 0. ssh -p %d root@127.0.0.1 on the host."
-                 % (e["UTM_FOR"], e["UTM_DEVICE"], w, h, port),
+                 "The console: the Display menu's Serial 0. ssh -p %d root@127.0.0.1 on the host.%s"
+                 % (e["UTM_FOR"], e["UTM_DEVICE"], w, h, port,
+                    "" if e["UTM_GPS"] == "off" else
+                    " GPS: the Mac's position from tools/vm-location (Phoenix VM Location) on 127.0.0.1:%s."
+                    % e["UTM_GPS"]),
     },
     "System": {
         "Architecture": "aarch64",
@@ -291,7 +309,7 @@ config = {
         # UTM splits each argument at spaces unless quoted (parsedUserArguments):
         # the command line goes in double quotes, as one argument.
         "AdditionalArguments": ["-global", "%s.xres=%s" % (gpu, w), "-global", "%s.yres=%s" % (gpu, h),
-                                "-append", '"%s"' % e["UTM_APPEND"]],
+                                "-append", '"%s"' % e["UTM_APPEND"]] + gps_arguments,
     },
     # UTM's USB 3.0 bus brings usb-tablet, usb-mouse and usb-kbd: the
     # touches (as an absolute pointer) and the keyboard.
@@ -319,7 +337,7 @@ EOF
 }
 
 plan() {
-    echo "make-utm.sh: $BUNDLE: the $NAME for UTM ($FOR): ${WIDTH}x$HEIGHT, $CPUS CPUs, $MEMORY MiB, $GPU, sound ${SOUND:-none}, a $DISK root disk$HOW; ssh on 127.0.0.1:$SSH_PORT"
+    echo "make-utm.sh: $BUNDLE: the $NAME for UTM ($FOR): ${WIDTH}x$HEIGHT, $CPUS CPUs, $MEMORY MiB, $GPU, sound ${SOUND:-none}, a $DISK root disk$HOW; ssh on 127.0.0.1:$SSH_PORT; GPS $([ "$GPS" = off ] && echo off || echo "from 127.0.0.1:$GPS")"
 }
 
 if [ -n "$DRY" ]; then

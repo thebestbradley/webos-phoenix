@@ -15,5 +15,14 @@
         "org.webosphoenix.service.matrix/signIn",
         "org.webosphoenix.service.matrix/markRead",
         "org.webosphoenix.service.matrix/setPresence"
+    ],
+    "phoenix.matrix.signin": [
+        "org.webosphoenix.service.matrix/signInOptions",
+        "org.webosphoenix.service.matrix/checkCredentials",
+        "org.webosphoenix.service.matrix/signIn"
+    ],
+    "phoenix.matrix.messaging": [
+        "org.webosphoenix.service.matrix/setPresence",
+        "org.webosphoenix.service.matrix/markRead"
     ]
 }

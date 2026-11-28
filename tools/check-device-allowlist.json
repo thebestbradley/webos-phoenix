@@ -194,10 +194,6 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:no-permissions:org.webosphoenix.enyo2demo": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:no-permissions:org.webosphoenix.firstuse": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
@@ -210,19 +206,11 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:no-permissions:org.webosphoenix.notificationlab": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:no-permissions:org.webosphoenix.phone": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
  "luna:no-permissions:org.webosphoenix.screenshot": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.settings": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -290,10 +278,6 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
- "luna:unknown-group:org.webosphoenix.filemanager:drives.files": {
-  "owner": "the drives connector (apps/connectors/drives: installed from the catalog, its sysbus files come with it, not with the image)",
-  "row": "C6"
- },
  "luna:unknown-group:org.webosphoenix.flashlight:torch.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
@@ -314,8 +298,28 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.service.bluesky:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/bluesky): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.bluesky:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/bluesky): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.service.dav:accounts.operation": {
   "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.deltachat:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/deltachat): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.deltachat:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/deltachat): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.drives:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/drives): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.service.fediverse:accounts.operation": {
@@ -326,12 +330,56 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.service.google:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/google): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.linkedin:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/linkedin): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.matrix:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/matrix): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.matrix:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/matrix): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.microsoft:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/microsoft): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.slack:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/slack): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.slack:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/slack): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.service.telegram:accounts.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.service.telegram:messaging.operation": {
   "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.todoist:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/todoist): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.xmpp:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/xmpp): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.xmpp:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/xmpp): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.zoom:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/zoom): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.voicememos:media.operation": {
@@ -396,6 +444,10 @@
  },
  "luna:unknown-method:org.webosphoenix.service.oauth/broker": {
   "owner": "the OAuth service's owner (services/oauth): the token relay's broker, PLATFORM.md 6.5.4, OPEN-QUESTIONS Q49; the connector kit's viaRelay probes it",
+  "row": "C5"
+ },
+ "luna:unknown-method:org.webosphoenix.service.oauth/sheet": {
+  "owner": "intended: Bluesky's oauthAvailable probes it and offers an app password when it is refused (apps/connectors/bluesky/service/connector.js: the sheet cannot be lent for the AT Protocol's sign-in yet)",
   "row": "C5"
  },
  "luna:unknown-method:org.webosphoenix.transcriber/listen": {
@@ -590,10 +642,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
  },
- "luna:unknown-service:com.webos.service.devmode": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C1"
- },
  "luna:unknown-service:com.webos.service.tv.systemproperty": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
@@ -733,5 +781,13 @@
  "simrefs:loopback:services/account:127.0.0.1": {
   "owner": "intended: the simulator's servers.json (this computer's servers); meta-phoenix writes an image's own over it (tools/servers-json.py, docs/PLATFORM-CLIENT.md)",
   "row": "Q1"
+ },
+ "simrefs:loopback:services/nova:0.0.0.0": {
+  "owner": "intended: novad's network listener binds every address, 0.0.0.0 where the kernel has no IPv6 for \"::\" (services/nova/lib/listeners.js, docs/DEV-PUSH.md 6.2)",
+  "row": "G5"
+ },
+ "simrefs:loopback:services/nova:127.0.0.1": {
+  "owner": "intended: the simulator's novad (sim.js) is this computer's, and nova forward reaches ports on the device's own loopback (docs/DEV-PUSH.md, DEV-HELPER.md 8)",
+  "row": "G5"
  }
 }

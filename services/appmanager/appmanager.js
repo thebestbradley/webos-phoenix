@@ -46,8 +46,12 @@
 //                                 the exhibitions (appinfo.json
 //                                 "exhibitionMode"), the user's in a file
 //
+//   rescan {}                     the installed apps read again (SAM's scanApp)
+//
 // createAppManager({sam(method, params) -> Promise<reply>, readFile(path) ->
-// string | null, registry: {load() -> obj | null, save(obj)}, now()}) ->
+// string | null, registry: {load() -> obj | null, save(obj)}, now(),
+// appFolders() -> [the ids of the app folders installed], developerMode() ->
+// Promise<boolean>: whether Developer Mode is on}) ->
 // {methods: {name: (params, caller) -> Promise<reply>}, watchLaunchPoints}
 // STATUS: written against SAM's source and appmanager.test.ts; not yet run
 // on a device.
@@ -202,6 +206,23 @@ function createAppManager(opts) {
     }
     function forget() { appsCache = null; }
     function app(list, id) { return list.filter(function (a) { return a.id === id; })[0] || null; }
+    function developerMode() {
+        return Promise.resolve().then(function () { return opts.developerMode ? opts.developerMode() : false; })
+            .then(function (on) { return on === true; }, function () { return false; });
+    }
+    // The developer apps (appinfo.json "phoenix": {"developer": true}; docs/
+    // APP-RUNTIME.md "Developer apps") to leave out now: {id: true}, none
+    // while Developer Mode is on.
+    function developerApps() {
+        return developerMode().then(function (on) {
+            if (on) return {};
+            return apps().then(function (list) {
+                var out = {};
+                list.forEach(function (a) { if (a.phoenix && a.phoenix.developer === true) out[a.id] = true; });
+                return out;
+            });
+        });
+    }
 
     // ---- The handler registry (MimeSystem's table, in a file) --------------------------
     function registry() {
@@ -418,18 +439,34 @@ function createAppManager(opts) {
                 return ok({ appId: id, basePath: entry });
             });
         },
+        // SAM's launch points, less the developer apps' while Developer Mode
+        // is off (the simulator's listLaunchPoints; the Assistant opens apps
+        // from this list).
         listLaunchPoints: function () {
-            return sam("listLaunchPoints", {}).then(function (r) {
-                return r.returnValue === false ? r : ok({ launchPoints: Array.isArray(r.launchPoints) ? r.launchPoints : [] });
+            return Promise.all([sam("listLaunchPoints", {}), developerApps()]).then(function (replies) {
+                var r = replies[0], hide = replies[1];
+                if (r.returnValue === false) return r;
+                var lps = Array.isArray(r.launchPoints) ? r.launchPoints : [];
+                return ok({ launchPoints: lps.filter(function (lp) { return !hide[lp && lp.id]; }) });
             });
         },
-        // Launch points whose title has a word starting with the keyword.
+        // Launch points whose title has a word starting with the keyword,
+        // less the apps the launcher does not show: an app whose appinfo.json
+        // says "visible": false or "phoenix": {"hidden": true}, and, while
+        // Developer Mode is off, a developer app ("phoenix": {"developer":
+        // true}; docs/APP-RUNTIME.md "Developer apps"), as the simulator's
+        // searchApps leaves them out. Just Type and the Assistant search here.
         searchApps: function (p) {
             var k = String(p.keyword || "").toLowerCase();
             if (!k) return Promise.resolve(ok({ apps: [] }));
-            return sam("listLaunchPoints", {}).then(function (r) {
+            return Promise.all([sam("listLaunchPoints", {}), apps(), developerMode()]).then(function (replies) {
+                var r = replies[0], list = replies[1], developerOn = replies[2];
+                if (r.returnValue === false) return r;
                 var lps = Array.isArray(r.launchPoints) ? r.launchPoints : [];
                 return ok({ apps: lps.filter(function (lp) {
+                    var info = app(list, lp.id), phoenix = info && info.phoenix || {};
+                    if (!info || info.visible === false || phoenix.hidden || (phoenix.developer && !developerOn) ||
+                        lp.id === "com.palm.launcher" || lp.id === "com.palm.systemui") return false;
                     return (" " + String(lp.title || "").toLowerCase()).indexOf(" " + k) >= 0;
                 }).map(function (lp) { return { launchPoint: lp.launchPointId }; }) });
             });
@@ -478,6 +515,33 @@ function createAppManager(opts) {
             p.appIds.forEach(function (id) { r[String(id)] = 0; });
             return Promise.resolve(r);
         },
+        // Palm's rescan {} (luna-sysmgr ApplicationManagerService.cpp:2985):
+        // read the installed apps again, so one a dev bundle added, changed
+        // or removed (docs/DEV-PUSH.md 4.5) shows without a restart. SAM
+        // reads its list once, at start; a SAM with scanApp (webOS-ports'
+        // SAM: it scans the given ids as it does an install or removal, an
+        // id whose folder is gone being removed) is given every app folder
+        // there is and every app it lists whose folder is gone. Without
+        // scanApp (OSE's SAM) it says so, and novad has the change wait for
+        // the next restart (NO_RESCAN). opts.appFolders() -> [ids].
+        rescan: function () {
+            var onDisk = opts.appFolders ? opts.appFolders() : [];
+            return apps().then(function (list) {
+                var ids = {};
+                onDisk.forEach(function (id) { ids[id] = true; });
+                list.forEach(function (a) { if (onDisk.indexOf(a.id) < 0 && a.folderPath) ids[a.id] = true; });
+                var all = Object.keys(ids).sort();
+                if (!all.length) return ok({ scanned: [] });
+                return sam("scanApp", { ids: all }).then(function (r) {
+                    forget();
+                    if (r.returnValue === false) {
+                        return fail("NO_RESCAN", "The application manager cannot read the apps again (" + (r.errorText || "no scanApp") +
+                            "); they are read at the next start");
+                    }
+                    return ok({ scanned: all });
+                });
+            });
+        },
         listPendingLaunchPoints: function () { return Promise.resolve(ok({ launchPoints: [] })); },
         listDockPoints: function () { return Promise.resolve(ok({ dockPoints: [] })); },
 
@@ -495,7 +559,17 @@ function createAppManager(opts) {
                 var ext = extOf(path);
                 var mime = MIME[ext] || p.mime || "application/octet-stream";
                 var h = handlersFor(list, mime, ext)[0] || (p.mime ? handlersFor(list, p.mime)[0] : null);
-                if (!h) return fail(-1, "No handler for " + mime);
+                if (!h) {
+                    // No app for the type: the handler of the address's scheme, as
+                    // LunaSysMgr's last try (luna-sysmgr ApplicationManagerService.cpp
+                    // :558-567, getActiveHandlerForRedirect with command handlers):
+                    // a web address's is the Browser, which then downloads the file
+                    // (isis-browser BrowserApp.js:391-394). Without it the Browser's
+                    // every download of a type no app opens (a .bin, a .zip) failed.
+                    var scheme = urlMatches(list, uri).filter(function (m) { return m.active.schemeForm; })[0];
+                    if (!scheme) return fail(-1, "No handler for " + mime);
+                    return ok({ uri: uri, appIdByExtension: scheme.active.appId, mimeByExtension: mime, canStream: false });
+                }
                 var streams = registeredTypes(list).some(function (r) {
                     return r.appId === h.appId && r.stream && (r.extension === ext || typeMatches(r.mime, mime));
                 });
@@ -697,7 +771,7 @@ function createAppManager(opts) {
 }
 
 var METHODS = ["launch", "open", "listApps", "getAppInfo", "getAppBasePath", "listLaunchPoints", "searchApps",
-               "running", "close", "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "listPendingLaunchPoints", "listDockPoints",
+               "running", "close", "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "rescan", "listPendingLaunchPoints", "listDockPoints",
                "getHandlerForMimeType", "getResourceInfo", "listAllHandlersForMime", "mimeTypeForExtension",
                "getHandlerForExtension", "getHandlerForUrl", "addResourceHandler", "swapResourceHandler",
                "removeHandlersForAppId", "listResourceHandlers", "listExtensionMap", "addRedirectHandler",

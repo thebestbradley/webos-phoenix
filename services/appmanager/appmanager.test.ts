@@ -122,6 +122,11 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(await w.m.methods.getResourceInfo({ uri: "file:///media/internal/a.mp4" }))
             .toMatchObject({ returnValue: true, appIdByExtension: "org.webosphoenix.videos", mimeByExtension: "video/mp4", canStream: false });
         expect(await w.m.methods.getResourceInfo({ uri: "https://x.example/a.mp4" })).toMatchObject({ canStream: true });
+        // A type no app opens: a web address's goes to the Browser, which downloads it (LunaSysMgr's
+        // scheme handler, its last try); anything else still has no handler.
+        expect(await w.m.methods.getResourceInfo({ uri: "http://10.0.2.2/regress-slow.bin", mime: "application/octet-stream" }))
+            .toMatchObject({ returnValue: true, appIdByExtension: "com.palm.app.browser", canStream: false });
+        expect(await w.m.methods.getResourceInfo({ uri: "file:///media/internal/a.nosuchtype" })).toMatchObject({ returnValue: false });
         expect(await w.m.methods.mimeTypeForExtension({ extension: ".PDF" })).toMatchObject({ returnValue: true, mimeType: "application/pdf" });
         expect(await w.m.methods.getHandlerForExtension({ extension: "pdf" })).toMatchObject({ appId: "org.webosphoenix.pdfview", download: true });
         expect(await w.m.methods.getHandlerForUrl({ url: "sms:5550100" })).toMatchObject({ returnValue: true, appId: "org.webosphoenix.messaging" });
@@ -168,6 +173,33 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(w.calls.find((c: Any) => c.method === "addLaunchPoint").params).toEqual({ id: "com.palm.app.browser", title: "News", params: { url: "https://n.example" } });
     });
 
+    it("keeps hidden and developer apps out of search, the developer ones only while Developer Mode is off", async () => {
+        let enabled: unknown = false;
+        const list = [
+            { id: "notes", title: "Notes" },
+            { id: "demo", title: "Notes Demo", phoenix: { developer: true } },
+            { id: "hidden", title: "Notes Hidden", phoenix: { hidden: true } },
+            { id: "provider", title: "Notes Provider", visible: false }
+        ];
+        const manager = am.createAppManager({
+            developerMode: () => enabled instanceof Error ? Promise.reject(enabled) : Promise.resolve(enabled),
+            sam: (method: string) => Promise.resolve(method === "listApps"
+                ? { returnValue: true, apps: list }
+                : { returnValue: true, launchPoints: list.map(a => ({ id: a.id, title: a.title, launchPointId: a.id + "_default" }))
+                    .concat([{ id: "notes", title: "Notes Work", launchPointId: "work" }]) }) });
+        const search = async () => (await manager.methods.searchApps({ keyword: "notes" })).apps;
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "work" }]);
+        enabled = true;
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "demo_default" }, { launchPoint: "work" }]);
+        enabled = new Error("no Developer Mode service");
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "work" }]);
+        // listLaunchPoints (the Assistant's apps) leaves out the developer apps' only.
+        const ids = async () => (await manager.methods.listLaunchPoints({})).launchPoints.map((lp: Any) => lp.launchPointId);
+        expect(await ids()).toEqual(["notes_default", "hidden_default", "provider_default", "work"]);
+        enabled = true;
+        expect(await ids()).toEqual(["notes_default", "demo_default", "hidden_default", "provider_default", "work"]);
+    });
+
     it("keeps the exhibitions the user turned on", async () => {
         const w = world();
         let r = await w.m.methods.listDockModeLaunchPoints({});
@@ -205,9 +237,42 @@ describe("com.palm.applicationManager on OSE", () => {
         const listed = new Set(Object.values(api).flat().map((m: Any) => String(m).split("/")[1]));
         for (const name of [...am.METHODS, "launchPointChanges"]) expect(listed.has(name)).toBe(true);
         const perm = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/com.palm.applicationManager.perm.json"), "utf8"));
-        // SAM's launch is application.launcher, oem only (webosose/sam files/sysbus/com.webos.sam.groups.json).
-        expect(perm["com.palm.applicationManager"]).toEqual(["application.operation", "application.launcher"]);
+        // SAM's launch is application.launcher, oem only (webosose/sam files/sysbus/com.webos.sam.groups.json);
+        // searchApps and listLaunchPoints read Developer Mode from OSE's service (devmode.query) or Phoenix's
+        // provider (phoenix.devmode.query, dev push P3).
+        expect(perm["com.palm.applicationManager"]).toEqual(expect.arrayContaining(["application.operation", "application.launcher",
+            "devmode.query", "phoenix.devmode.query"]));
         const role = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/com.palm.applicationManager.role.json"), "utf8"));
         expect(role.trustLevel).toBe("oem");
+        const outbound = role.permissions.find((x: Any) => x.service === "com.palm.applicationManager").outbound;
+        expect(outbound).toContain("com.webos.service.devmode");
     });
 });
+
+describe("rescan (Palm's; docs/DEV-PUSH.md 4.5)", () => {
+    function rescanWorld(scanApp: Any) {
+        const calls: Any[] = [];
+        const listed = [{ id: "com.palm.app.clock", folderPath: "/usr/palm/applications/com.palm.app.clock" },
+                        { id: "org.example.gone", folderPath: "/usr/palm/applications/org.example.gone" },
+                        { id: "com.example.builtin" }];
+        const sam = (method: string, params: Any) => {
+            calls.push({ method, params });
+            if (method === "listApps") return Promise.resolve({ returnValue: true, apps: listed });
+            if (method === "scanApp") return Promise.resolve(scanApp(params));
+            return Promise.resolve({ returnValue: false, errorText: "unknown " + method });
+        };
+        const m = am.createAppManager({ sam, readFile: () => null, now: () => 0,
+                                        appFolders: () => ["com.palm.app.clock", "org.example.new"] });
+        return { m, calls };
+    }
+    it("hands SAM's scanApp every app folder there is and every listed app whose folder is gone", async () => {
+        const w = rescanWorld(() => ({ returnValue: true }));
+        expect(await w.m.methods.rescan({})).toEqual({ returnValue: true, scanned: ["com.palm.app.clock", "org.example.gone", "org.example.new"] });
+        expect(w.calls.filter((c: Any) => c.method === "scanApp")).toEqual([{ method: "scanApp", params: { ids: ["com.palm.app.clock", "org.example.gone", "org.example.new"] } }]);
+    });
+    it("says so when SAM cannot (OSE's SAM has no scanApp)", async () => {
+        const w = rescanWorld(() => ({ returnValue: false, errorText: "Unknown method \"scanApp\"" }));
+        expect(await w.m.methods.rescan({})).toMatchObject({ returnValue: false, errorCode: "NO_RESCAN" });
+    });
+});
+

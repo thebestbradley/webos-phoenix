@@ -5,9 +5,14 @@ The plan for sending a handful of changed files (the shell's QML,
 Developer Mode without building a new image, and restarting only what
 changed. Written 25 November 2026 at the owner's request ("plan it with both
 the direct push and server channel, follow closely to Palm's workflow and
-naming conventions"). **Status: P1 built** (26 November 2026: the dev
-bundle format and its checks, the image's manifest, the bundle maker and
-`nova package`; section 12, "P1 as built"); P2 onwards still a plan. 1.0
+naming conventions"). **Status: P1 and P2 built** (26 November 2026: the
+dev bundle format and its checks, the image's manifest, the bundle maker
+and `nova package`; then `novad` / `org.webosphoenix.nova` over a fake
+root, pairing, the `nova` device commands, the simulator's overlay and
+Settings' Pushed Changes; section 12, "P1 as built" and "P2 as built");
+P3's image side built (27 November 2026: Developer Mode's provider, the
+units, the manifest stamped at image time; "P3 as built"), to be checked
+on the VM image (P3v); P3b and P4 onwards still a plan. 1.0
 (this repository) is the core; 2.0 (phoenix-ember-glass-ui) gets it by
 merging 1.0.
 
@@ -154,7 +159,7 @@ sent), **Pushed Changes** (the list in Settings > Developer Mode) and
 | `novacom run file:///usr/bin/luna-send -- ...` | Run a program | `nova luna-send URI JSON` (as the developer role); arbitrary commands only over SSH | Narrower |
 | `novacom -t open tty://`, `novaterm` | Root shell | `nova term`: SSH as `user` with the paired key, Developer Mode's SSH ([TERMINAL.md](TERMINAL.md) T4); no root shell | Same verb, safer |
 | `palm-package` (`ares-package`) | Make an `.ipk` | `nova package APPDIR` (an app), `nova package --system` (a dev bundle: section 8) | Same verb |
-| `palm-install [-r]` | Install / remove an app | `nova install IPK`, `nova install -r ID` (`com.webos.appInstallService`, `developerMode: true`) | Same |
+| `palm-install [-r]` | Install / remove an app | `nova install IPK` (the Marketplace's service, `sideload`, which checks the publisher: a new app or an update of one this computer installed; never a built-in app or another publisher's), later `nova install -r ID` | Same verb, Android's same-key rule |
 | `palm-launch [-c] [-i]` | Launch, close, inspect | `nova launch ID [JSON]`, `-c` close; `-i` later (WebAppMgr's inspector port) | Same |
 | `palm-log [-f]` | App and system log | `nova log [-f] [ID]` (the journal, filtered to the app or service) | Same |
 | `palm-generate` | New project | Later: `nova generate` over the SDK's templates ([APP-SDK.md](APP-SDK.md)) | Later |
@@ -174,7 +179,7 @@ and phoenix-ember-glass-ui `e11c38f1`:
   `com.webos.service.devmode` `getDevMode` / `setDevMode`; Settings,
   `services/account/accountservice.js:605` and
   `services/hardware/hardwareservice.js:156` read it. **Phoenix's own image
-  has no provider for it**: `com.webos.service.devmode` is a C1 gap in
+  had no provider for it** (P3 adds `services/devmode`; "P3 as built"): `com.webos.service.devmode` is a C1 gap in
   phoenix-ember-glass-ui `meta-phoenix/conf/image-contract.json`, and
   LuneOS's `org.webosports.service.devmode` comes with
   `packagegroup-luneos-extended` (meta-webos-ports `9abe603b`,
@@ -285,7 +290,8 @@ early: after `/var` is mounted and before the Luna hub, WebAppMgr and
 luna-surfacemanager start (`Before=` on their units, which local confirms
 on the image), and only when:
 
-1. Developer Mode is on (the provider's flag file, read directly: the bus
+1. Developer Mode is on (the provider's flag file,
+   `/var/luna/preferences/devmode_enabled`, OSE's: read directly, the bus
    is not up yet);
 2. `state.json`'s build equals `/etc/os-release` `BUILD_ID`;
 3. the overlay holds something.
@@ -315,7 +321,15 @@ Apply is **replace by default**: the overlay ends up holding exactly the
 bundle's files, so pushing the repository's state twice is the same as
 once, and a file put back to the image's version in the repository leaves
 the overlay. `nova push --add` adds to what is there instead (for a fix
-sent on top of another developer's).
+sent on top of another developer's). Under a grant (9.1) a replace puts
+back only what the grant may change: the overlay ends up holding exactly
+the bundle's files within the grant's parts, and the rest as it was, so an
+apps-only grant never reverts the owner's shell, service or role changes
+(nor restarts the shell for them). The device works out the whole change
+(files, removals and these implicit reverts), checks every path's part
+against the grant before it accepts the bundle, and the waiting entry in
+Pushed Changes lists the reverts and the restarts they cause. The
+platform's key and a paired computer replace everything, as before.
 
 ### 4.5 Restart only what changed
 
@@ -505,7 +519,7 @@ device connected, else the last used.
 | `nova restart shell\|wam\|app ID\|service ID` | By hand |
 | `nova rescan` | Palm's `rescan` |
 | `nova package APPDIR` / `nova package --system [-o FILE]` | An app's `.ipk` / a dev bundle to a file (for the server channel). **Built (P1)**, with `nova verify BUNDLE` (the device's checks, on the computer) and `nova key` |
-| `nova install IPK`, `nova install -r ID` | Install, remove an app (Developer Mode's installer path) |
+| `nova install IPK` | Install an app: novad hands it to the Marketplace's service (`org.webosphoenix.service.packages/sideload`, group `phoenix.packages.sideload`, novad's only) with this computer's key, which refuses a built-in app (`BUILT_IN`) and an app another publisher installed, a catalog or another computer (`OTHER_PUBLISHER`: "This app is already installed from another publisher; remove it first"). Built 28 November 2026; `nova install -r ID` to come |
 | `nova launch ID [JSON]`, `nova launch -c ID` | Launch, close |
 | `nova log [-f] [ID]` | The journal, filtered |
 | `nova luna-send URI JSON` | One Luna call as the developer role |
@@ -520,7 +534,13 @@ device connected, else the last used.
 One protocol on every link: **HTTPS (TLS 1.3) on TCP port 6965**, beside
 novacom's 6968-6971 (to check against IANA's registry before it is fixed).
 JSON requests, the bundle as the body; `novad` answers with progress lines
-as they happen. Over:
+as they happen. Each connection is answered one request at a time and only
+as fast as it reads: while an answer waits unsent `novad` reads nothing
+more from it, and a stream it does not read (`log -f`) ends it once 8 MB
+wait. Before a computer is paired (or while Developer Mode is off) its
+connection may send only JSON messages of 64 KB at most, 256 KB and 32
+requests in all, for three minutes, and 8 such connections at once; a TLS
+handshake has 10 seconds (`lib/proto.js` `LIMITS`). Over:
 
 - **the LAN** (Wi-Fi or Ethernet): only while Developer Mode's "Push over
   network" switch is on, and only on private addresses;
@@ -568,7 +588,11 @@ As adb does, never as novacom did:
    fingerprints) would let anyone on the network who poses as the device
    during pairing take that proof away and try all million codes offline,
    whatever the attempt limit. With a PAKE, a guess is possible only by
-   talking to the real device, one guess per run. Five failed runs end
+   talking to the real device, one guess per run. A run is good only in
+   the window it began in: once the owner cancels, the two minutes run
+   out, a new Pair a Computer starts or another computer completes
+   pairing, a run still waiting for the computer's confirmation is refused
+   (`NOT_PAIRING`). Five failed runs end
    the window, so a guess succeeds at most 5 times in a million. **The code is asked over USB too** (the owner, 26 November
    2026): a cable is no proof of who holds it, so there is no Allow-only
    shortcut as adb's RSA prompt has.
@@ -576,8 +600,17 @@ As adb does, never as novacom did:
    only from keys in its paired list, the computer only from the device key
    it paired with. No passwords; nothing on the wire a listener can reuse.
 4. Settings lists the paired computers with their names, fingerprints and
-   last use, and removes them. Turning Developer Mode off stops `novad`
-   listening; Full Erase forgets everything.
+   last use, and removes them. A key the signed revocation list names
+   (9.1) leaves the list and the `user` account's authorized_keys when the
+   list arrives, and new connections are refused at the TLS handshake, as
+   is pairing it again. Whenever a computer stops being authorized, for
+   whatever reason (Remove, `nova unpair`, a revocation, Developer Mode
+   turned off, its key forgotten), its open connections close, a `forward`
+   (the inspector, the QML debugger, SSH) or a `log -f` among them: one
+   check of every authenticated connection against the paired list and
+   Developer Mode, after every change `novad` reports and every 5 seconds.
+   Turning Developer Mode off stops `novad` listening; Full Erase forgets
+   everything.
 
 A paired computer's key is also a trusted bundle key (section 9.1), so a
 bundle it made with `nova package --system` can come by the server channel
@@ -643,8 +676,8 @@ A waiting bundle posts a notification: "Developer changes from <name>:
 A new group, **Pushed Changes**, at the end of the Developer Mode pane:
 
 - **Waiting**: each bundle with its sender, key fingerprint, note, the
-  files it changes (grouped: Shell, Web apps, Services, System pages), and
-  what it will restart ("The system UI will restart"). **Apply** asks for the
+  files it changes (grouped: Shell, Web apps, Services, System pages), what
+  a replace puts back as the image has it (4.4), and what it will restart ("The system UI will restart"). **Apply** asks for the
   device passcode (as turning Developer Mode on does), **Decline** drops it.
 - **On this device**: the overlay's state: the build, the number of files
   and their list, each bundle applied, by whom and when, and the restarts
@@ -764,13 +797,18 @@ make it harder to abuse"):
      `shell` (the shell's QML and the runtime), `services` (JS services),
      and `roles` (Luna role and permission files, off unless named).
    - **Short-lived:** 14 days by default, 90 at most; renewing is a new
-     signed grant.
+     signed grant. A key may hold several grants (a renewal, or grants
+     with different scopes): a bundle is accepted if any live grant of the
+     key allows it, and the counter and the daily rate are that grant's.
+     Adding a grant drops the key's expired, older ones.
    - **Revocable:** a signed revocation list rides the update feed (as
      revoked builds do); the device checks it before every Apply and refuses
-     bundles from a revoked key or grant.
+     bundles from a revoked key or grant. A revoked key is trusted for
+     nothing, a paired computer's included (6.4).
    - **No replay:** each bundle names the device and a counter the device
-     keeps per grant; a bundle with a counter at or below the last one
-     applied is refused.
+     keeps per grant (and per key); a bundle with a counter at or below the
+     last one applied under its key or any of the key's grants is refused,
+     so a bundle one grant took never comes again under another.
    - **Rate-limited on the device:** 10 bundles a day per grant.
    - **Strong sign-in to upload:** Phoenix-Web-Services takes a bundle for
      a device only from the grant's account with a passkey or TOTP
@@ -830,19 +868,28 @@ ever has them, report the overlay as a modification.
 ### 9.6 Legacy novacom, for vintage tools
 
 The owner chose to keep LG's `novacomd` (26 November 2026) so the real
-`novacom` from webos-sdk-redux works with Phoenix too. Started as it ships,
-it gives an unauthenticated root shell, so Phoenix keeps it behind its own
-switch:
-- Settings > Developer Mode > **Legacy novacom (USB)**, off by default,
-  shown only with Developer Mode on, with a plain warning ("Anyone with a
-  cable gets full control of this device").
-- **USB only:** never bound to a network interface.
-- **A password:** turning it on asks for one and writes
-  `/var/novacom/passwd`, the file novacomd's own authentication reads
-  (`src/device/auth.c`), so the switch never runs it open.
-- **It turns itself off** after an hour and at every restart; nothing
-  starts it at boot.
-- `novad` and the developer overlay don't depend on it.
+`novacom` from webos-sdk-redux works with Phoenix too, and settled how on
+27 November: **installed but off, a flag turns it on**. Reading novacomd
+(`webOS-ports/novacomd` at `537338a`) showed its USB side cannot work on
+Phoenix's hardware: it opens gadgetfs at `/dev/gadget/musb_hdrc`
+(`src/device/usb-gadget.c:387`), the USB controller of Palm's own phones,
+and Phoenix's port carries USB debugging's link (6.2). Porting it is days
+of C for a niche; its inet transport (the emulator's, port 6969,
+`src/transport_inet.c`) works as it is. So (P3b):
+
+- **Installed, off:** LuneOS-based images already have `novacomd`
+  (meta-luneos `packagegroup-webos-extended`, `VIRTUAL-RUNTIME_novacomd`),
+  and nothing starts it; OSE-based images have none.
+- **A flag turns it on:** `phoenix-legacy-novacom.service` (phoenix-devmode)
+  starts it only with Developer Mode on and `/var/lib/phoenix/legacy-novacom`
+  made by hand, as root. Off again: remove the flag and restart.
+- **Never on the network:** without `-b` it listens on the device's
+  loopback only. A computer reaches it through nova's paired, encrypted
+  connection: `nova forward 6969` (now in the forward list), then
+  `novacomd -c 127.0.0.1` on the computer, then the vintage tools as usual.
+  No novacom password is needed for that, as nothing off the device can
+  reach the port; the Settings switch and the password planned here are
+  dropped.
 
 ## 10. Out of scope
 
@@ -925,8 +972,9 @@ deploys the server; the owner decides (section 13).
 | --- | --- | --- | --- | --- |
 | **P0** | The owner's answers to section 13 | — | owner | this plan |
 | **P1** | Dev bundle format; the image manifest (`install-rootfs.py --manifest`, the shell's); the bundle maker; `nova package --system`; tests. **Done** 26 November 2026 (below) | M | cloud | P0 names |
-| **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs` | L | cloud | P1 |
-| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1); the Legacy novacom switch, section 9.6); kernel configuration for the USB gadget | M | cloud | P2 |
+| **P2** | `org.webosphoenix.nova` with the fake root (apply, restart map, revert, build tie, Developer Mode gate, keys, TLS, pairing); `nova` host command (`pair`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `devices`); the simulator's overlay and `--device sim`; Settings > Developer Mode > Pushed Changes; `tools/test-nova.cjs`. **Done** 26 November 2026 (below) | L | cloud | P1 |
+| **P3** | meta-phoenix: `phoenix-devmode` (a `com.webos.service.devmode` provider for Phoenix's image, its flag, the restart; `phoenix-overlay.service`; `novad.service`; the manifest in the image (`install-rootfs.py --manifest` in phoenix-apps' do_install and `manifest.json` in its FILES; `--stamp` as a `ROOTFS_POSTPROCESS_COMMAND`, 8.1). **Built** ("P3 as built") | M | cloud | P2 |
+| **P3b** | The rest of P3: the USB NCM gadget (configfs, made while "USB debugging" is on) and its kernel configuration; the Legacy novacom switch (9.6); the `user` account's sudo and SSH in Developer Mode (TERMINAL.md); an app rescan on the device; the Luna role for `nova luna-send`. **Built** ("P3b as built"); sudo stays TERMINAL.md T4 | M | cloud | P3 |
 | **P3v** | Build the VM image with P3, verify the list in section 11, report unit names and anything that differs | M | local | P3 |
 | **P4** | Phoenix-Web-Services: grants, the `devpush` scope, the endpoints, storage and expiry, manifests per build; the device's polling and notification; `nova send` | M | cloud (code on a branch), codex or local (staging deploy after review) | P2, owner's yes to Q3 and Q9 |
 | **P4v** | End to end: a bundle from a second account to the owner's VM through staging, Apply, Revert | S | local | P3v, P4 deployed |
@@ -966,6 +1014,246 @@ reads `/usr/share/phoenix/manifest.json` from `novad` and calls
 overlay works on today's writable root, and the build tie stands in for the
 update clearing it until RAUC is there.
 
+### P2 as built (26 November 2026)
+
+| Piece | Where |
+| --- | --- |
+| `novad`'s core: apply (verify, then each file through the merged path, or into `upper/` before the first mount, then mounted), replace and add, rollback of a failed write, the restart map run by the device, revert one file and Revert to Image, the build tie, the Developer Mode gate, the cap, waiting bundles and Apply with the passcode, the Luna methods | `services/nova/novaservice.js` |
+| The overlay's two backends (overlayfs on a device; a folder for the simulator) and the boot-time decisions | `services/nova/lib/overlay.js`, `services/nova/boot.js` |
+| Who it trusts: the platform's key, paired computers, signed grants and the signed revocation list | `services/nova/lib/trust.js` |
+| Pairing: SPAKE2 | `services/nova/lib/pake.js` |
+| The protocol: TLS 1.3 with pinned Ed25519 keys, port 6965 | `services/nova/lib/proto.js`, `lib/keys.js` |
+| On a device (Luna registration, the listeners) | `services/nova/service.js`, `lib/system.js`, `sysbus/` |
+| The simulator's `novad` | `services/nova/sim.js`; phoenix-sim `shell/sim/simnova.h`, `Rootfs::developerOverlayFile`; `tools/serve-rootfs.py` |
+| `nova pair`, `unpair`, `devices`, `push`, `put`, `get`, `status`, `revert`, `restart`, `rescan`, `log`, `luna-send`, `forward`, `term` | `tools/nova/nova.cjs`, `lib/remote.cjs`, `lib/devices.cjs` |
+| Settings > Developer Mode: Pushed Changes, Pair a Computer, Paired Computers, Trusted Developers, Developer Connections | `apps/settings/src/pages/DevPush.tsx`; `@phoenix/luna` `nova.ts`; the runtime's `org.webosphoenix.nova` (`runtime/phoenix-runtime.js`, "Dev push") |
+| Tests | `services/nova/novaservice.test.ts` (the fake root, stand-ins for `mount`, `mknod`, `systemctl`, `ls-control`, `pkill`: `test/fake-system.cjs`), `services/nova/proto.test.ts` (RFC 9382's vectors, pairing over TLS, someone in the middle), `tools/nova/nova.test.ts` (the command against an in-process `novad`, and `nova push -d sim` over a small checkout), `apps/settings/src/pages/DevPush.test.tsx`, `tools/test-nova.cjs` (Chromium, in `tools/web-tests.txt`) |
+
+**The PAKE.** No vetted, permissively licensed SPAKE2 or CPace package
+exists for JavaScript (checked November 2026), so `lib/pake.js` writes RFC
+9382's protocol (SPAKE2-P256-SHA256-HKDF-HMAC, M and N from its section 6)
+over vetted parts: the group operations (point decoding and validation,
+constant-time scalar multiplication) are `@noble/curves` 1.9.7's P-256
+(MIT, audited; already in the image for the drives' SSH client),
+SHA-256, HKDF, HMAC, scrypt and the random scalars Node's own crypto. The
+code is about a hundred lines and passes the RFC's four test vectors
+(Appendix B, `test/rfc9382-vectors.json`, read from the RFC's text); it
+should still have a second reader before production. The run: A is the
+computer, B the device; identities `nova:` and `novad:` with the
+fingerprints of the keys each presented in the TLS handshake; the AAD the
+connection's exported keying material (label `EXPORTER-nova-pair`, 32
+bytes); w = scrypt(code; N 2^15, r 8, p 1; the identities as the salt), 40
+bytes reduced mod the order. The device sends pB with its confirmation;
+the computer checks it before it sends its own (a false device gets pA and
+nothing to test codes against); then each signs the transcript's hash
+with its key. A run counts from its first message, five a window. The
+tests show a party in the middle failing both runs, and one posing as the
+computer able to test only the code it committed to.
+
+**Design changes from the plan above**, each where it applies:
+- The transport is TLS 1.3 on 6965, but **framed messages, not HTTP**
+  (`lib/proto.js`): pairing's three messages must run over one TLS
+  connection (its exporter binds them), which an HTTP client's pool does
+  not promise, and `forward` turns the connection into a plain stream.
+- **The device id** a bundle names is novad's own, `nova-` and 16 hex
+  digits of the SHA-256 of the device's key (which only Full Erase
+  changes), not the platform registration's: a direct push needs no
+  sign-in. P4's grants name it; the device reports it at registration.
+- **A paired computer's own bundle applies at once**; one signed by the
+  platform's key, a granted key, or another paired computer's key waits
+  in Pushed Changes for the owner's Apply with the passcode (checked by
+  `novad`, through `com.palm.systemmanager/matchDevicePasscode`).
+- **Grants and revocations** (9.1) are JSON certificates with detached
+  signatures by the platform's dev-signing key (`lib/trust.js` documents
+  both; `addGrant`, `setRevocations`); the platform's key is pinned in
+  `/etc/palm/phoenix/servers.json` `"devpush": {"key"}`. Counters per grant
+  or key and the daily rate are kept in `/var/lib/phoenix/nova/` and
+  outlive Revert to Image. `verify()` weighs every trust entry of the
+  signing key (any live grant that allows the bundle authorizes it; the
+  reason given otherwise is the newest grant's). A revocation list removes
+  the revoked paired keys and their SSH lines, and `lib/proto.js` refuses
+  them at the handshake. Any computer that stops being authorized
+  (unpaired, revoked, Developer Mode off) loses its open connections and
+  streams (`lib/proto.js` recheck, 6.4). A grant's replace reverts only
+  within the grant's parts, and the waiting entry lists those reverts
+  (4.4).
+- **Bounded connections** (6.2): backpressure on both sides (nothing more
+  is read from a computer while an answer to it waits unsent), a cap on
+  what may wait for a stream, and limits on unauthenticated connections
+  (message size, bytes, requests, lifetime, how many at once). A pairing run's
+  confirmation is taken only in the window it began in.
+- **The Luna methods** are 7.4's plus `restartNow`, `addGrant`,
+  `setRevocations`, `restart` and `rescan` (what `nova` needs); every one
+  but `getStatus` answers `NEEDS_DEVMODE` with Developer Mode off.
+- **Restarts**: `app:<id>` closes the app and opens it again only if it
+  was open; `rescan` is Palm's `com.palm.applicationManager/rescan`, and
+  where the image has none the change waits for a restart ("Restart the
+  device to finish").
+- **`.ipk`**: `ipk.js` moved into `@phoenix/platform`; the Marketplace's
+  `lib/ipk.js` re-exports it. `devpush.js verify` takes `spaceLeft` as a
+  function of the manifest (replace counts only the bundle's files).
+- **The simulator**: `nova pair -d sim` and `nova push -d sim` use the
+  same protocol and pairing with `services/nova/sim.js`, which phoenix-sim
+  starts over its data folder. Its image is the checkout it runs (build
+  `sim`, compatible `phoenix-sim`); its overlay is
+  `<data>/var/lib/phoenix/overlay/sim/upper`, read first by phoenix-sim and
+  serve-rootfs.py while `active` is beside it (".wh." files for removals);
+  the shell loads from a tree with the pushed QML and assets in their
+  places; every restart is a restart of the simulator (opening the app a
+  push changed). Settings reaches it through the runtime and a
+  token-guarded HTTP server on 127.0.0.1.
+- **nova push PATHS** takes repository paths (`shell/qml`, `apps/settings`,
+  `services/updates`, `runtime`) as well as device paths. A push from a
+  checkout that is the image's (nothing differs) reverts what the overlay
+  holds (replace with nothing).
+- Not built in P2: mDNS discovery (`nova devices` probes the paired
+  devices and the USB address), `nova launch`/`send` (`nova install` came later, see the table in section 12), the
+  journal filter's exact units (G3), `nova forward` of JavaScript services'
+  inspector ports.
+
+**What P3 must provide** (meta-phoenix; P2 put each behind an interface):
+- `novad.service`: `node /usr/palm/services/org.webosphoenix.nova/service.js`
+  as root, long-running; the hub's service file says `Type=static`
+  (`sysbus/org.webosphoenix.nova.service`).
+- `phoenix-overlay.service`: `node .../boot.js` before the hub,
+  WebAppMgr and luna-surfacemanager (it clears after Revert to Image,
+  drops what reverts left, mounts with the image's copy bind-mounted at
+  `/run/phoenix/overlay/lower/<mount>` and the refused paths bound back).
+- Phoenix's Developer Mode provider keeping its flag (built in P3 over
+  OSE's flag, `/var/luna/preferences/devmode_enabled`).
+- `/etc/phoenix/nova.json`: `usbAddress` (the CDC NCM gadget's address;
+  172.16.42.1 assumed), `shellUnit` and `wamUnit` (the real unit names;
+  OSE's `surface-manager-daemon.service` and `webapp-mgr.service`),
+  `authorizedKeys` (the `user` account's, for `nova term`).
+- The image's manifest (8.1), a pinned `"devpush": {"key"}` in
+  servers.json, `ls-control` and `com.palm.configurator` on the image, a
+  rescan for apps (Phoenix's `com.palm.applicationManager` has none on a
+  device), and a Luna role for `luna-send -a org.webosphoenix.nova.developer`
+  (nova luna-send).
+- `com.palm.update` deleting overlays of other builds at mark-good (4.6).
+
+### P3 as built (27 November 2026)
+
+What OSE's own layers turned out to have, read from meta-webosose
+(`webosose/meta-webosose`) and `webosose/com.palm.service.devmode` at
+`94b6921`, changed three assumptions:
+
+- **OSE's Developer Mode service is `com.palm.service.devmode`**, not
+  `com.webos.service.devmode` (PRE-IMAGE-CHECKLIST C1 said so): `getDevMode`
+  answers `{enabled}`, `setDevMode {enabled}` writes or removes
+  `/var/luna/preferences/devmode_enabled` (and `dc0`...`dc9` beside it) and
+  runs `reboot` (`devmode_service.js:16-149`); its groups are
+  `devmode.query` (dev) and `devmode.management` (oem). **And OSE images
+  start in Developer Mode**: its recipe writes that flag into the image
+  (`com.palm.service.devmode.bb`, `do_install:append:webos`).
+- **There is no `BUILD_ID` in OSE's `/etc/os-release`** (nor LuneOS's),
+  which novad's build tie and the updates service's "no older build" read.
+- **The shell's unit on OSE is `surface-manager-daemon.service`**
+  (`luna-surfacemanager.bb:30`; `surface-manager.service` starts it), not
+  `luna-surfacemanager.service`; WebAppMgr's is `webapp-mgr.service`, the
+  hub's `ls-hubd.service`.
+
+So P3 is:
+
+- **`services/devmode`: `com.webos.service.devmode`**, Phoenix's provider
+  under the name Settings, the shell and Phoenix's services already call,
+  with Phoenix's API (`getDevMode {subscribe}` -> `{status}`, `setDevMode
+  {status}`; OSE's `{enabled}` is understood too) **over OSE's flag file**,
+  so OSE's service, OSE's boot script (`devmode.sh`), novad, the overlay's
+  boot step and WebAppMgr's start script (`phoenix-wam.sh`) all read one
+  file. As OSE's does, a change writes or removes the flag and the `dc`
+  markers, answers, then restarts the device (`systemctl reboot`). Its own
+  groups, `phoenix.devmode.query` / `phoenix.devmode.management`, beside
+  OSE's; the services and apps that read it have the query group. Tests:
+  `services/devmode/devmode.test.ts`.
+- **One flag everywhere**: novad (`DEVMODE_FLAG`), `sim.js`,
+  `phoenix-wam.sh` and the tests moved from LuneOS's
+  `/var/luna/dev-mode-enabled` to `/var/luna/preferences/devmode_enabled`.
+  On LuneOS builds, LuneOS's `org.webosports.service.devmode` keeps its own
+  flag, which Phoenix does not read.
+- **`meta-phoenix/recipes-phoenix/phoenix-devmode`**: `novad.service`
+  (`node .../org.webosphoenix.nova/service.js`, root, `Requires=` and
+  `After=ls-hubd.service`, restarted on failure), `phoenix-overlay.service`
+  (`node .../boot.js`, `Type=oneshot`, `DefaultDependencies=no`, after
+  `local-fs.target`, `Before=` the hub, WebAppMgr and the shell's units,
+  only when `/var/lib/phoenix/overlay/state.json` exists) and
+  `/etc/phoenix/nova.json` (OSE's unit names, `usbAddress` 172.16.42.1,
+  the `user` account's `authorized_keys`). novad's defaults are OSE's
+  names too.
+- **At image time, `phoenix-devpush.bbclass`** (a
+  `ROOTFS_POSTPROCESS_COMMAND` of `webos-phoenix-image`, with
+  `meta-phoenix/lib/phoenix/devpush.py`, which `install-rootfs.py --stamp`
+  now imports, so there is one copy): `BUILD_ID` written into the image's
+  os-release (the time the rootfs was put together, `${DATETIME}`, or
+  `PHOENIX_BUILD_ID`; a rootfs that is not rebuilt keeps its id), then
+  **Developer Mode off as built** (OSE's flag and markers removed;
+  `PHOENIX_DEVMODE_ON = "1"` keeps it, for a test image), then the manifest
+  stamped with that build. phoenix-apps runs `install-rootfs.py --manifest`
+  and packages `/usr/share/phoenix/manifest.json`.
+- **`PHOENIX_DEVPUSH_KEY`** (phoenix-apps) pins the platform's
+  dev-signing key: `servers.json` `"devpush": {"key"}` (`servers-json.py
+  --devpush-key`, the schema).
+- **`com.palm.update`** removes the overlays of other builds (and a
+  `state.json` made for one) once the running build is marked good, or at
+  start where there is no RAUC (no slot to fall back to)
+  (`services/updates/lib/node.js` `clearOtherOverlays`).
+- The device checks know `--manifest` writes the manifest; two allowlist
+  entries (`/etc/phoenix/nova.json`, the manifest) and the C1 entry for
+  `com.webos.service.devmode` are gone.
+
+**For P3v (local, on the VM image):** `ls /usr/lib/systemd/system/novad.service
+phoenix-overlay.service` and both enabled; `grep BUILD_ID /etc/os-release`;
+`/usr/share/phoenix/manifest.json` has that build and no "unstamped";
+`/var/luna/preferences/devmode_enabled` absent on a fresh image, and
+`curl 127.0.0.1:9998/json` refused (the inspector, #74); Settings >
+Developer Mode on (restart), then `luna-send -n 1
+luna://com.webos.service.devmode/getDevMode '{}'` says enabled, novad
+listens (`ss -ltn | grep 6965`), `nova pair` and a push from a Mac over the
+LAN; Revert to Image; the unit names on LuneOS's build if it is the one
+used. Anything that differs goes on the board.
+
+### P3b as built (27 November 2026)
+
+- **USB debugging's link:** `phoenix-usb-debug up|down|status`
+  (phoenix-devmode, `/usr/sbin`), which novad runs as Developer Mode and the
+  "USB debugging" switch change. A CDC NCM gadget through configfs (macOS,
+  Linux and Windows 11 drive it without a driver), stable addresses from
+  the machine id, the device at 172.16.42.1 and the computer given
+  172.16.42.2 by BusyBox's `udhcpd` (one lease; without it the computer is
+  set by hand, and the script says so). It makes its own gadget only: when
+  another holds the USB controller (a phone's Android gadget, USB
+  tethering's) it leaves it and says so; on a device without a controller
+  (the VM) it says that. Kernel: `CONFIG_USB_CONFIGFS_NCM` and its
+  dependencies in `phoenix-ose.cfg` (the phone and tablet kernels).
+  `tools/test-usb-debug.py` (a quick check, `usb-debug`) runs it over a
+  pretend configfs.
+- **SSH in Developer Mode, production images:** `phoenix-devmode-ssh`
+  (installed when `PHOENIX_PRODUCTION = "1"`, which takes the debug SSH
+  server out): OpenSSH, started only with Developer Mode's flag
+  (`sshd.socket` and `sshd.service` drop-ins), for `user` by key alone
+  (`sshd_config.d/10-phoenix-devmode.conf`), the keys being the paired
+  computers' (novad writes them). Development images keep their own SSH as
+  it is. `sudo` waits for TERMINAL.md T4 (the device passcode through PAM).
+- **Rescan on a device:** `com.palm.applicationManager/rescan` in
+  `services/appmanager` (Palm's call): every app folder there is, and every
+  listed app whose folder is gone, handed to SAM's `scanApp` (webOS-ports'
+  SAM). OSE's SAM has none: `NO_RESCAN`, and novad keeps the change pending
+  a restart, as before. novad has the group (`phoenix.appmanager.manage`).
+- **`nova luna-send`'s permissions:** the client permissions of
+  `org.webosphoenix.nova.developer` (`luna-send -a`): public and private,
+  launching and listing apps, Developer Mode's state, system settings,
+  activities, notifications, db8.
+- **Legacy novacom:** 9.6 (the flag, loopback only, `nova forward 6969`).
+
+**For P3v:** with "USB debugging" on, a cable to a Mac or Linux computer
+gives it 172.16.42.2 and `nova pair 172.16.42.1` works; connman leaves the
+link's address alone (LuneOS found connman taking a gadget link over:
+meta-luneos `connman-conf/main.conf`); turning the switch off takes the link
+down; a production image answers SSH only in Developer Mode, by key; a
+pushed new app shows after `nova rescan` or the restart; `nova luna-send`
+gets an answer; on a LuneOS-based image, the flag and `nova forward 6969`
+give a vintage `novacom` a shell.
+
 ## 13. Decisions (the owner, 26 November 2026)
 
 The owner answered questions 1, 3, 4 and 5; the rest take the
@@ -977,7 +1265,7 @@ recommendation they had, and the owner can change any of them.
 | 2 | Dev bundles are `.ipk` files with a signed manifest |
 | 3 | **Both:** the platform's dev-signing key ("master"), and developer keys the owner grants, **with an extra layer on granted keys** to make abuse harder (section 9.1) |
 | 4 | **A six-digit code for both** the LAN and USB; no Allow-only shortcut on USB (section 6.4) |
-| 5 | **Keep LG's `novacomd` for vintage tools**, behind its own switch (section 9.6) |
+| 5 | **Keep LG's `novacomd` for vintage tools**: installed but off, a flag turns it on (27 November; section 9.6) |
 | 6 | Developer Mode off: the overlay stays inactive on disk until Revert to Image or the next update |
 | 7 | Bundles may carry Luna role and permission files, listed separately on the Apply screen; for granted keys only when their grant allows it (section 9.1) |
 | 8 | Apply from the server channel asks the device passcode every time |

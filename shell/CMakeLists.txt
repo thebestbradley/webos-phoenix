@@ -73,7 +73,7 @@ if(PHOENIX_BUILD_SIM)
     # Widgets: the window's menu bar (the global one on macOS) and toolbar
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
-    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
+    add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simnova.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
                                sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h sim/siminstances.cpp sim/siminstances.h)
     # Network: the other simulators' sockets (SimInstances, QLocalSocket).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)

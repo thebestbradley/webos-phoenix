@@ -1,0 +1,9 @@
+{
+    "//": "Developer apps that Phoenix does not own (docs/APP-RUNTIME.md, \"Developer apps\"). Phoenix's own developer apps say so in their appinfo.json (\"phoenix\": {\"developer\": true}: Notification Lab, the framework demos, Terminal). The test, demo and example apps that the platform's layers install cannot, so they are listed here, each with why, and phoenix-developer-apps.bbclass writes the same flag into their appinfo.json in the image (meta-phoenix/lib/phoenix/developerapps.py): the launcher, the dock, Just Type and the app pickers then leave them out while Developer Mode is off, as Phoenix's own. An id that is not in the image is skipped. Not for an app a user needs: an account's sign-in page (LuneOS's IM connectors, com.palm.app.teams and the rest) already says \"visible\": false, which keeps it out of the launcher and Just Type, and stays usable from Accounts.",
+    "apps": {
+        "com.webos.app.test.youtube": "webOS OSE's YouTube test page (webos-extended), a launcher icon on LuneOS images: a test app",
+        "com.webos.exampleapp.canvastablet": "webOS OSE's QML example: tablet events drawn on a canvas",
+        "com.webos.exampleapp.qmllocalization": "webOS OSE's QML example: localization",
+        "com.webos.exampleapp.tabletevent": "webOS OSE's QML example: tablet events"
+    }
+}

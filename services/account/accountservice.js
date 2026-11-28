@@ -64,6 +64,14 @@
 //                                 the OAuth broker (PLATFORM.md 6.5.4, Q49)      the OAuth service, connectors
 //   assistantProvider {}          -> {baseUrl, apiKey (the access token),
 //                                 models}: an OpenAI-compatible provider         the assistant
+//   locationRelay {}              -> {enabled, sharing, position | null, reason}:
+//                                 the account's shared position (GET
+//                                 /v1/me/location) when this device's switch
+//                                 is on and it is fresh; never this device's
+//                                 own (docs/MAPS.md, "Another device's
+//                                 position")                                      the location service, Settings
+//   setLocationRelay {enabled}    this device's "Use my other device's
+//                                 position" switch, off by default              Settings
 //
 // Errors: NOT_SET_UP, SIGNED_OUT, BUSY, ACCESS_DENIED, EXPIRED,
 // CONNECTION_FAILED, BAD_SERVER, BAD_SIGNATURE, UNAUTHORIZED, FORBIDDEN,
@@ -78,7 +86,7 @@ var SERVICE = "org.webosphoenix.service.account";
 var ACCOUNT_NAME = "Phoenix Account";   // Q40: one string to change
 var METHODS = ["getServers", "setServers", "getStatus", "signIn", "cancelSignIn", "signOut", "refresh", "entitlements", "devices",
                "backupCredentials", "backupSummary", "pushEndpoint", "pushRegister", "pushRenew", "pushDrop", "tokenRelay",
-               "assistantProvider"];
+               "assistantProvider", "locationRelay", "setLocationRelay"];
 var DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 var TOKENS = "account:tokens";
 var BACKUP = "account:backup";
@@ -91,8 +99,16 @@ var CALLERS = {
     setServers: SETTINGS, signIn: SETTINGS, cancelSignIn: SETTINGS, signOut: SETTINGS, devices: SETTINGS,
     backupCredentials: ["org.webosphoenix.service.backup"],
     backupSummary: ["org.webosphoenix.service.backup"].concat(SETTINGS),
-    assistantProvider: ["org.webosphoenix.assistant"]
+    assistantProvider: ["org.webosphoenix.assistant"],
+    locationRelay: ["com.webos.service.location"].concat(SETTINGS),
+    setLocationRelay: SETTINGS
 };
+
+// The account's shared position: how long a read is reused (the location
+// service asks on every request and every minute), and the oldest position
+// used even if the server still has it (its own limit is 30 minutes).
+var RELAY_CACHE_MS = 15000;
+var RELAY_MAX_AGE_S = 1800;
 
 function err(code, text, extra) {
     var e = new Error(text);
@@ -110,6 +126,21 @@ function form(o) {
     return Object.keys(o).filter(function (k) { return o[k] !== undefined && o[k] !== null; })
         .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(o[k]); }).join("&");
 }
+// POST /v1/devices's body: what device() found, without what it couldn't
+// read. The platform answers 422 to an empty string (Laravel reads "" as
+// missing, and "compatible" was required) and to a build it can't store, so
+// a field without a value is left out rather than sent as "" or 0.
+// "build" is the image's build number (14 digits since dev push P3), sent
+// whole up to 2^53-1 (the server's column is an unsigned BIGINT).
+function registration(publicKey, dev) {
+    dev = dev || {};
+    var body = { publicKey: publicKey, name: (typeof dev.name === "string" && dev.name.trim()) || "Phoenix device" };
+    ["model", "compatible", "osVersion"].forEach(function (k) {
+        if (typeof dev[k] === "string" && dev[k].trim()) body[k] = dev[k].trim();
+    });
+    if (typeof dev.build === "number" && dev.build > 0 && Number.isSafeInteger(dev.build)) body.build = dev.build;
+    return body;
+}
 
 // deps:
 //   request({method, url, headers, body}) -> Promise<{status, headers, body (text)}>
@@ -126,7 +157,8 @@ function form(o) {
 //   crypto {sha256, sha512 -> Promise<Uint8Array>, randomBytes(n) -> Uint8Array,
 //           deviceKey() -> Promise<base64 Ed25519 public key> (made once, the
 //           private half kept on the device)}
-//   device() -> Promise<{name, model, compatible, osVersion, build}>
+//   device() -> Promise<{name, model?, compatible?, osVersion?, build?}> (a
+//       device: deviceinfo.js; what it can't read, left out)
 //   timers {set(fn, ms) -> handle, clear(handle)} (optional)
 //   now(), log() (optional)
 function createAccountService(deps) {
@@ -390,8 +422,7 @@ function createAccountService(deps) {
             var s = load();
             var reg = s.deviceId && s.accountId === me.id
                 ? Promise.resolve({ id: s.deviceId })
-                : apiJson("POST", "v1/devices", { publicKey: got[2], name: dev.name || "Phoenix device", model: dev.model || "",
-                                                   compatible: dev.compatible || "", osVersion: dev.osVersion || "", build: dev.build || 0 },
+                : apiJson("POST", "v1/devices", registration(got[2], dev),
                           { idempotencyKey: platform.b64.hex(deps.crypto.randomBytes(16)) });
             return reg.then(function (d) {
                 var s2 = load();
@@ -599,6 +630,68 @@ function createAccountService(deps) {
         });
     }
 
+    // ---- Another device's position (location sharing) ----------------------------------------
+    //
+    // A device that cannot find itself (a VM in UTM on an iPad) uses the
+    // position another of the account's devices shares (Safari on the iPad,
+    // a Shortcut, a phone with GPS). Off on this device until Settings turns
+    // it on; the account's sharing is off until the website turns it on.
+    // Answers {returnValue: true} with position null rather than an error
+    // when there is none, so the location service just goes on to its other
+    // sources; "reason" says why.
+
+    var relayCache = null;   // {at, reply}: the last read of GET /v1/me/location
+
+    function relayOff(reason, extra) {
+        return Object.assign({ returnValue: true, enabled: reason !== "OFF", sharing: false, position: null, reason: reason }, extra || {});
+    }
+    function relayPosition(p, readAt) {
+        if (!p || typeof p.latitude !== "number" || typeof p.longitude !== "number") return null;
+        var measured = Date.parse(p.timestamp);
+        if (!isFinite(measured)) return null;
+        // The age by the server's count, plus the time since it answered (this
+        // device's clock may be wrong; a VM's often is).
+        var age = Math.max(0, (typeof p.age === "number" ? p.age : 0) + Math.round((now().getTime() - readAt) / 1000));
+        var num = function (v) { return typeof v === "number" && isFinite(v) ? v : null; };
+        var src = p.source || {};
+        return { latitude: p.latitude, longitude: p.longitude, accuracy: num(p.accuracy) || 100, altitude: num(p.altitude),
+                 altitudeAccuracy: num(p.altitudeAccuracy), heading: num(p.heading), speed: num(p.speed), timestamp: measured, age: age,
+                 source: { kind: typeof src.kind === "string" ? src.kind : null, name: typeof src.name === "string" ? src.name : null,
+                           deviceId: typeof src.deviceId === "string" ? src.deviceId : null } };
+    }
+    function locationRelay() {
+        var s = load();
+        if (s.locationRelay !== true) return Promise.resolve(relayOff("OFF"));
+        return servers().then(function (r) {
+            if (!r || !r.account || !r.api) return relayOff("NOT_SET_UP");
+            if (!s.signedIn) return relayOff("SIGNED_OUT");
+            var cached = relayCache && now().getTime() - relayCache.at < RELAY_CACHE_MS ? Promise.resolve(relayCache)
+                : apiJson("GET", "v1/me/location").then(function (b) {
+                    relayCache = { at: now().getTime(), reply: b || {} };
+                    return relayCache;
+                });
+            return cached.then(function (c) {
+                var b = c.reply;
+                if (!b.sharing) return relayOff("SHARING_OFF");
+                var pos = relayPosition(b.position, c.at);
+                if (!pos) return relayOff("NO_POSITION", { sharing: true });
+                if (pos.source.deviceId && pos.source.deviceId === load().deviceId) return relayOff("OWN_POSITION", { sharing: true });
+                if (pos.age > RELAY_MAX_AGE_S) return relayOff("TOO_OLD", { sharing: true });
+                return { returnValue: true, enabled: true, sharing: true, position: pos, reason: null };
+            }, function (e) {
+                return relayOff(e && e.errorCode || "CONNECTION_FAILED", { errorText: e && e.message });
+            });
+        });
+    }
+    function setLocationRelay(p) {
+        if (typeof p.enabled !== "boolean") return Promise.reject(err("BAD_PARAMS", "enabled: true or false"));
+        var s = load();
+        s.locationRelay = p.enabled;
+        save(s);
+        relayCache = null;
+        return Promise.resolve({ returnValue: true, enabled: p.enabled });
+    }
+
     // ---- Developer Mode's override ------------------------------------------------------------
 
     function devMode() {
@@ -688,6 +781,8 @@ function createAccountService(deps) {
         }),
         tokenRelay: guard("tokenRelay", tokenRelay),
         assistantProvider: guard("assistantProvider", assistantProvider),
+        locationRelay: guard("locationRelay", locationRelay),
+        setLocationRelay: guard("setLocationRelay", setLocationRelay),
         // onChange(status) after every change -> stop() (getStatus {subscribe})
         watch: function (onChange) {
             watchers.push(onChange);
@@ -697,4 +792,5 @@ function createAccountService(deps) {
     return methods;
 }
 
-module.exports = { SERVICE: SERVICE, METHODS: METHODS, ACCOUNT_NAME: ACCOUNT_NAME, createAccountService: createAccountService };
+module.exports = { SERVICE: SERVICE, METHODS: METHODS, ACCOUNT_NAME: ACCOUNT_NAME, createAccountService: createAccountService,
+                   registration: registration };

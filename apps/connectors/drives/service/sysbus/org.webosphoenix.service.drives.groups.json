@@ -10,5 +10,8 @@
     ],
     "drives.account": [
         "oem"
+    ],
+    "phoenix.drives.signin": [
+        "oem"
     ]
 }

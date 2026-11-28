@@ -10,5 +10,8 @@
     ],
     "phoenix.connector.share": [
         "oem"
+    ],
+    "phoenix.linkedin.signin": [
+        "oem"
     ]
 }

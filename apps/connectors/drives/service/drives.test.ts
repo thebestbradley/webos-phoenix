@@ -393,17 +393,32 @@ describe("drives as places of the file manager (drives.ts)", () => {
         const id = await w.addAccount("nextcloud", await w.methods.checkCredentials({ templateId: T.nextcloud, username: "phoenix", password: "app-password-1",
                                                                                      config: { server: fake.origin } }), "nc1");
         // The device's file manager for its own files, over the same memory.
+        const CACHE = "/media/internal/.phoenix/drive-cache";
+        const dirs = new Set<string>(["/media", "/media/internal"]);
         const local: any = {
             list: async (p: any) => ({ returnValue: true, path: p.path, entries: Object.keys(w.files.data).filter((k) => k.replace(/\/[^/]*$/, "") === p.path)
                 .map((k) => ({ name: k.replace(/^.*\//, ""), path: k, type: "file", size: w.files.data[k].length, mtime: 0, mode: 0o644 })) }),
             stat: async (p: any) => (w.files.data[p.path] ? { returnValue: true, entry: { name: p.path.replace(/^.*\//, ""), path: p.path, type: "file",
                                                                                           size: w.files.data[p.path].length, mtime: 0 } }
                 : { returnValue: false, errorCode: 1, errorText: "No such file" }),
-            mkdir: async (p: any) => ({ returnValue: true, path: p.path }),
+            // As the device's: one level, and only once; on a new device
+            // /media/internal/.phoenix and the transfer folder are missing
+            // (the drives service's downloads make the cache's other folders).
+            mkdir: async (p: any) => {
+                if (dirs.has(p.path)) return { returnValue: false, errorCode: E.EXISTS, errorText: "Already exists: " + p.path };
+                const up = p.path.replace(/\/[^/]*$/, "");
+                if (up.indexOf("/media/internal/") === 0 && !dirs.has(up))
+                    return { returnValue: false, errorCode: 1, errorText: "ENOENT: no such file or directory, mkdir '" + p.path + "'" };
+                dirs.add(p.path);
+                return { returnValue: true, path: p.path };
+            },
             remove: async (p: any) => { delete w.files.data[p.path]; return { returnValue: true, path: p.path }; },
             read: async (p: any) => (w.files.data[p.path] ? { returnValue: true, path: p.path, encoding: p.encoding || "utf8", size: w.files.data[p.path].length,
                 data: Buffer.from(w.files.data[p.path]).toString(p.encoding === "base64" ? "base64" : "utf8") } : { returnValue: false, errorCode: 1, errorText: "No such file" }),
-            write: async (p: any) => { w.files.data[p.path] = new Uint8Array(Buffer.from(p.data, p.encoding === "base64" ? "base64" : "utf8")); return { returnValue: true, path: p.path, size: w.files.data[p.path].length }; }
+            write: async (p: any) => {
+                const parent = p.path.replace(/\/[^/]*$/, "");
+                if (parent === CACHE + "/.transfer" && !dirs.has(parent)) return { returnValue: false, errorCode: 1, errorText: "ENOENT: no such file or directory, open '" + p.path + "'" };
+                w.files.data[p.path] = new Uint8Array(Buffer.from(p.data, p.encoding === "base64" ? "base64" : "utf8")); return { returnValue: true, path: p.path, size: w.files.data[p.path].length }; }
         };
         const router = kit.createDriveRouter({ call: (uri: string, params: any) => w.bus.call(uri, params), local });
         return { w, id, router };

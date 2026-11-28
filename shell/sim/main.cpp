@@ -68,6 +68,7 @@
 #include "simpty.h"
 #include "simsettings.h"
 #include "simprocess.h"
+#include "simnova.h"
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include "simmarketplace.h"
 #include "simtcp.h"
@@ -526,8 +527,13 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // The shell's QML and assets with those pushed by `nova push -d sim`
+    // (simnova.h), once the overlay's boot step has run (a Revert to Image
+    // clears it first).
+    const QString shellQmlDir = rootfs.isValid() && bootDeveloperOverlay(&rootfs, repoDir)
+        ? shellWithPushedChanges(&rootfs, qmlDir, QDir(qmlDir).filePath(QStringLiteral("../assets"))) : qmlDir;
     QQuickView view;
-    view.engine()->addImportPath(qmlDir);
+    view.engine()->addImportPath(shellQmlDir);
     // Compiled modules (Phoenix.Native): the build tree, or installed beside
     // the QML.
     const QString qmlBuildDir = QString::fromUtf8(PHOENIX_QML_BUILD_DIR);
@@ -597,6 +603,10 @@ int main(int argc, char *argv[])
     SimSettings settings;
     SimProcess simProcess;
     view.rootContext()->setContextProperty(QStringLiteral("simProcess"), &simProcess);
+    // Dev push: the device's novad over this simulator's data (simnova.h).
+    SimNova simNova(&rootfs, repoDir, parser.value(instanceOpt), &simProcess);
+    if (rootfs.isValid())
+        simNova.start();
     view.rootContext()->setContextProperty(QStringLiteral("simTranscriberCommand"), transcriberCommand);
     QStringList microphoneFiles;
     for (const QString &f : parser.values(microphoneFileOpt))
@@ -785,7 +795,7 @@ int main(int argc, char *argv[])
         delete chrome;
     });
     view.rootContext()->setContextProperty(QStringLiteral("simChrome"), chrome);
-    view.setSource(QUrl::fromLocalFile(QDir(qmlDir).filePath(QStringLiteral("sim.qml"))));
+    view.setSource(QUrl::fromLocalFile(QDir(shellQmlDir).filePath(QStringLiteral("sim.qml"))));
     if (view.status() != QQuickView::Ready)
         return 1;
     if (chrome) {

@@ -130,11 +130,16 @@ Preferences; and, from wTerm, a shell that is not root by default.
   `useradd` and `ttf-dejavu` package names in the OSE layers, and the
   Luna round trip per keystroke.
 - **Developer Mode (T4):** the Settings page is done (Settings > Developer
-  Mode: a warning, then the device PIN or password; it calls OSE's
-  `com.webos.service.devmode` setDevMode, and the Marketplace already
-  checks it, see [APP-RUNTIME.md](APP-RUNTIME.md#developer-mode)). `exec`
-  still answers `DEVMODE_REQUIRED`; there is no sudo, no SSH server and no
-  Konami code yet. The systemd
+  Mode: a warning, then the device PIN or password; it calls
+  `com.webos.service.devmode` setDevMode, Phoenix's provider on a device,
+  and the Marketplace already checks it, see
+  [APP-RUNTIME.md](APP-RUNTIME.md#developer-mode)). `exec` still answers
+  `DEVMODE_REQUIRED`; there is no sudo yet. The SSH server: a development
+  image has its distribution's debug one; a production image has OpenSSH
+  only while Developer Mode is on, for `user` by key alone, the keys being
+  the computers paired with nova (`phoenix-devmode-ssh`, DEV-PUSH.md "P3b as
+  built"). The Terminal app itself is the device's shell and an SSH
+  *client* (`ssh`, `scp`, `sftp`). The systemd
   unit's `NoNewPrivileges=yes` will have to go when sudo comes.
 - **Keep running in the background** and the sessions dashboard, OSC 777
   notifications, Find, pinch to zoom, selection drag handles, the shell's

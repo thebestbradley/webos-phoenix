@@ -172,6 +172,24 @@ FocusScope {
         MouseArea { anchors.fill: parent }
     }
 
+    // No backlight (a VM: QEMU has none, and phoenix-devices says "backlight
+    // none"): the compositor draws the display's level itself, as phoenix-
+    // sim's veil does (sim.qml). Display.brightness is what a backlight would
+    // be set to: the user's brightness (Settings > Screen & Lock, the system
+    // menu; picture.backlight, LsmSystemStatus), a tenth of it while dimmed.
+    // A device with a backlight draws nothing here (phoenix-devices sets the
+    // panel's). 27 November 2026: before, both sliders moved nothing in the VM.
+    Rectangle {
+        objectName: "brightnessVeil"
+        anchors.fill: parent
+        z: 9998
+        color: "black"
+        readonly property bool drawn: !DeviceConfig.hasBacklight
+        opacity: drawn && phoenix.display.on ? (1 - Math.max(1, Math.min(100, phoenix.display.brightness)) / 100) * 0.85 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+    }
+
     Component.onCompleted: {
         windows.lunaSubscribe("luna://com.webos.bootManager/getBootStatus", { subscribe: true }, root._bootStatus);
         windows.pushSystemStatus({ deviceLocked: phoenix.locked, dockMode: phoenix.dockMode,

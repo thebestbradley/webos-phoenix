@@ -16,6 +16,7 @@ on:
       - scripts/setup-build-luneos.sh
       - scripts/luneos-layers.txt
       - scripts/parse-check.sh
+      - scripts/packageconfig-check.py
       - .github/workflows/parse.yml
 
 # A newer push to a branch or PR cancels its older runs, which would only
@@ -63,7 +64,7 @@ jobs:
       - name: Host tools for bitbake
         run: |
           echo "PHOENIX_PARSE_DIR=$RUNNER_TEMP/webos-phoenix-parse" >> "$GITHUB_ENV"
-          sudo apt-get update
+          .github/ci/apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             gawk diffstat chrpath cpio zstd lz4
 
@@ -137,7 +138,7 @@ jobs:
       - name: Host tools for bitbake
         run: |
           echo "PHOENIX_PARSE_DIR=$RUNNER_TEMP/webos-phoenix-parse-luneos" >> "$GITHUB_ENV"
-          sudo apt-get update
+          .github/ci/apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             gawk diffstat chrpath cpio zstd lz4
 

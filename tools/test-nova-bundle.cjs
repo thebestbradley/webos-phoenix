@@ -537,9 +537,9 @@ print(json.dumps([ir.overlayable(p, rules) for p in json.loads(sys.argv[1])]))`,
     await t("nova: usage, commands still to come, the key's mode", async () => {
         assert.strictEqual((await run()).code, 2);
         assert.strictEqual((await run("frobnicate")).code, 2);
-        const later = await run("push");
+        const later = await run("install");
         assert.strictEqual(later.code, 2);
-        assert.match(later.err, /P2/);
+        assert.match(later.err, /not built yet/);
         assert.strictEqual((await run("package", "--system")).code, 2);
         assert.strictEqual(fs.statSync(key.file).mode & 0o777, 0o600);
         const loose = path.join(TMP, "loose", "key");

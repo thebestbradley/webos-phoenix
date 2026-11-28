@@ -224,6 +224,17 @@ for host in ("ios", "ios-se"):
           not any("multitouch" in a for a in cmd))
 code, _, config, _ = dry(["fairphone-fp6", "--for", "mac"])
 cmd = cub.qemu_arguments(config, "macos")
+check("macos: the GPS port, fed from 127.0.0.1:45570 (tools/vm-location)",
+      has(cmd, "-device", "virtio-serial-pci,id=phoenixgps")
+      and has(cmd, "-chardev", "socket,id=phoenixgps0,host=127.0.0.1,port=45570,reconnect-ms=2000")
+      and has(cmd, "-device", "virtserialport,bus=phoenixgps.0,chardev=phoenixgps0,name=org.webosphoenix.gps.0"), " ".join(cmd))
+code, _, c2, _ = dry(["fairphone-fp6", "--for", "mac", "--gps", "off"])
+check("--gps off: no GPS port", "virtio-serial-pci,id=phoenixgps" not in cub.qemu_arguments(c2, "macos"))
+code, _, c2, _ = dry(["fairphone-fp6", "--for", "ipad", "--gps", "45571"])
+check("--gps PORT on an iPad bundle", "socket,id=phoenixgps0,host=127.0.0.1,port=45571,reconnect-ms=2000"
+      in cub.qemu_arguments(c2, "ios"))
+check("an iPad bundle has no GPS port by default",
+      not any("phoenixgps" in a for a in cub.qemu_arguments(dry(["fairphone-fp6", "--for", "ipad"])[2], "ios")))
 check("macos: HVF and the host's CPU, the device's 8 CPUs and 8192 MiB",
       has(cmd, "-cpu", "host") and any(a.startswith("hvf") for a in after(cmd, "-accel"))
       and has(cmd, "-smp", "cpus=8,sockets=1,cores=8,threads=1") and has(cmd, "-m", "8192"), " ".join(cmd))

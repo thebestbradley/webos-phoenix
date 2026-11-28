@@ -169,7 +169,12 @@ too slow for OSE's Chromium-based WebAppMgr anyway.
 5. **Audio**: PulseAudio/audiod with the device's ALSA UCM profile; in-call
    routing.
 6. **Camera**: libcamera (Fairphone: the ultra-wide only, experimental).
-7. **GPS**: GeoClue (Qualcomm: through the modem's QMI location service).
+7. **GPS**: the nyx GPS module reads the receiver's NMEA port
+   (`/etc/location/gpsConfig.conf`) for OSE's location service (PinePhone
+   Pro: the EG25 modem's `/dev/ttyUSB1`, its GNSS turned on by
+   eg25-manager; unverified on hardware). Qualcomm: the modem's QMI
+   location service, not read yet. Without a receiver the network position
+   answers ([MAPS.md](MAPS.md), "Where the position comes from").
 8. **Suspend**: wake on modem, RTC alarm, power key; battery life.
 
 **Halium fallback for the Fairphone.** If audio and camera stay broken on
@@ -495,6 +500,23 @@ there are no libinput settings (tap-to-click, natural scrolling) to set
 (OPEN-QUESTIONS Q100). The first boot checks the pointer, the trackpad and
 the keyboard shortcuts in card view and with an app maximized
 ([BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm), step 5).
+
+**Brightness and volume on a device** (27 November 2026, Revision 22: the
+Settings brightness slider did not move, and neither it nor the volume
+sliders changed anything the shell showed). The user's brightness is
+settingsservice's `picture.backlight` (1-100) on a device as in the
+simulator: Settings > Screen & Lock writes it, and the shell's
+`LsmSystemStatus` now reads it (it was a placeholder at 100%) and writes
+the system menu's and control center's changes back. OSE's settingsservice
+has no default for the key, so on a new device its get answers `errorKey`
+and subscribes nothing; the shell sets its own level once and asks again,
+and Settings' slider no longer waits for an answer before it moves. A
+machine with no backlight (`DeviceConfig.hasBacklight`: none under
+`/sys/class/backlight`, as in QEMU) gets the level drawn by the compositor,
+a black veil over everything (`PhoenixViewsRoot.qml`), as phoenix-sim does;
+dimming shows the same way. The shell's master volume is read with
+`master/getVolume {}`: audiod-pro refuses `{soundOutput: "alsa"}` there
+(error 204), though `master/setVolume` takes it.
 
 In every case the VM has no ringer switch, vibrator, light sensor or
 backlight to drive (phoenix-devices finds none and says so), no Wi-Fi or
@@ -1183,7 +1205,7 @@ cheapest way to back several legacy APIs at once.
 | **Audio routing, in-call audio** | PulseAudio (what OSE's `audiod-pro` and [`pulseaudio-webos`](https://github.com/webosose/pulseaudio-webos) are built on); [callaudiod](https://gitlab.com/mobian1/callaudiod) for call routing on mainline; `pulseaudio-modules-droid` on Halium | Legacy `com.palm.audio`; OSE `com.webos.service.audio` (volumes, streams, feedback sounds) | Yes for media and system sounds. No voice-call audio policy | Keep PulseAudio for M3 (audiod depends on it; LuneOS does the same). Add a voice-call stream type and routing (earpiece, speaker, headset, Bluetooth HFP) to audiod, driven by telephonyd call state; on mainline delegate the UCM profile switch to callaudiod. PipeWire/WirePlumber (with its PulseAudio compat) is a later migration, only when OSE or LuneOS moves |
 | **Camera** | [libcamera](https://libcamera.org/) on mainline; `droidmedia` + `gst-droid` on Halium (both in LuneOS's layer) | OSE `com.webos.service.camera2` and `com.webos.pipeline.camera`; the apps use `getUserMedia` in the web runtime | Yes, for V4L2/UVC cameras | Phone cameras are not simple V4L2 devices. Mainline: a camera2 HAL plugin on libcamera, or route Chromium's capture through libcamera's V4L2 compatibility layer (*uncertain which is less work*). Halium: a gst-droid source. Expect camera to lag every other area |
 | **Sensors** | [iio-sensor-proxy](https://gitlab.freedesktop.org/hadess/iio-sensor-proxy) on mainline; [sensorfw](https://github.com/sailfishos/sensorfw) (Sailfish OS, Ubuntu Touch) with its hybris adaptor on Halium | Legacy `com.palm.ambientLightSensor`, orientation and acceleration events to apps, proximity during calls | **No sensor service** (nyx-lib defines the light, proximity and orientation interfaces; OSE's nyx-modules implement none of them) | **Light: done** in `phoenix-devices` (below), straight from IIO (`in_illuminance_input` / `_raw` × `_scale`). **Orientation: written, not run** in `phoenix-devices`: the IIO accelerometer (`in_accel_*_raw` × scale, the driver's mount matrix) to the shell's rotation (below; not iio-sensor-proxy, GPL-3.0). Still to do: the legacy accelerometer events to apps, proximity during calls. On Halium, sensorfw instead of IIO. Note: iio-sensor-proxy exposes orientation, light, proximity and compass, not raw acceleration or steps; sensorfw on Halium does expose a step counter |
-| **GPS** | [GeoClue](https://gitlab.freedesktop.org/geoclue/geoclue) (with ModemManager/oFono or gpsd for the GNSS source) | Legacy `com.palm.location`; OSE `com.webos.service.location`; `navigator.geolocation` in the web runtime | Yes: OSE's location service has GPS and network handlers, and nyx has a GPS module | Write a nyx GPS module (or location handler) that reads GeoClue. On Halium, a hybris GNSS module (LuneOS has one). Wire Chromium's geolocation provider to the same service |
+| **GPS** | NMEA from the receiver's serial port (the nyx GPS module, `nyxGpsMain`, with the port in nyx-conf's `gpsConfig.conf`); on Qualcomm, the modem's QMI location service; [GeoClue](https://gitlab.freedesktop.org/geoclue/geoclue) only for Qt Positioning | Legacy `com.palm.location`; OSE `com.webos.service.location`; `navigator.geolocation` in the web runtime | Yes: OSE's location service (LuneOS's, patched in meta-phoenix) with its GPS and network handlers, and nyx's GPS module (the PinePhones and the VM machine build it) | Done for NMEA receivers and VMs (a virtio port fed by `tools/vm-location`); the network position (Wi-Fi, cells, the IP address) and place names come from the platform without a key; a position the user sets. Which source wins: [MAPS.md](MAPS.md). Still to do: a QMI reader for the Qualcomm phones; turning the EG25's GNSS on and off with the handler on the PinePhone Pro; the legacy `com.palm.location` API |
 | **Wi-Fi** | ConnMan + wpa_supplicant/iwd | OSE `com.webos.service.wifi`, `com.webos.service.connectionmanager` (webos-connman-adapter) | **Yes** | None beyond firmware. Settings already codes against these |
 | **Bluetooth** | BlueZ | OSE `com.webos.service.bluetooth2` | **Yes** | Check profiles on phones: HFP for calls (with oFono's HFP support or `com.webos.service.hfp`), A2DP, HID |
 | **VPN** | ConnMan `connman-vpnd` (OpenVPN, WireGuard) | Legacy `com.palm.app.vpn` pane; LuneOS `com.webos.service.vpn` | Partly (ConnMan has it; webos-connman-adapter does not expose it) | Use LuneOS's [`luneos-vpn-adapter`](https://github.com/webOS-ports/luneos-vpn-adapter) (Apache-2.0), which Settings > VPN already codes against (the simulator reimplements it); build it and `connman-vpnd` with the OpenVPN, WireGuard, OpenConnect, vpnc and L2TP plugins into the image |
@@ -1648,9 +1670,23 @@ The service is written: `services/updates`, `com.palm.update` (Palm's update
 daemon's name and API, which luna-systemui's update alerts still use), over
 RAUC's command line (`rauc status`, `info`, `install`, `status mark-active`).
 The feed is static JSON per device type and channel (`server/updates`). See
-[APP-RUNTIME.md](APP-RUNTIME.md#system-updates). Still to do per device: the
-slot layout in `system.conf`, the bootloader backend, the keyring, and
-`rauc-mark-good` after a good start.
+[APP-RUNTIME.md](APP-RUNTIME.md#system-updates). The service marks the
+running slot good itself once the System UI is up (not meta-rauc's
+`rauc-mark-good`, which marks it at boot).
+
+**Done for the ARM64 VM** (28 November 2026; meta-phoenix
+`dynamic-layers/rauc`, [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#system-updates)):
+meta-rauc in LuneOS's layers, an A/B disk booted with UEFI (GRUB on the EFI
+system partition, root slots A and B, a data partition), GRUB's boot counter
+(three tries a slot), `/var`, `/home` and `/media` kept on the data partition
+as overlays, the verity bundle `phoenix-bundle`, and a public test keyring.
+
+**Still to do per device**: each device's slots and boot counter.
+
+| Device | Boot | Plan |
+| --- | --- | --- |
+| PineTab2, PinePhone Pro | U-Boot or Tow-Boot in SPI flash, reading `extlinux.conf` from the FAT boot partition (`phoenix-extlinux.wks.in`) | The same four partitions as the VM, with a U-Boot `boot.scr` in place of `extlinux.conf` (distro boot runs it when there is no `extlinux.conf`): it loads the slots' state from a small text file on the boot partition (`env import -t`), takes RAUC's U-Boot variables (`BOOT_ORDER`, `BOOT_A_LEFT`, `BOOT_B_LEFT`), counts the try with `setexpr`, writes the file back (`env export -t`, `fatwrite`) and boots the slot's own `/boot/Image` and device tree with `rauc.slot=`. In Linux, RAUC's `custom` boot loader backend (a script) reads and writes the same file, so nothing depends on where the device's U-Boot keeps its own environment. Needs a U-Boot built with `fatwrite`, `setexpr` and `env import/export`: to check on each device |
+| Fairphone 6 | Android's boot loader, Android A/B slots | Not the Android slots (switching them from Linux bricks it); a chain-loaded boot loader, to design |
 
 ### Bootloader constraints
 
@@ -1689,7 +1725,10 @@ Verizon Pixels) cannot be unlocked and are out.
   commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
   (parse every recipe) and `bitbake -n webos-phoenix-image` (a dry run that
   resolves the whole task graph, including every `RDEPENDS`, and runs
-  nothing; the `torchd` stub is resolved too). Nothing
+  nothing; the `torchd` stub is resolved too), then
+  `scripts/packageconfig-check.py`, which checks that every `PACKAGECONFIG`
+  option `meta-phoenix` asks for exists in its recipe (OE checks that only in
+  `do_configure`, hours into a build). Nothing
   is fetched (`BB_NO_NETWORK`) or built. Each machine adds about 300 MB
   and about 12 minutes on 4 cores. The build directory is
   `${TMPDIR:-/tmp}/webos-phoenix-parse` unless `PHOENIX_PARSE_DIR` says
@@ -1922,7 +1961,9 @@ the current Chrome, so sites that check the version keep working.
 
 The parse job (`scripts/parse-check.sh`, see Build above) catches recipes
 that do not parse, missing `DEPENDS`/`RDEPENDS` providers, wrong
-`bbappend` targets and layer-series mismatches. It cannot catch what only
+`bbappend` targets, layer-series mismatches and `PACKAGECONFIG` options a
+recipe no longer has (Mesa 26 dropped `kmsro`; the first PineTab2 build
+stopped on it). It cannot catch what only
 shows when sources arrive: a wrong `LIC_FILES_CHKSUM` md5, a `SRC_URI` or
 `SRCREV` that does not exist upstream, a missing `file://` file (bitbake
 only notes its absence while parsing) or a compile error. Those wait for the

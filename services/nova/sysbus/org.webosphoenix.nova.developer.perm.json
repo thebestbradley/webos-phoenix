@@ -1,0 +1,15 @@
+{
+    "org.webosphoenix.nova.developer": [
+        "public",
+        "private",
+        "application.launcher",
+        "application.operation",
+        "phoenix.appmanager.query",
+        "phoenix.appmanager.launch",
+        "phoenix.devmode.query",
+        "systemsettings.query",
+        "activity.operation",
+        "notification.operation",
+        "database.operation"
+    ]
+}

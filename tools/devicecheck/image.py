@@ -198,6 +198,12 @@ def check(root):
     f = Findings(CHECKER)
     plan, unbuilt = install_plan(root)
     notes = list(unbuilt)
+    # install-rootfs.py --manifest (phoenix-apps' do_install) also writes the
+    # image's manifest (docs/DEV-PUSH.md 8.1), which the plan does not list.
+    apps_bb = recipe(root, "phoenix-apps")
+    if apps_bb and re.search(r"install-rootfs\.py[^\n]*--manifest", read(apps_bb)):
+        plan = dict(plan)
+        plan["/usr/share/phoenix/manifest.json"] = None
 
     # Packaging: phoenix-apps' FILES against what its do_install installs.
     apps_recipe = recipe(root, "phoenix-apps")

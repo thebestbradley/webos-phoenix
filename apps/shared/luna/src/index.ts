@@ -26,6 +26,7 @@ export * from "./setup";
 export * from "./vpn";
 export * from "./backup";
 export * from "./updates";
+export * from "./nova";
 export * from "./releasenotes";
 export * from "./account";
 export * from "./hardware";

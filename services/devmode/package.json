@@ -1,0 +1,8 @@
+{
+  "name": "com.webos.service.devmode",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's Developer Mode service on a device (Luna): getDevMode {subscribe} and setDevMode {status}, over OSE's flag file /var/luna/preferences/devmode_enabled; a change restarts the device",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

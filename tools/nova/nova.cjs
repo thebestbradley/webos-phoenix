@@ -8,20 +8,28 @@
 // checkout: run it as ./phoenix nova ..., or put it on the PATH
 // (ln -s "$PWD/tools/nova/nova.cjs" /usr/local/bin/nova).
 //
-// Built (P1):
-//   nova package APPDIR [-o DIR]       an app's .ipk (palm-package)
-//   nova package --system --manifest FILE [options]
-//                                      a dev bundle of what differs from an image
-//   nova verify BUNDLE [options]       check a dev bundle as a device would
-//   nova key                           this computer's key (made on first use)
-// To come (P2 and later, docs/DEV-PUSH.md 12): devices, pair, unpair, push,
-// put, get, status, revert, restart, rescan, install, launch, log,
-// luna-send, term, send.
+// Built: package, verify, key (P1); pair, unpair, devices, push, put, get,
+// status, revert, restart, rescan, log, luna-send, forward, term (P2,
+// lib/remote.cjs, talking to the device's novad: services/nova); install.
+// To come (docs/DEV-PUSH.md 12): install -r, launch, send, generate, inspect.
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+
+// The device's protocol (services/nova) needs @noble/curves, from the
+// checkout's apps/node_modules (./phoenix installs it), as Node would
+// find it with NODE_PATH.
+(function nodePath() {
+    const Module = require("module");
+    const nm = path.resolve(__dirname, "../../apps/node_modules");
+    const paths = (process.env.NODE_PATH || "").split(path.delimiter).filter(Boolean);
+    if (!paths.includes(nm)) {
+        process.env.NODE_PATH = [nm].concat(paths).join(path.delimiter);
+        Module._initPaths();
+    }
+})();
 
 const USAGE = `nova: webOS Phoenix's developer command (docs/DEV-PUSH.md)
 
@@ -51,14 +59,41 @@ const USAGE = `nova: webOS Phoenix's developer command (docs/DEV-PUSH.md)
   nova key
       This computer's public key and fingerprint (made on first use)
 
+With a device (Developer Mode on; TLS on port 6965, both keys pinned):
+
+  nova pair [ADDRESS] [--code CODE] [--as NAME] [--name COMPUTER]
+      Pair with the device at ADDRESS (or -d usb, -d sim): type the six-digit
+      code it shows in Settings > Developer Mode > Pair a Computer
+  nova unpair DEVICE              Forget it, here and on the device
+  nova devices                    Paired devices and whether they answer
+  nova push [--add] [--dry-run] [--note TEXT] [--allow-compiled] [PATHS...]
+      Build a dev bundle of what this checkout changes against the device's
+      image and apply it; it restarts only what changed. PATHS: only those
+      (repository paths such as shell/qml or apps/settings, or device paths)
+  nova put DEVICEPATH FILE        One file into the device's overlay
+  nova get DEVICEPATH [FILE]      One file from the device (its five overlay folders)
+  nova status [--json]            What the overlay holds
+  nova revert [DEVICEPATH]        One file back to the image's; without one,
+                                  Revert to Image (the device restarts)
+  nova restart shell|wam|app ID|service ID
+  nova rescan                     Pick up new or changed apps (Palm's rescan)
+  nova install IPK                Install an app's .ipk (nova package): a new
+                                  app, or an update of one this computer
+                                  installed; never a built-in app or one
+                                  from another publisher (remove it first)
+  nova log [-f] [ID]              The device's journal, for an app, service or unit
+  nova luna-send URI [JSON]       One Luna call on the device
+  nova forward PORT [--local N]   A local port reaching the device's 9998
+                                  (Web Inspector), 3768 (QML debugger) or 22
+  nova term [COMMAND]             SSH to the device as user, with the paired key
+
+  -d, --device NAME|usb|sim[:INSTANCE]|ADDRESS   which device (default: the
+      only one paired, else the last used)
   Every command: --key FILE (default ~/.config/nova/key), -h/--help
 
-Still to come (docs/DEV-PUSH.md 12, P2): devices, pair, unpair, push, put,
-get, status, revert, restart, rescan, install, launch, log, luna-send, term,
-send.`;
+Still to come (docs/DEV-PUSH.md 12): install -r, launch, send, generate, inspect.`;
 
-const LATER = ["devices", "pair", "unpair", "push", "put", "get", "status", "revert", "restart", "rescan", "install",
-               "launch", "log", "luna-send", "term", "send", "generate", "inspect"];
+const LATER = ["launch", "send", "generate", "inspect"];
 
 class UsageError extends Error {}
 
@@ -75,6 +110,7 @@ function parseArgs(argv, specs) {
         if (name === "o") name = "out";
         if (name === "d") name = "device";
         if (name === "h") name = "help";
+        if (name === "f") name = "follow";
         const kind = specs[name];
         if (!kind) throw new UsageError("unknown option " + a);
         if (kind === "bool") { out[name] = true; continue; }
@@ -172,19 +208,43 @@ function cmdKey(argv, out) {
     return 0;
 }
 
-// argv (after "nova") -> exit code. out: {log, err}.
+// The commands that talk to a device: lib/remote.cjs's function, options.
+const REMOTE = {
+    pair: ["pair", { code: "value", as: "value", name: "value" }],
+    unpair: ["unpair", {}],
+    devices: ["listDevices", {}],
+    push: ["push", { add: "bool", "dry-run": "bool", note: "value", "allow-compiled": "bool", repo: "value" }],
+    put: ["put", { note: "value" }],
+    get: ["get", {}],
+    status: ["status", { json: "bool" }],
+    revert: ["revert", {}],
+    restart: ["restart", {}],
+    rescan: ["rescan", {}],
+    install: ["install", {}],
+    log: ["log", { follow: "bool" }],
+    "luna-send": ["lunaSend", {}],
+    forward: ["forward", { local: "value", once: "bool" }],
+    term: ["term", { ssh: "value" }],
+};
+
+// argv (after "nova") -> exit code. out: {log, err, write (bytes to stdout)}.
 async function main(argv, out) {
-    out = out || { log: (t) => console.log(t), err: (t) => console.error(t) };
+    out = out || { log: (t) => console.log(t), err: (t) => console.error(t), write: (b) => process.stdout.write(b) };
     const [cmd, ...rest] = argv;
     try {
         if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") { out.log(USAGE); return cmd ? 0 : 2; }
         if (cmd === "package") return await cmdPackage(rest, out);
         if (cmd === "verify") return await cmdVerify(rest, out);
         if (cmd === "key") return cmdKey(rest, out);
+        if (REMOTE[cmd]) {
+            const a = parseArgs(rest, Object.assign({ device: "value", key: "value", help: "bool" }, REMOTE[cmd][1]));
+            if (a.help) { out.log(USAGE); return 0; }
+            return await require("./lib/remote.cjs")[REMOTE[cmd][0]](a, out);
+        }
         if (LATER.includes(cmd)) { out.err(`nova ${cmd}: not built yet (docs/DEV-PUSH.md section 12, P2 and later)`); return 2; }
         throw new UsageError("unknown command " + cmd);
     } catch (e) {
-        if (e instanceof UsageError) { out.err("nova: " + e.message + " (nova --help)"); return 2; }
+        if (e instanceof UsageError || e.code === "USAGE") { out.err("nova: " + e.message + " (nova --help)"); return 2; }
         if (e.code) { out.err(`nova: ${e.message}`); return 1; }
         throw e;
     }

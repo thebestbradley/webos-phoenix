@@ -1,0 +1,511 @@
+From 5b6f390af6a51ebc01f71fe34485980a214edad3 Mon Sep 17 00:00:00 2001
+From: webOS Phoenix <dev@webosphoenix.org>
+Date: Fri, 27 Nov 2026 19:12:29 -0500
+Subject: [PATCH] Another of the account's devices' position (location sharing)
+
+webOS Phoenix VMs in UTM on an iPad cannot reach the iPad's Core
+Location, Wi-Fi or cells: the network handler only knows the town from
+the IP address. The user's Phoenix account can carry the position of
+another device they own (Safari on that iPad, a Shortcut, a phone with
+GPS), which the account service gives as locationRelay.
+
+- network: at each request, and with each 60 s update while one runs,
+  ask luna://org.webosphoenix.service.account/locationRelay. A position
+  in the reply is the network handler's answer (with its age, accuracy,
+  altitude, heading and speed); while there is one (2.5 minutes after it
+  last came) no Wi-Fi, cell or IP query is posted.
+- network: with the "manual" provider, the answer waits for the account
+  service (at most 3 s) and is its position if it has one, else the
+  user's own.
+- The reply carries no position when this device's switch (Settings) or
+  the account's sharing is off, or none is fresh: the handler goes on as
+  before.
+
+Upstream-Status: Inappropriate [webOS Phoenix configuration]
+---
+ include/NetworkLocationBackend.h              |  25 ++++
+ include/NetworkPositionProvider.h             |  22 +++
+ .../network/NetworkLocationBackend.cpp        |  52 ++++++++
+ .../network/NetworkPositionProvider.cpp       | 125 +++++++++++++++++-
+ tests/test_network_backend.cpp                |  39 ++++++
+ tests/test_network_position.cpp               |  65 +++++++++
+ 6 files changed, 327 insertions(+), 1 deletion(-)
+
+diff --git a/include/NetworkLocationBackend.h b/include/NetworkLocationBackend.h
+index 0d1b453..648cde6 100644
+--- a/include/NetworkLocationBackend.h
++++ b/include/NetworkLocationBackend.h
+@@ -99,6 +99,31 @@ bool parseManualPosition(const char *json, ManualPosition *out);
+ /* The JSON stored and reported for a position. */
+ std::string manualPositionJson(const ManualPosition &position);
+ 
++/*
++ * Another of the account's devices' position (webOS Phoenix's location
++ * sharing): Safari on the iPad a VM runs on, a Shortcut, a phone with GPS.
++ * The account service (org.webosphoenix.service.account/locationRelay)
++ * answers {returnValue, enabled, position: {latitude, longitude, accuracy,
++ * altitude, heading, speed, age (seconds), source: {name}} | null, reason}.
++ */
++#define RELAY_POSITION_METHOD "luna://org.webosphoenix.service.account/locationRelay"
++
++struct RelayPosition {
++    bool set = false;
++    double latitude = 0;
++    double longitude = 0;
++    double accuracy = 0;      /* metres, 1 m to 100 km */
++    double altitude = -1;     /* -1: not known, as GeoLocation takes it */
++    double heading = -1;
++    double speed = -1;
++    double age = 0;           /* seconds since it was measured */
++    std::string source;       /* the device it came from, for the log */
++};
++
++/* From the account service's reply: false (and out unset) when it carries no
++ * position (sharing off here or on the account, none fresh, no service). */
++bool parseRelayPosition(const char *reply, RelayPosition *out);
++
+ /* The body of a request with no radios: the server places the device by its
+  * IP address (beaconDB, Google and Phoenix's service all take it). */
+ #define IP_ONLY_GEOLOCATE_QUERY "{\"considerIp\":true}"
+diff --git a/include/NetworkPositionProvider.h b/include/NetworkPositionProvider.h
+index baa83c4..9edc5cc 100644
+--- a/include/NetworkPositionProvider.h
++++ b/include/NetworkPositionProvider.h
+@@ -195,6 +195,21 @@ private:
+ 
+     static gboolean manualReplyCb(gpointer obj);
+ 
++    /* Another of the account's devices' position (location sharing),
++     * asked of the account service at each request and with each 60 s
++     * update. While it has one (RELAY_HOLD_MS after it last did), the
++     * network handler answers with it, ahead of the user's own (manual)
++     * position, and posts no Wi-Fi, cell or IP query. */
++    void askRelay();
++
++    void relayAnswered(const RelayPosition *position);
++
++    bool relayFresh() const;
++
++    static bool relayCb(LSHandle *sh, LSMessage *reply, void *ctx);
++
++    static gboolean relayTimeoutCb(gpointer obj);
++
+     template<typename T>
+     bool parseWifiData(T& jsonObj);
+ 
+@@ -225,6 +240,13 @@ private:
+     // The server the last fix came from: a fix from one is not handed out
+     // as the answer of the other after setNetworkProvider.
+     NetworkLocationBackend mFixBackend;
++    // Location sharing: the call to the account service, its time limit,
++    // when it last gave a position, and a manual answer that waits for it.
++    LSMessageToken mRelayToken;
++    guint mRelayTimeoutId;
++    bool mRelayPending;
++    int64_t mRelayFixAt;
++    bool mManualWaiting;
+ };
+ 
+ 
+diff --git a/src/handler/position/network/NetworkLocationBackend.cpp b/src/handler/position/network/NetworkLocationBackend.cpp
+index 8c284a0..c62071c 100644
+--- a/src/handler/position/network/NetworkLocationBackend.cpp
++++ b/src/handler/position/network/NetworkLocationBackend.cpp
+@@ -139,6 +139,58 @@ bool parseManualPosition(const char *json, ManualPosition *out) {
+     return ok;
+ }
+ 
++bool parseRelayPosition(const char *reply, RelayPosition *out) {
++    if (!reply || !*reply || !out)
++        return false;
++    JSchemaInfo schemaInfo;
++    jschema_info_init(&schemaInfo, jschema_all(), NULL, NULL);
++    jvalue_ref parsed = jdom_parse(j_cstr_to_buffer(reply), DOMOPT_NOOPT, &schemaInfo);
++    if (jis_null(parsed) || !jis_object(parsed)) {
++        if (!jis_null(parsed))
++            j_release(&parsed);
++        return false;
++    }
++    RelayPosition position;
++    jvalue_ref ok = NULL, pos = NULL;
++    bool returned = false;
++    bool good = jobject_get_exists(parsed, J_CSTR_TO_BUF("returnValue"), &ok) && jis_boolean(ok)
++                && jboolean_get(ok, &returned) == CONV_OK && returned
++                && jobject_get_exists(parsed, J_CSTR_TO_BUF("position"), &pos) && jis_object(pos)
++                && numberField(pos, "latitude", &position.latitude)
++                && numberField(pos, "longitude", &position.longitude)
++                && position.latitude >= -90 && position.latitude <= 90
++                && position.longitude >= -180 && position.longitude <= 180
++                && !(position.latitude == 0 && position.longitude == 0);
++    if (good) {
++        if (!numberField(pos, "accuracy", &position.accuracy) || !(position.accuracy > 0))
++            position.accuracy = 100;
++        if (position.accuracy < 1)
++            position.accuracy = 1;
++        if (position.accuracy > 100000)
++            position.accuracy = 100000;
++        if (!numberField(pos, "age", &position.age) || position.age < 0)
++            position.age = 0;
++        double value;
++        if (numberField(pos, "altitude", &value))
++            position.altitude = value;
++        if (numberField(pos, "heading", &value) && value >= 0 && value <= 360)
++            position.heading = value;
++        if (numberField(pos, "speed", &value) && value >= 0)
++            position.speed = value;
++        jvalue_ref source = NULL, name = NULL;
++        if (jobject_get_exists(pos, J_CSTR_TO_BUF("source"), &source) && jis_object(source)
++            && jobject_get_exists(source, J_CSTR_TO_BUF("name"), &name) && jis_string(name)) {
++            raw_buffer buf = jstring_get(name);
++            position.source.assign(buf.m_str, buf.m_len < 100 ? buf.m_len : 100);
++            jstring_free_buffer(buf);
++        }
++        position.set = true;
++        *out = position;
++    }
++    j_release(&parsed);
++    return good;
++}
++
+ std::string manualPositionJson(const ManualPosition &position) {
+     jvalue_ref obj = jobject_create();
+     jobject_put(obj, J_CSTR_TO_JVAL("latitude"), jnumber_create_f64(position.latitude));
+diff --git a/src/handler/position/network/NetworkPositionProvider.cpp b/src/handler/position/network/NetworkPositionProvider.cpp
+index 2bd55bb..36c2d4a 100644
+--- a/src/handler/position/network/NetworkPositionProvider.cpp
++++ b/src/handler/position/network/NetworkPositionProvider.cpp
+@@ -35,6 +35,11 @@
+  * position instead, and how often an IP position is asked for again. */
+ #define IP_FALLBACK_DELAY_S                    4
+ #define IP_QUERY_INTERVAL_MS                   (10 * 60 * 1000)
++/* Location sharing: how long the account service may take to answer, and
++ * how long its last position keeps the Wi-Fi, cell and IP queries back
++ * (it is asked again every minute while a request runs). */
++#define RELAY_TIMEOUT_MS                       3000
++#define RELAY_HOLD_MS                          (150 * 1000)
+ 
+ static int64_t nowMs() {
+     struct timeval tv;
+@@ -60,6 +65,11 @@ NetworkPositionProvider::NetworkPositionProvider(LSHandle *sh) : PositionProvide
+     mIpFallbackId = 0;
+     mLastIpQuery = 0;
+     mFixBackend = NetworkLocationBackend::BeaconDB;
++    mRelayToken = LSMESSAGE_TOKEN_INVALID;
++    mRelayTimeoutId = 0;
++    mRelayPending = false;
++    mRelayFixAt = 0;
++    mManualWaiting = false;
+ }
+ 
+ /*
+@@ -150,6 +160,98 @@ gboolean NetworkPositionProvider::manualReplyCb(gpointer obj) {
+     return G_SOURCE_REMOVE;
+ }
+ 
++bool NetworkPositionProvider::relayFresh() const {
++    return mRelayFixAt != 0 && nowMs() - mRelayFixAt < RELAY_HOLD_MS;
++}
++
++void NetworkPositionProvider::askRelay() {
++    if (mRelayPending)
++        return;
++    LSError lserror;
++    LSErrorInit(&lserror);
++    mRelayToken = LSMESSAGE_TOKEN_INVALID;
++    if (!LSCallOneReply(mLSHandle, RELAY_POSITION_METHOD, "{}", relayCb, this, &mRelayToken, &lserror)) {
++        // No account service (a build without it): as if it had no position.
++        LS_LOG_DEBUG("askRelay: %s", lserror.message ? lserror.message : "LSCall failed");
++        LSErrorFree(&lserror);
++        relayAnswered(NULL);
++        return;
++    }
++    mRelayPending = true;
++    if (mRelayTimeoutId)
++        g_source_remove(mRelayTimeoutId);
++    mRelayTimeoutId = g_timeout_add(RELAY_TIMEOUT_MS, &relayTimeoutCb, (gpointer) this);
++}
++
++bool NetworkPositionProvider::relayCb(LSHandle *sh, LSMessage *reply, void *ctx) {
++    NetworkPositionProvider *pThis = static_cast<NetworkPositionProvider *>(ctx);
++    if (!pThis)
++        return true;
++    pThis->mRelayPending = false;
++    pThis->mRelayToken = LSMESSAGE_TOKEN_INVALID;
++    if (pThis->mRelayTimeoutId) {
++        g_source_remove(pThis->mRelayTimeoutId);
++        pThis->mRelayTimeoutId = 0;
++    }
++    RelayPosition position;
++    if (parseRelayPosition(LSMessageGetPayload(reply), &position))
++        pThis->relayAnswered(&position);
++    else
++        pThis->relayAnswered(NULL);
++    return true;
++}
++
++/* The account service did not answer in time: go on without it (a reply
++ * that comes later is still used). */
++gboolean NetworkPositionProvider::relayTimeoutCb(gpointer obj) {
++    NetworkPositionProvider *pThis = static_cast<NetworkPositionProvider *>(obj);
++    if (!pThis)
++        return G_SOURCE_REMOVE;
++    pThis->mRelayTimeoutId = 0;
++    LS_LOG_INFO("locationRelay: no answer in %d ms", RELAY_TIMEOUT_MS);
++    if (pThis->mManualWaiting) {
++        pThis->mManualWaiting = false;
++        manualReplyCb(obj);
++    }
++    return G_SOURCE_REMOVE;
++}
++
++void NetworkPositionProvider::relayAnswered(const RelayPosition *position) {
++    bool waiting = mManualWaiting;
++    mManualWaiting = false;
++    if (!position) {
++        mRelayFixAt = 0;
++        if (waiting)
++            manualReplyCb((gpointer) this);
++        return;
++    }
++    int64_t now = nowMs();
++    int64_t measured = now - (int64_t) (position->age * 1000);
++    mRelayFixAt = now;
++    if (!mProcessRequestInProgress && !waiting)
++        return;   // nobody asked any more; kept as "fresh" for the next request
++    if (!waiting && position->latitude == mPositionData.lastLatitude && position->longitude == mPositionData.lastLongitude
++        && position->accuracy == mPositionData.lastAccuracy && mFixBackend == currentBackend()) {
++        LS_LOG_DEBUG("locationRelay: no position change");
++        mPositionData.lastTimeStamp = measured;
++        return;
++    }
++    LS_LOG_INFO("locationRelay: a position from %s, %.0f m, %.0f s old",
++                position->source.empty() ? "another device" : position->source.c_str(), position->accuracy, position->age);
++    mPositionData.lastLatitude = position->latitude;
++    mPositionData.lastLongitude = position->longitude;
++    mPositionData.lastAccuracy = position->accuracy;
++    mPositionData.lastTimeStamp = measured;
++    mFixBackend = currentBackend();
++    set_store_position(measured, position->latitude, position->longitude, position->altitude, position->speed,
++                       position->heading, position->accuracy, INVALID_PARAM, (LOCATION_DB_PREF_PATH_NETWORK));
++    if (getCallback()) {
++        GeoLocation geoLocation(position->latitude, position->longitude, position->altitude, position->accuracy, measured,
++                                position->heading, -1.0, position->speed, -1.0);
++        getCallback()->getLocationUpdateCb(geoLocation, ERROR_NONE, HANDLER_NETWORK);
++    }
++}
++
+ /* No Wi-Fi or cell data came in time (a VM, a tablet on a wired network, a
+  * phone without a SIM): the server places the device by its address. */
+ gboolean NetworkPositionProvider::ipFallbackCb(gpointer obj) {
+@@ -166,6 +268,11 @@ gboolean NetworkPositionProvider::ipFallbackCb(gpointer obj) {
+ bool NetworkPositionProvider::postIpQueryIfDue() {
+     int64_t now = nowMs();
+ 
++    if (relayFresh()) {
++        LS_LOG_DEBUG("postIpQueryIfDue: another device's position is in use");
++        return false;
++    }
++
+     if (mPositionData.lastTimeStamp != 0 && mLastIpQuery != 0 && now - mLastIpQuery < IP_QUERY_INTERVAL_MS) {
+         LS_LOG_DEBUG("postIpQueryIfDue: asked %lld ms ago", (long long) (now - mLastIpQuery));
+         return false;
+@@ -270,6 +377,11 @@ void NetworkPositionProvider::onUpdateWifiData(GHashTable *wifiAccessPoints) {
+ bool NetworkPositionProvider::triggerPostQuery() {
+     char *postData = NULL;
+ 
++    if (relayFresh()) {
++        LS_LOG_DEBUG("triggerPostQuery: another device's position is in use");
++        return true;
++    }
++
+     if (!mwifiStatus && mtelephonyPowerd) {
+         LS_LOG_DEBUG("createCellQuery");
+         postData = createCellQuery();
+@@ -329,6 +441,7 @@ gboolean NetworkPositionProvider::networkUpdateCallback(void *obj) {
+         pThis->getCallback()->getLocationUpdateCb(geoLocation, ERROR_NETWORK_ERROR, HANDLER_NETWORK);
+         return true;
+     }
++    pThis->askRelay();
+     if (pThis->mwifiStatus)
+         pThis->lunaServiceCall(SCAN_METHOD, SCAN_PAYLOAD, scanCb, &(pThis->mScanToken), true);
+     else if (pThis->mtelephonyPowerd)
+@@ -370,12 +483,21 @@ ErrorCodes  NetworkPositionProvider::processRequest(PositionRequest request) {
+                 }
+             }
+ 
++            // Another of the account's devices' position first, when this
++            // device uses it (Settings) and the account shares one.
++            askRelay();
++
+             if (currentBackend() == NetworkLocationBackend::Manual) {
+                 if (!manualPosition().set) {
+                     LS_LOG_ERROR("processRequest: the manual provider has no position");
+                     return ERROR_NOT_AVAILABLE;
+                 }
+-                g_idle_add(&manualReplyCb, (gpointer) this);
++                // Answered when the account service has answered: with its
++                // position if it has one, else the user's own.
++                if (mRelayPending)
++                    mManualWaiting = true;
++                else
++                    g_idle_add(&manualReplyCb, (gpointer) this);
+                 break;
+             }
+ 
+@@ -447,6 +569,7 @@ ErrorCodes  NetworkPositionProvider::processRequest(PositionRequest request) {
+                 mIpFallbackId = 0;
+             }
+             mLastIpQuery = 0;
++            mManualWaiting = false;
+ 
+             mPositionData.resetData();
+             misFirstCellResponse = true;
+diff --git a/tests/test_network_backend.cpp b/tests/test_network_backend.cpp
+index 67bb4dc..e18b8d4 100644
+--- a/tests/test_network_backend.cpp
++++ b/tests/test_network_backend.cpp
+@@ -230,6 +230,44 @@ static void test_manual_position(void) {
+     g_assert_false(untouched.set);
+ }
+ 
++/* The account service's locationRelay reply (location sharing). */
++static void test_relay_position(void) {
++    RelayPosition p;
++    g_assert_true(parseRelayPosition("{\"returnValue\":true,\"enabled\":true,\"sharing\":true,\"reason\":null,"
++                                     "\"position\":{\"latitude\":51.5007,\"longitude\":-0.1246,\"accuracy\":8.5,"
++                                     "\"altitude\":21,\"heading\":null,\"speed\":0,\"timestamp\":1795000000000,\"age\":42,"
++                                     "\"source\":{\"kind\":\"browser\",\"name\":\"iPad\",\"deviceId\":null}}}", &p));
++    g_assert_true(p.set);
++    g_assert_cmpfloat(p.latitude, ==, 51.5007);
++    g_assert_cmpfloat(p.longitude, ==, -0.1246);
++    g_assert_cmpfloat(p.accuracy, ==, 8.5);
++    g_assert_cmpfloat(p.altitude, ==, 21);
++    g_assert_cmpfloat(p.heading, ==, -1);
++    g_assert_cmpfloat(p.speed, ==, 0);
++    g_assert_cmpfloat(p.age, ==, 42);
++    g_assert_cmpstr(p.source.c_str(), ==, "iPad");
++
++    // No accuracy: 100 m; one below 1 m is 1 m; no age: 0.
++    RelayPosition q;
++    g_assert_true(parseRelayPosition("{\"returnValue\":true,\"position\":{\"latitude\":1,\"longitude\":2}}", &q));
++    g_assert_cmpfloat(q.accuracy, ==, 100);
++    g_assert_cmpfloat(q.age, ==, 0);
++    g_assert_true(parseRelayPosition("{\"returnValue\":true,\"position\":{\"latitude\":1,\"longitude\":2,\"accuracy\":0.2}}", &q));
++    g_assert_cmpfloat(q.accuracy, ==, 1);
++
++    // None: off, no position, an error, not a position.
++    RelayPosition untouched;
++    g_assert_false(parseRelayPosition("{\"returnValue\":true,\"enabled\":false,\"position\":null,\"reason\":\"OFF\"}", &untouched));
++    g_assert_false(parseRelayPosition("{\"returnValue\":false,\"errorCode\":\"NOT_ALLOWED\"}", &untouched));
++    g_assert_false(parseRelayPosition("{\"returnValue\":false,\"position\":{\"latitude\":1,\"longitude\":2}}", &untouched));
++    g_assert_false(parseRelayPosition("{\"returnValue\":true,\"position\":{\"latitude\":95,\"longitude\":2}}", &untouched));
++    g_assert_false(parseRelayPosition("{\"returnValue\":true,\"position\":{\"latitude\":0,\"longitude\":0}}", &untouched));
++    g_assert_false(parseRelayPosition("{\"returnValue\":true,\"position\":{\"latitude\":\"1\",\"longitude\":2}}", &untouched));
++    g_assert_false(parseRelayPosition("", &untouched));
++    g_assert_false(parseRelayPosition(NULL, &untouched));
++    g_assert_false(untouched.set);
++}
++
+ int main(int argc, char **argv) {
+     g_test_init(&argc, &argv, NULL);
+     g_test_add_func("/backend/parse_names", test_parse_names);
+@@ -245,5 +283,6 @@ int main(int argc, char **argv) {
+     g_test_add_func("/backend/no_key_in_config", test_no_key_in_config);
+     g_test_add_func("/backend/phoenix_service_from_config", test_phoenix_service_from_config);
+     g_test_add_func("/backend/manual_position", test_manual_position);
++    g_test_add_func("/backend/relay_position", test_relay_position);
+     return g_test_run();
+ }
+diff --git a/tests/test_network_position.cpp b/tests/test_network_position.cpp
+index f928e1a..b1b0650 100644
+--- a/tests/test_network_position.cpp
++++ b/tests/test_network_position.cpp
+@@ -82,6 +82,15 @@ public:
+         return provider.mPositionData.lastTimeStamp;
+     }
+ 
++    // The account service's locationRelay answer (NULL: no position).
++    static void relayAnswer(NetworkPositionProvider& provider, const RelayPosition *position) {
++        provider.relayAnswered(position);
++    }
++
++    static bool relayFresh(const NetworkPositionProvider& provider) {
++        return provider.relayFresh();
++    }
++
+     static void setLastTimeStamp(NetworkPositionProvider& provider, int64_t timestamp) {
+         provider.mPositionData.lastTimeStamp = timestamp;
+     }
+@@ -245,6 +254,60 @@ static void test_fix_from_other_backend_not_reported(void) {
+     g_assert_cmpint(callbacks.calls, ==, 0);
+ }
+ 
++// Another of the account's devices' position (location sharing) answers a
++// running request with its own accuracy and the time it was measured, holds
++// back the IP query, and is let go when the account service has none.
++static void test_relay_position_answers_the_request(void) {
++    NetworkPositionProvider provider(NULL);
++    FakeCallbacks callbacks;
++    provider.setCallback(&callbacks);
++    NetworkPositionProviderTest::startRequest(provider);
++    RelayPosition relay;
++    relay.set = true;
++    relay.latitude = 51.5007;
++    relay.longitude = -0.1246;
++    relay.accuracy = 8;
++    relay.age = 10;
++    relay.source = "iPad";
++    int64_t before = g_get_real_time() / 1000;
++
++    NetworkPositionProviderTest::relayAnswer(provider, &relay);
++
++    g_assert_cmpint(callbacks.calls, ==, 1);
++    g_assert_cmpint(callbacks.lastError, ==, ERROR_NONE);
++    g_assert_cmpfloat(callbacks.last.getLatitude(), ==, 51.5007);
++    g_assert_cmpfloat(callbacks.last.getHorizontalAccuracy(), ==, 8);
++    int64_t measured = NetworkPositionProviderTest::lastTimeStamp(provider);
++    g_assert_cmpint(measured, <=, before - 9000);
++    g_assert_cmpint(measured, >=, before - 11000);
++    g_assert_true(NetworkPositionProviderTest::relayFresh(provider));
++
++    // The same again a minute later: nothing new to tell.
++    NetworkPositionProviderTest::relayAnswer(provider, &relay);
++    g_assert_cmpint(callbacks.calls, ==, 1);
++
++    NetworkPositionProviderTest::relayAnswer(provider, NULL);
++    g_assert_false(NetworkPositionProviderTest::relayFresh(provider));
++    g_assert_cmpint(callbacks.calls, ==, 1);
++}
++
++// With no request running (a one-off request answered and stopped), a late
++// answer tells nobody.
++static void test_relay_position_without_a_request(void) {
++    NetworkPositionProvider provider(NULL);
++    FakeCallbacks callbacks;
++    provider.setCallback(&callbacks);
++    RelayPosition relay;
++    relay.set = true;
++    relay.latitude = 1;
++    relay.longitude = 2;
++    relay.accuracy = 5;
++
++    NetworkPositionProviderTest::relayAnswer(provider, &relay);
++
++    g_assert_cmpint(callbacks.calls, ==, 0);
++}
++
+ int main(int argc, char **argv) {
+     g_test_init(&argc, &argv, NULL);
+     // As LocationService::init() does: responses are handed back to the
+@@ -258,6 +321,8 @@ int main(int argc, char **argv) {
+     g_test_add_func("/network/reply_without_position_is_no_fix", test_reply_without_position_is_no_fix);
+     g_test_add_func("/network/position_without_accuracy", test_position_without_accuracy);
+     g_test_add_func("/network/fix_from_other_backend_not_reported", test_fix_from_other_backend_not_reported);
++    g_test_add_func("/network/relay_position_answers_the_request", test_relay_position_answers_the_request);
++    g_test_add_func("/network/relay_position_without_a_request", test_relay_position_without_a_request);
+     int result = g_test_run();
+     NetworkRequestManager::getInstance()->deInit();
+     return result;
+-- 
+2.56.0
+

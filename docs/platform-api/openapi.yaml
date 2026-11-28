@@ -112,6 +112,13 @@ paths:
       responses: { "201": { description: created, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceCreated" } } } }, "422": { $ref: "#/components/responses/Error" } }
   /v1/me/devices:
     get: { tags: [account], security: [{ bearer: [account] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceList" } } } } } }
+  /v1/me/location:
+    summary: "Location sharing between the account's own devices (docs/MAPS.md, \"Another device's position\"): the latest position only, kept 30 minutes from when it was measured, off until the account turns it on"
+    get: { tags: [account], security: [{ bearer: [account] }], summary: "{sharing, ttlSeconds, position: {latitude, longitude, accuracy, altitude, altitudeAccuracy, heading, speed, timestamp, age, expiresAt, source: {kind, name, deviceId}} | null}", responses: { "200": { description: ok } } }
+    put: { tags: [account], security: [{ bearer: [account] }], summary: "This device's own position {latitude, longitude, accuracy?, altitude?, altitudeAccuracy?, heading?, speed?, timestamp?}; a token bound to a registered device", responses: { "200": { description: "as GET" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } } }
+    delete: { tags: [account], security: [{ bearer: [account] }], summary: "Forget the position now", responses: { "200": { description: "as GET" } } }
+  /v1/conformance/location:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "The mock platform only (the real platform has no such control; its Location sharing page does this): {user?, enabled?, position?: {latitude, longitude, accuracy?, timestamp?, name?, kind?} | null}, standing in for the website's Location sharing page", responses: { "200": { description: "as GET /v1/me/location" } } }
   /v1/devices/{id}:
     patch: { tags: [account], security: [{ bearer: [account] }], parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
     delete: { tags: [account], security: [{ bearer: [account] }], summary: "Signs the device out: its tokens, WebDAV password and push channels go", parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "204": { description: gone } } }
