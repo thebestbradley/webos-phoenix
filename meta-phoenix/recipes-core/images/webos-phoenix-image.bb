@@ -58,6 +58,13 @@ inherit phoenix-devpush
 PHOENIX_RAUC ??= "0"
 IMAGE_INSTALL:append = "${@' rauc rauc-service rauc-conf phoenix-slots e2fsprogs-resize2fs' if d.getVar('PHOENIX_RAUC') == '1' else ''}"
 BAD_RECOMMENDATIONS:append = "${@' rauc-mark-good' if d.getVar('PHOENIX_RAUC') == '1' else ''}"
+# wic leaves each partition's file system in tmp-wic until the next image
+# (image_types_wic.bbclass removes it only then): the A/B disk's root slot is
+# another 4 GiB or more there. The disk itself is in DEPLOY_DIR_IMAGE.
+phoenix_wic_tidy() {
+    rm -rf ${WORKDIR}/tmp-wic
+}
+do_image_wic[postfuncs] += "${@'phoenix_wic_tidy' if d.getVar('PHOENIX_RAUC') == '1' else ''}"
 
 # The web apps' user agent: Chrome on Android at the current Chrome stable
 # major, set in WebAppMgr at each start (/etc/wam/plugins/conf.sh;

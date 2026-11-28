@@ -53,7 +53,23 @@ RAUC_BUNDLE_VERSION = "${@phoenix_bundle_info(d, 'version')}"
 RAUC_BUNDLE_VERSION[vardepvalue] = "the image's product version"
 RAUC_BUNDLE_DESCRIPTION = "webOS Phoenix for ${RAUC_BUNDLE_COMPATIBLE}"
 
+# Room on the build host: bundle.bbclass copies the slot image into the
+# bundle directory with shutil.copy, which writes the ext4's holes as data
+# (9.7 GiB for 4.3 GiB of blocks, November 2026). The deployed image is on
+# the same file system (TMPDIR), so link it there instead, and only read it
+# (mksquashfs). do_configure:append puts shutil back.
 python do_configure:prepend() {
+    import os, shutil
+    phoenix_copy = shutil.copy
+    def phoenix_link_or_copy(src, dst, *args, **kwargs):
+        try:
+            if os.path.lexists(dst):
+                os.remove(dst)
+            os.link(src, dst)
+            return dst
+        except OSError:
+            return phoenix_copy(src, dst, *args, **kwargs)
+    shutil.copy = phoenix_link_or_copy
     for key in ("build", "version"):
         if phoenix_bundle_info(d, key) == "unknown":
             bb.fatal("phoenix-bundle: no %s in the image's .phoenix.json (phoenix-devpush.bbclass)" % key)
@@ -71,6 +87,16 @@ python do_configure:prepend() {
             bb.fatal("phoenix-bundle: the rootfs (%d MiB) does not fit a root slot (PHOENIX_ROOT_SLOT_SIZE = %s)" % (size >> 20, slot))
 }
 
+python do_configure:append() {
+    shutil.copy = phoenix_copy
+}
+# Once the bundle is made the link is not needed; without this it would
+# keep an old image's blocks after the image is rebuilt.
+phoenix_bundle_tidy() {
+    rm -f ${BUNDLE_DIR}/*.ext4
+}
+do_bundle[postfuncs] += "phoenix_bundle_tidy"
+
 # The signing certificate and key: the TEST development certificate by
 # default (meta-phoenix/files/rauc/test, public keys: bundles only test
 # images install). A release bundle is re-signed with the owner's key
@@ -83,10 +109,18 @@ RAUC_CERT_FILE = "${PHOENIX_RAUC_CERT}"
 RAUC_KEY_FILE = "${PHOENIX_RAUC_KEY}"
 RAUC_KEYRING_FILE = "${PHOENIX_RAUC_KEYRING}"
 
-# The bundle under the build's name too, as the feed publishes it
-# (phoenix-<build>.raucb is what com.palm.update saves it as).
-do_deploy:append() {
+# Deployed as a hard link to the bundle do_bundle made (bundle.bbclass's
+# do_deploy copies it: one more copy of several GB), under the bundle's
+# names and the build's (<compatible>-<build>.raucb, as
+# platform:publish-testing-update publishes it), after checking it as the
+# device will (the keyring). No crypt or casync bundle here.
+do_deploy() {
+    install -d ${DEPLOYDIR}
+    chmod 0644 ${B}/bundle.raucb
     build=$(${STAGING_BINDIR_NATIVE}/rauc info --keyring=${RAUC_KEYRING_FILE} --output-format=shell ${B}/bundle.raucb | sed -n 's/^RAUC_MF_BUILD=//p' | tr -d "'\"")
     [ -n "$build" ] || bbfatal "phoenix-bundle: rauc info shows no build"
+    ln -f ${B}/bundle.raucb ${DEPLOYDIR}/${BUNDLE_NAME}${BUNDLE_EXTENSION} 2>/dev/null || \
+        install -m 0644 ${B}/bundle.raucb ${DEPLOYDIR}/${BUNDLE_NAME}${BUNDLE_EXTENSION}
+    ln -sf ${BUNDLE_NAME}${BUNDLE_EXTENSION} ${DEPLOYDIR}/${BUNDLE_LINK_NAME}${BUNDLE_EXTENSION}
     ln -sf ${BUNDLE_NAME}${BUNDLE_EXTENSION} ${DEPLOYDIR}/${RAUC_BUNDLE_COMPATIBLE}-$build${BUNDLE_EXTENSION}
 }
