@@ -104,6 +104,7 @@ var COPY = {
     CONNECTION_FAILED: "Cannot reach the " + ACCOUNT_NAME + " server. Check this device's connection and try again.",
     STILL_TRYING_OFFLINE: "Cannot reach the " + ACCOUNT_NAME + " server right now; still trying. Check this device's connection.",
     SERVER_ERROR: "The " + ACCOUNT_NAME + " server is having trouble. Try again in a few minutes.",
+    RATE_LIMITED: "The " + ACCOUNT_NAME + " server is busy. Wait a minute, then sign in again.",
     STILL_TRYING_SERVER: "The " + ACCOUNT_NAME + " server is having trouble; still trying. You can approve the code meanwhile.",
     EXPIRED: "The code expired before it was approved; sign in again for a new one.",
     CODE_GONE: "This code no longer works; sign in again for a new one.",
@@ -210,11 +211,15 @@ function createAccountService(deps) {
             throw err("CONNECTION_FAILED", COPY.CONNECTION_FAILED);
         });
     }
-    // The server's error, with the copy above for a server that is away (5xx
-    // without its own words: Laravel's 503 page, a proxy's 502).
+    // The server's error, with the copy above for a server that is away or
+    // busy (5xx or 429 without its own words: Laravel's 503 and 429 pages, a
+    // proxy's 502).
     function apiError(res, what) {
         var e = platform.http.apiError(res, what, now().getTime());
-        if (res.status >= 500 && /answered \d+$/.test(e.message)) e.message = COPY.SERVER_ERROR;
+        if (/answered \d+$/.test(e.message)) {
+            if (res.status >= 500) e.message = COPY.SERVER_ERROR;
+            else if (res.status === 429) e.message = COPY.RATE_LIMITED;
+        }
         return e;
     }
     function json(res, what) { return platform.http.json(res, what); }

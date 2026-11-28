@@ -328,6 +328,24 @@ describe("signing in: the edge cases", () => {
         await until(async () => (await statusOf(svc)).state === "signedIn");
     });
 
+    // Seen live against Phoenix-Web-Services under its preview lock: its
+    // device-api limit (60 a minute from one address) answered GET /v1/me
+    // with 429 while the device finished signing in.
+    it("rate limited (429) while finishing: signed out with nothing kept, and the copy says to try again shortly", async () => {
+        let limited = true;
+        const svc = service({ request: (req: Any) => limited && /\/v1\/me$/.test(req.url)
+            ? Promise.resolve({ status: 429, headers: { "content-type": "text/html", "retry-after": "30" }, body: "<html>Too Many Requests</html>" })
+            : device.request(req) });
+        const st = await svc.signIn({ method: "code" }, S);
+        mock.approve(st.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedOut" && !keystore["account:tokens"]);
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "RATE_LIMITED", errorText: expect.stringMatching(/busy\. Wait a minute, then sign in again/) });
+        limited = false;
+        const again = await svc.signIn({ method: "code" }, S);
+        mock.approve(again.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+    });
+
     it("the device removed on the website: the next call signs it out, says so, and nothing is kept", async () => {
         const svc = service();
         const st = await signedIn(svc);
