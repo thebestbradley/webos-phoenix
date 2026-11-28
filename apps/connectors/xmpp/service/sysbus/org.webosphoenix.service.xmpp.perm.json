@@ -5,6 +5,9 @@
         "accounts.operation",
         "accounts.transport",
         "notification.operation",
-        "messaging.operation"
+        "messaging.operation",
+        "phoenix.accounts.list",
+        "phoenix.accounts.info",
+        "phoenix.accounts.read-credentials"
     ]
 }

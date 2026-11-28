@@ -10,5 +10,8 @@
     ],
     "phoenix.xmpp.signin": [
         "oem"
+    ],
+    "phoenix.xmpp.messaging": [
+        "oem"
     ]
 }

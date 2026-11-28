@@ -20,5 +20,9 @@
         "org.webosphoenix.service.matrix/signInOptions",
         "org.webosphoenix.service.matrix/checkCredentials",
         "org.webosphoenix.service.matrix/signIn"
+    ],
+    "phoenix.matrix.messaging": [
+        "org.webosphoenix.service.matrix/setPresence",
+        "org.webosphoenix.service.matrix/markRead"
     ]
 }

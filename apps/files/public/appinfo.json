@@ -20,7 +20,6 @@
     "requiredPermissions": [
         "filemanager.operation",
         "application.launcher",
-        "application.operation",
-        "applicationinstall.management"
+        "application.operation"
     ]
 }
