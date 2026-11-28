@@ -88,8 +88,9 @@ DAV service, the hardware and updates services, OSE's installer, the
 accounts service's capability callbacks (`onCreate`, `onEnabled`, ...,
 app-services' `notify-created.js`) and a connector's own outbox watch.
 
-`PHOENIX_BUS_PERMISSIONS=log` (phoenix-sim, `tools/serve-rootfs.py`) only
-warns; `PHOENIX_BUS_LOG=FILE` has serve-rootfs.py write each refusal with
+The simulator refuses by default. `PHOENIX_BUS_PERMISSIONS=log`
+(phoenix-sim, `tools/serve-rootfs.py`) only warns, for a developer whose
+app is not ready yet; `PHOENIX_BUS_LOG=FILE` has serve-rootfs.py write each refusal with
 the stack that made it. A test's own probe calls, made in an app's page to
 drive a service, are not the app's: such a test gives that app the groups
 it needs through `--host-json '{"busGrants": {"<app id>": [...]}}'`,

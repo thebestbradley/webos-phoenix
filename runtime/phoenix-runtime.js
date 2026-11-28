@@ -1537,13 +1537,13 @@
     //   - A service with no api files in the table (the simulator's own,
     //     what a device answers in the page) is not checked.
     //
-    // host.json's "busPermissions" says how: "enforce" refuses, "log" (the
-    // default while the apps' refusals are found) only warns in the console ("[phoenix-runtime] bus: would
+    // host.json's "busPermissions" says how: "enforce" (the default) refuses,
+    // "log" only warns in the console ("[phoenix-runtime] bus: would
     // refuse"). PHOENIX_BUS_PERMISSIONS=log in the environment of phoenix-sim
     // or tools/serve-rootfs.py sets it; with PHOENIX_BUS_LOG=FILE
     // serve-rootfs.py also writes every refusal pages report to FILE, one JSON
     // line each (host.json "busPermissionsReport": true).
-    var BUS_DEFAULT_MODE = "log";
+    var BUS_DEFAULT_MODE = "enforce";
     var bus = { table: undefined, mode: undefined, report: false, grants: {}, clients: {}, warned: {} };
     // The two files are fetched as the page starts, without waiting: a
     // synchronous request made while the page is being left (the calls sent
