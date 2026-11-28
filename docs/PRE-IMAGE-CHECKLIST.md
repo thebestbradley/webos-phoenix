@@ -139,6 +139,7 @@ its owner. Counts are on 10 October 2026.
 | F7 | db8 kinds and permissions | 🟡 | packaging | install-rootfs.py puts each app's `configuration/db/kinds` and `permissions` in `/etc/palm/db/`, which OSE's configurator registers at boot (`BusClient.cpp:47`). Apps' kinds written by code at first launch (the React apps' `putKind`) need `database.operation` (C4) |
 | F8 | Activities registered | ✅ | packaging | B12 |
 | F9 | Optional configuration with defaults | 🟡 | each service's owner | `/etc/phoenix/transcriber.json` (Voice Memos' transcriber: model and threads) is read when present; no recipe installs one, so the defaults apply. Known finding of `check-image.py` |
+| F10 | Developer apps out of sight | 🟡 | device shell, packaging | The owner's rule (27 November 2026, "Hide unless Developer Mode"): the developer apps (`"phoenix": {"developer": true}`: Notification Lab, the framework demos, Terminal; the platform's test apps listed in `meta-phoenix/conf/developer-apps.json`, flagged at image time by `phoenix-developer-apps.bbclass`) are not in the launcher, the dock, Just Type, the Assistant's apps or the app pickers until Developer Mode is on (APP-RUNTIME.md, "Developer apps"). Tested with stand-ins (`shell/tests-device/tst_lsm.qml`, `services/appmanager`, `tools/test-install-rootfs.py`); to check on an image |
 
 ## D. Display
 

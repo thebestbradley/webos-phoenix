@@ -50,7 +50,8 @@
 //
 // createAppManager({sam(method, params) -> Promise<reply>, readFile(path) ->
 // string | null, registry: {load() -> obj | null, save(obj)}, now(),
-// appFolders() -> [the ids of the app folders installed]}) ->
+// appFolders() -> [the ids of the app folders installed], developerMode() ->
+// Promise<boolean>: whether Developer Mode is on}) ->
 // {methods: {name: (params, caller) -> Promise<reply>}, watchLaunchPoints}
 // STATUS: written against SAM's source and appmanager.test.ts; not yet run
 // on a device.
@@ -205,6 +206,23 @@ function createAppManager(opts) {
     }
     function forget() { appsCache = null; }
     function app(list, id) { return list.filter(function (a) { return a.id === id; })[0] || null; }
+    function developerMode() {
+        return Promise.resolve().then(function () { return opts.developerMode ? opts.developerMode() : false; })
+            .then(function (on) { return on === true; }, function () { return false; });
+    }
+    // The developer apps (appinfo.json "phoenix": {"developer": true}; docs/
+    // APP-RUNTIME.md "Developer apps") to leave out now: {id: true}, none
+    // while Developer Mode is on.
+    function developerApps() {
+        return developerMode().then(function (on) {
+            if (on) return {};
+            return apps().then(function (list) {
+                var out = {};
+                list.forEach(function (a) { if (a.phoenix && a.phoenix.developer === true) out[a.id] = true; });
+                return out;
+            });
+        });
+    }
 
     // ---- The handler registry (MimeSystem's table, in a file) --------------------------
     function registry() {
@@ -421,18 +439,34 @@ function createAppManager(opts) {
                 return ok({ appId: id, basePath: entry });
             });
         },
+        // SAM's launch points, less the developer apps' while Developer Mode
+        // is off (the simulator's listLaunchPoints; the Assistant opens apps
+        // from this list).
         listLaunchPoints: function () {
-            return sam("listLaunchPoints", {}).then(function (r) {
-                return r.returnValue === false ? r : ok({ launchPoints: Array.isArray(r.launchPoints) ? r.launchPoints : [] });
+            return Promise.all([sam("listLaunchPoints", {}), developerApps()]).then(function (replies) {
+                var r = replies[0], hide = replies[1];
+                if (r.returnValue === false) return r;
+                var lps = Array.isArray(r.launchPoints) ? r.launchPoints : [];
+                return ok({ launchPoints: lps.filter(function (lp) { return !hide[lp && lp.id]; }) });
             });
         },
-        // Launch points whose title has a word starting with the keyword.
+        // Launch points whose title has a word starting with the keyword,
+        // less the apps the launcher does not show: an app whose appinfo.json
+        // says "visible": false or "phoenix": {"hidden": true}, and, while
+        // Developer Mode is off, a developer app ("phoenix": {"developer":
+        // true}; docs/APP-RUNTIME.md "Developer apps"), as the simulator's
+        // searchApps leaves them out. Just Type and the Assistant search here.
         searchApps: function (p) {
             var k = String(p.keyword || "").toLowerCase();
             if (!k) return Promise.resolve(ok({ apps: [] }));
-            return sam("listLaunchPoints", {}).then(function (r) {
+            return Promise.all([sam("listLaunchPoints", {}), apps(), developerMode()]).then(function (replies) {
+                var r = replies[0], list = replies[1], developerOn = replies[2];
+                if (r.returnValue === false) return r;
                 var lps = Array.isArray(r.launchPoints) ? r.launchPoints : [];
                 return ok({ apps: lps.filter(function (lp) {
+                    var info = app(list, lp.id), phoenix = info && info.phoenix || {};
+                    if (!info || info.visible === false || phoenix.hidden || (phoenix.developer && !developerOn) ||
+                        lp.id === "com.palm.launcher" || lp.id === "com.palm.systemui") return false;
                     return (" " + String(lp.title || "").toLowerCase()).indexOf(" " + k) >= 0;
                 }).map(function (lp) { return { launchPoint: lp.launchPointId }; }) });
             });

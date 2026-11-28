@@ -7,5 +7,6 @@
 import QtQuick
 
 ListModel {
+    objectName: "fakeLaunchPoints"
     property string appId: ""
 }

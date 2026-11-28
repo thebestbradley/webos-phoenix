@@ -63,6 +63,37 @@ Item {
         appId: LS.appId
     }
 
+    // What SAM's launch points do not carry: each app's appinfo.json, from
+    // SAM's listApps (its "phoenix" metadata and "visible"), by id. An app
+    // whose appinfo.json says "phoenix": {"developer": true} (Notification
+    // Lab, the framework demos, Terminal; the image's other test apps,
+    // meta-phoenix/conf/developer-apps.json) is a developer app: its entry's
+    // developer "devmode" keeps it out of the launcher, the dock and Just
+    // Type while Developer Mode is off (Shell.developerShown; docs/
+    // APP-RUNTIME.md "Developer apps"). One whose appinfo.json says
+    // "visible": false or "phoenix": {"hidden": true} (a connector, an
+    // account's sign-in page, First Use) is not in the launcher (tab -1).
+    // Asked again whenever the launch points change (an install).
+    property var _appMetadata: ({})
+    function refreshAppMetadata() {
+        lunaCall("luna://com.webos.applicationManager/listApps", {}, function(reply) {
+            if (!reply || reply.returnValue === false || !Array.isArray(reply.apps))
+                return;
+            var byId = {};
+            reply.apps.forEach(function(a) { if (a && a.id) byId[a.id] = a; });
+            source._appMetadata = byId;
+            rebuildApps.restart();
+        });
+    }
+    function developerRequirement(value) {
+        return value === "unlock" ? "unlock" : (value ? "devmode" : "");
+    }
+    Timer {
+        id: refreshMetadata
+        interval: 0
+        onTriggered: source.refreshAppMetadata()
+    }
+
     // Copy launch points into a plain ListModel the shell can read with get().
     Instantiator {
         id: launchPointCopies
@@ -72,7 +103,7 @@ Item {
             required property string title
             required property string icon
         }
-        onObjectAdded: rebuildApps.restart()
+        onObjectAdded: { rebuildApps.restart(); refreshMetadata.restart(); }
         onObjectRemoved: rebuildApps.restart()
     }
 
@@ -85,10 +116,14 @@ Item {
                 var lp = launchPointCopies.objectAt(i);
                 if (!lp)
                     continue;
+                var info = source._appMetadata[lp.id] || {};
+                var phoenix = info.phoenix || {};
                 source.apps.append({
                     appId: lp.id, title: lp.title, icon: lp.icon, largeIcon: "",
                     color: "#666666", glyph: lp.title.charAt(0),
-                    tab: 0, quickLaunch: i < 4 ? i + 1 : 0
+                    tab: phoenix.hidden || info.visible === false ? -1 : 0,
+                    quickLaunch: i < 4 ? i + 1 : 0,
+                    developer: source.developerRequirement(phoenix.developer)
                 });
             }
         }
@@ -1179,6 +1214,7 @@ Item {
     }
 
     Component.onCompleted: {
+        refreshAppMetadata();
         startBootApps();
         lunaSubscribe("luna://com.webos.applicationManager/getAppLifeEvents", { subscribe: true },
                       function(r) { source.bootAppEvent(r); });
