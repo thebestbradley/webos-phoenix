@@ -940,21 +940,52 @@ conflicts are `apps/dav`'s.
   10.15); only an account never upgraded still has VTODO lists, which, as on
   any DAV account, Calendar does not show (CalDAV tasks for Tasks are not
   built).
+- **Edges** (28 November 2026): only iCloud's hosts are reached
+  (`*.icloud.com` and the image's own; `presets.js` `checkUrl`, before
+  every request and redirect), so the password goes nowhere else; an
+  account of iCloud in mainland China (home sets or a redirect on
+  `*.icloud.com.cn`) is told `REGION_NOT_SUPPORTED` at once, with why, on
+  the sign-in page; a password revoked later flags the account
+  (`401_UNAUTHORIZED`) with a sync state text saying so. A partition move
+  (pNN to pMM, same paths) keeps every collection, object and id, and
+  uploads what changed meanwhile. 429 and 503 go through synckit's
+  `createHttp` (short `Retry-After` waited out, a long one ends the sync as
+  `503_SERVICE_UNAVAILABLE` with `retryAt`, nothing sent before then; a
+  503 while uploading stops the sync). An upload whose answer is lost makes
+  no second copy (the href is kept on the object before it is sent; the
+  server's resource at it is linked, a 412 on create is sent over).
+  Sync-collection pages (507) are followed to the end, and a listing cut
+  short never removes anything. A calendar shared read-only (its
+  privileges: `write-properties` alone is not write; or a 403 on a change,
+  remembered) shows read-only, and a change made on the device anyway is
+  undone and named in the sync's `refused` and `errors`. Two accounts keep
+  apart (a new contact's photo is keyed by its account); removing one, or
+  turning a capability off, waits for a sync that is running.
 - **Hosts from the image**: `/etc/palm/dav/presets.json`
   (`{"com.webosphoenix.icloud": {"carddav", "caldav"}}`, http(s) only; the
   simulator's store `systemConfig:dav/presets.json`) points a preset
   elsewhere: the tests' stand-in, or a mirror.
 - **Tests**: a stand-in that behaves like iCloud
   (`apps/dav/service/test/icloud.cjs`: two front hosts with the well-known
-  redirect and the principal, two partition hosts in front of Radicale,
-  only the app-specific password, a group card, a VTODO-only list);
-  `apps/dav/service/icloud.test.ts` (9 tests); `tools/test-icloud-sync.cjs`
-  in Chromium (Accounts, add iCloud, the account password refused,
-  contacts and an event both ways, the account deleted; `--tablet`).
+  redirect and the principal, partition hosts in front of Radicale,
+  only the app-specific password, a group card, a VTODO-only list; and on
+  a test's asking: several Apple Accounts, a partition move, 503 / 429 with
+  `Retry-After`, dropped connections, slow answers, sync-collection in
+  pages, expired sync-tokens, a calendar shared read-only, a mainland-China
+  account); `apps/dav/service/icloud.test.ts` (9 tests) and
+  `icloud-edges.test.ts` (23: the edges above, conflicts both ways, deleted
+  on iCloud while edited on the device, a recurring event with exceptions
+  across the end of DST, all-day events between Los Angeles and Tokyo, a
+  contact with a photo, several phones and emails and Unicode names,
+  groups, 1040 contacts in pages of 40, two accounts, removal during a
+  sync); `tools/test-icloud-sync.cjs` in Chromium (Accounts, add iCloud,
+  the account password refused, a mainland-China account told it is not
+  supported, contacts and an event both ways, the account deleted;
+  `--tablet`).
 - **Not yet**: a run against a live Apple Account (needs an Apple Account
   with two-factor authentication and an app-specific password; nothing to
-  register). Chinese mainland accounts (`contacts.icloud.com.cn`, which
-  DAVx5 reports iCloud sometimes names wrongly) are not handled.
+  register). Accounts of iCloud in mainland China are refused clearly,
+  not synced (their hosts, `*.icloud.com.cn`, untried).
 
 **Known limits.** An edit made on the device (a task ticked in Tasks, an
 event moved in Calendar) reaches the provider at the account's next sync

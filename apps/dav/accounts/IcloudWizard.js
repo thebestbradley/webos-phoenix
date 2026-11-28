@@ -119,7 +119,11 @@ enyo.kind({
         this.$.validate.call(params);
     },
 
-    errorText: function (code) {
+    errorText: function (code, response) {
+        // The service's own words: an account of iCloud in mainland China
+        // (lib/presets.js), or a host iCloud sent us to that is not its own.
+        if ((code === "REGION_NOT_SUPPORTED" || code === "400_BAD_REQUEST") && response && response.errorText)
+            return response.errorText;
         if (code === "401_UNAUTHORIZED")
             return "iCloud did not accept this email address and password. Use an app-specific password from " +
                    "account.apple.com (Sign-In and Security, App-Specific Passwords), not your Apple Account's own password.";
@@ -134,7 +138,7 @@ enyo.kind({
         this.$.signInButton.setCaption(AccountsUtil.BUTTON_SIGN_IN);
         this.fieldChanged();
         if (!inResponse || !inResponse.returnValue) {
-            this.$.errorMessage.setContent(this.errorText(inResponse && inResponse.errorCode));
+            this.$.errorMessage.setContent(this.errorText(inResponse && inResponse.errorCode, inResponse));
             this.$.errorBox.show();
             return;
         }

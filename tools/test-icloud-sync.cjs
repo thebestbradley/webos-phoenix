@@ -13,8 +13,9 @@
 // In headless Chromium with runtime/phoenix-runtime.js:
 //   1. Accounts -> Add an Account -> iCloud -> the sign-in page
 //      (apps/dav/accounts/icloud.html): the Apple Account's own password is
-//      refused with what to do, the app-specific password signs in, Create
-//      Account runs the first sync;
+//      refused with what to do, an account of iCloud in mainland China is
+//      told at once that it is not supported, the app-specific password
+//      signs in, Create Account runs the first sync;
 //   2. the contact and the event are in db8, Contacts and Calendar show
 //      them; the group card and the reminder are not;
 //   3. a contact and an event made on the device reach the stand-in;
@@ -99,6 +100,8 @@ async function main() {
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
     const ic = await icloud.start();
+    // An Apple Account of iCloud in mainland China (its home sets on *.icloud.com.cn).
+    const cn = await ic.addUser({ user: "li.wei@icloud.com", appPassword: "cnpw-cnpw-cnpw-cnpw", dsid: "30033003", region: "cn" });
     const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
     let browser;
     try {
@@ -179,6 +182,16 @@ async function main() {
         check(/did not accept/.test(refused) && /app-specific password/.test(refused),
               "the Apple Account's own password is refused, saying to use an app-specific password");
         await shot(page, "3-account-password");
+        await inputs.nth(0).fill(cn.user);
+        await inputs.nth(1).fill(cn.appPassword);
+        await inputs.nth(1).press("Tab");
+        const cnStarted = Date.now();
+        await frame.getByText("Sign In", { exact: true }).click();
+        await frame.waitForFunction(() => /mainland China/.test(document.body.innerText), null, { timeout: 10000 }).catch(() => {});
+        check(/mainland China/.test(await frame.evaluate(() => document.body.innerText)) && /not supported/.test(await frame.evaluate(() => document.body.innerText)),
+              "an account of iCloud in mainland China is told it is not supported (in " + (Date.now() - cnStarted) + " ms)");
+        await shot(page, "3b-mainland-china");
+        await inputs.nth(0).fill(ic.user);
         await inputs.nth(1).fill(ic.appPassword);
         await inputs.nth(1).press("Tab");
         await frame.getByText("Sign In", { exact: true }).click();

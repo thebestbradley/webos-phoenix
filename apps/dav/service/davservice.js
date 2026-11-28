@@ -66,8 +66,15 @@ var WEBCAL_INTERVAL = "30m";
 var errorCodeOf = synckit.errorCodeOf;
 var fail = synckit.fail;
 
+// Every request goes through @phoenix/synckit's createHttp (http.js): a
+// timeout, retries of dropped connections and 502 / 504, and 429 / 503
+// with Retry-After waited out when short, otherwise ending the sync with
+// "503_SERVICE_UNAVAILABLE" and a retryAt before which nothing more is sent
+// for that account (kept per account while the service runs).
+//
 // options: { luna: {call(uri, params) -> Promise<reply>}, request, log?, localTz?,
 //            savePhoto?, linkPersons?, periodicSync? ("1h"; false for none),
+//            http? (createHttp's options for tests: sleep, now, maxWaitMs, retries, timeoutMs),
 //            presetHosts?() -> {"<templateId>": {carddav, caldav}} | null (the image's
 //            /etc/palm/dav/presets.json; lib/presets.js) }
 function createDavService(options) {
@@ -82,6 +89,25 @@ function createDavService(options) {
     var accountInfo = bus.accountInfo;
     var scheduler = synckit.createScheduler({ call: bus.call, service: SERVICE, log: log });
     var serialize = synckit.createSerializer();
+    // One thing at a time per account: a sync, then the removal of its data
+    // asked for meanwhile (it must not run under a sync that would write
+    // the data back), or the other way round. serialize() above only joins
+    // a second sync to the one running.
+    var lanes = {};
+    function exclusive(accountId, fn) {
+        var job = (lanes[accountId] || Promise.resolve()).then(fn);
+        var tail = job.then(function () {}, function () {});
+        lanes[accountId] = tail;
+        tail.then(function () { if (lanes[accountId] === tail) delete lanes[accountId]; });
+        return job;
+    }
+
+    // Per account: until when the server asked us to wait (http.js backoff).
+    var backoffs = {};
+    function requestFor(accountId) {
+        var backoff = accountId ? (backoffs[accountId] = backoffs[accountId] || { retryAt: 0 }) : { retryAt: 0 };
+        return synckit.createHttp(Object.assign({ log: log }, options.http || {}, { request: options.request, backoff: backoff })).request;
+    }
 
     function presetOf(templateId) {
         var hosts = null;
@@ -91,10 +117,11 @@ function createDavService(options) {
 
     function engine(accountId, creds, username, preset) {
         return syncLib.createEngine({
-            db: db, tempdb: tempdb, request: options.request, accountId: accountId,
+            db: db, tempdb: tempdb, request: requestFor(accountId), accountId: accountId,
             username: username, password: creds.password, localTz: options.localTz, log: log,
             linkPersons: options.linkPersons, savePhoto: options.savePhoto,
-            services: preset ? preset.services : undefined, providers: preset ? preset.providers : undefined
+            services: preset ? preset.services : undefined, providers: preset ? preset.providers : undefined,
+            checkUrl: preset ? preset.checkUrl : undefined, passwordRefused: preset ? preset.passwordRefused : undefined
         });
     }
 
@@ -150,13 +177,14 @@ function createDavService(options) {
             return Promise.resolve().then(function () {
                 // Changing the password of an existing account also refreshes its server record.
                 if (p.accountId) {
-                    return syncLib.createEngine({ db: db, request: options.request, accountId: p.accountId,
+                    return syncLib.createEngine({ db: db, request: requestFor(), accountId: p.accountId,
                                                   username: p.username, password: p.password, log: log,
-                                                  services: preset ? preset.services : undefined }).setup(serverUrl);
+                                                  services: preset ? preset.services : undefined,
+                                                  checkUrl: preset ? preset.checkUrl : undefined }).setup(serverUrl);
                 }
-                return davclient.createClient({ request: options.request, serverUrl: preset ? null : serverUrl,
+                return davclient.createClient({ request: requestFor(), serverUrl: preset ? null : serverUrl,
                                                 services: preset ? preset.services : undefined, username: p.username,
-                                                password: p.password, log: log }).discover();
+                                                password: p.password, log: log, checkUrl: preset ? preset.checkUrl : undefined }).discover();
             }).then(function (found) {
                 return {
                     returnValue: true,
@@ -169,11 +197,7 @@ function createDavService(options) {
                 var r = fail(e);
                 // iCloud answers 401 to the Apple Account's own password as to a
                 // wrong one: say what it wants (its sign-in page says it too).
-                if (preset && r.errorCode === "401_UNAUTHORIZED") {
-                    r.errorText = preset.name + " did not accept this email address and password. Use an app-specific " +
-                        "password made at account.apple.com (Sign-In and Security, App-Specific Passwords; two-factor " +
-                        "authentication must be on), not your Apple Account's own password.";
-                }
+                if (preset && r.errorCode === "401_UNAUTHORIZED" && preset.signInRefused) r.errorText = preset.signInRefused;
                 return r;
             });
         },
@@ -205,8 +229,11 @@ function createDavService(options) {
                 schedulePeriodic(p.accountId).then(function () { return syncOverBus(p.accountId, capability); });
                 return Promise.resolve({ returnValue: true });
             }
-            return credentials(p.accountId).catch(function () { return {}; }).then(function (creds) {
-                return engine(p.accountId, creds, "").removeData(capability);
+            // After a sync that is running: it would bring the data back.
+            return exclusive(p.accountId, function () {
+                return credentials(p.accountId).catch(function () { return {}; }).then(function (creds) {
+                    return engine(p.accountId, creds, "").removeData(capability);
+                });
             }).then(function () {
                 return accountInfo(p.accountId).then(function (account) {
                     var left = enabledCapabilities(account).filter(function (c) { return c !== capability; });
@@ -232,8 +259,12 @@ function createDavService(options) {
 
         onDelete: function (p) {
             return cancelPeriodic(p.accountId).then(function () {
-                return engine(p.accountId, {}, "").removeData();
-            }).then(function () { return { returnValue: true }; }, fail);
+                // After a sync that is running, which would leave its writes behind.
+                return exclusive(p.accountId, function () { return engine(p.accountId, {}, "").removeData(); });
+            }).then(function () {
+                delete backoffs[p.accountId];
+                return { returnValue: true };
+            }, fail);
         },
 
         // One sync at a time per account: a second request waits for the
@@ -241,7 +272,7 @@ function createDavService(options) {
         sync: function (p) {
             var accountId = p.accountId;
             if (!accountId) return Promise.resolve({ returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" });
-            return serialize(accountId, function () {
+            return serialize(accountId, function () { return exclusive(accountId, function () {
                 return Promise.all([credentials(accountId), accountInfo(accountId)]).then(function (r) {
                     var creds = r[0], account = r[1];
                     var caps = enabledCapabilities(account);
@@ -259,7 +290,7 @@ function createDavService(options) {
                     scheduler.complete(p.$activity);
                     return reply;
                 });
-            });
+            }); });
         }
     };
     return methods;
