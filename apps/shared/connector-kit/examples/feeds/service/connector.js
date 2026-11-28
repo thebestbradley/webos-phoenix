@@ -44,7 +44,11 @@ module.exports = kit.defineConnector({
     kinds: { state: "org.example.feeds.state:1", item: "org.example.feeds.item:1" },
     userAgent: "webOS-Phoenix-Feeds-Example/0.1",
 
-    // The sign-in page sends {config: {url}}: the feed must be one.
+    // Accounts' standard sign-in sends the feed's address as the user name
+    // (the template's loc_usernameLabel; a feed has no password, but the
+    // standard sign-in asks for one: it is not used). A third-party connector
+    // has no sign-in page of its own yet (rule C17, docs/SYNERGY-SDK.md);
+    // {config: {url}} is still taken, as the conformance fixture sends it.
     validate: function (ctx, p) {
         var url = httpUrl((p.config && p.config.url) || p.username);
         ctx.http.allowHost(new URL(url).host);

@@ -340,6 +340,15 @@ def plan_app_services(plan):
                 copy_tree(path, "/etc/palm/activities/services", plan)
                 continue
             copy_tree(path, dest + "/" + fn, plan)
+        # Phoenix's additions to the service's code (accounts'
+        # listMyAccounts: its services.json and sources.json, with the
+        # original's entries, and the new handler), beside the bus files in
+        # compat/app-services/<id>/: later entries win, as overlays do.
+        overlay = os.path.dirname(sysbus)
+        for fn in sorted(os.listdir(overlay)):
+            if fn in ("sysbus", "README.md") or fn in SKIP_NAMES:
+                continue
+            copy_tree(os.path.join(overlay, fn), dest + "/" + fn, plan, skip_tests=True)
         for fn in sorted(os.listdir(sysbus)):
             for suffix, sub in SYSBUS_DIRS:
                 if fn.endswith(suffix):

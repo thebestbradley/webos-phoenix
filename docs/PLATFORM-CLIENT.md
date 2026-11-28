@@ -212,7 +212,14 @@ alerts.
 3. **Download**: to `/var/lib/phoenix/updates/phoenix-<build>.raucb`; a
    stopped download is kept and continued with `Range: bytes=<n>-` (206
    appends, 200 restarts, 416 = complete); the whole is checked against
-   `size` and `sha256` (`lib/node.js` `download`).
+   `size` and `sha256` (`lib/node.js` `download`). A response cut off, a
+   connection that stalls for a minute or fails and a 5xx answer are taken
+   up again by themselves after a pause (5 s, doubling to a minute), until
+   five tries in a row bring nothing (`DOWNLOAD_FAILED`, the part kept): a
+   bundle is a few GB and staging ended every response at about 1 GiB
+   (28 November 2026). What the file holds is hashed before the request,
+   in chunks, so the service keeps answering (hashed inside the response,
+   a 2 GB part held it for over a minute and its socket timed out).
 4. **Prepare**: `rauc info` (RAUC verifies the bundle's signature against
    the image's keyring), `compatible`, newer build, the feed's build; `rauc
    install` writes the other slot; the running slot stays primary.
@@ -220,10 +227,16 @@ alerts.
    prepared slot active and restarts; "Install Later" waits for the charger.
 6. **After the restart**: the service marks the running slot good (`rauc
    status mark-good`, what meta-rauc's `rauc-mark-good.service` does) when
-   it first starts, which luna-systemui's GetStatus subscription causes
-   once the System UI is up; a system that never gets there is not marked
-   good, so the bootloader's counter takes the device back, and the service
-   then says "The update to X did not start".
+   it first starts. On an A/B device that first call is
+   `phoenix-update-wake.service` (meta-phoenix `phoenix-slots`), once SAM
+   lists the System UI (`com.palm.systemui`) as running: luna-systemui's own
+   GetStatus subscription waits for the bus to report the service running
+   (`registerServerStatus`), and the service starts only on demand, so
+   without it nothing would start it and no slot would ever be marked good
+   (found on Revision 39's A/B disk, 28 November 2026). A system that never
+   gets to the System UI is not marked good, so the boot loader's counter
+   takes the device back, and the service then says "The update to X did
+   not start".
 
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime

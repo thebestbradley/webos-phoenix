@@ -378,6 +378,22 @@ Still to do:
       ([SYNERGY-MEDIA.md](SYNERGY-MEDIA.md))
 - [ ] Synergy on a device: the accounts service and contacts linker on OSE,
       the key store, the activity manager for periodic sync
+- [ ] Per-connector sign-in isolation (a blocker for third-party connectors
+      with sign-in pages of their own): a template's sign-in page
+      (`validator.customUI`) runs today in a frame of Accounts' card, and
+      WebAppMgr's bridge gives its calls Accounts' name, so every page holds
+      every Phoenix connector's narrow sign-in group (`phoenix.<name>.signin`,
+      27 November 2026). The industry-standard fix: each page runs under its
+      own connector's app id (a CrossAppUI card of the connector's app, or a
+      frame the bridge charges to the page's own app), holding only its own
+      group, and Accounts gets the answer back as it does now. Until then the
+      catalogs refuse a third-party connector's own sign-in page (connector
+      rule C17: the kit's `checks.ts`, `server/marketplace` `Connector.php`,
+      Phoenix-Web-Services' copy), and so does the device for packages that
+      never went through one (the Marketplace's install and its
+      `checkSignInPage`, which the accounts library asks before it frames a
+      page), and those connectors use the standard sign-in
+      ([PRE-IMAGE-CHECKLIST.md](PRE-IMAGE-CHECKLIST.md) X6, X7)
 - [ ] 🟡 Phone and Messaging on a device: telephony service, MMS, IM transports
       (the active-call banner is done in the simulator, GAPS N7)
 - [ ] Device side of the new apps (torch, PTY service, key store, location

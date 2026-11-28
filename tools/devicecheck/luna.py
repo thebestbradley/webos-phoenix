@@ -27,6 +27,13 @@ An account template's sign-in page (validator.customUI) is checked as
 Accounts (com.palm.app.accounts), whose card shows it in a frame: on a
 device the hub sees Accounts calling.
 
+The connector kit (@phoenix/connector-kit and synckit's bus helpers) is one
+shared library that makes calls for each service running on it: they are
+charged to each such service (KIT_CALLS), and a literal call in the kit that
+the table does not name is reported:
+
+  kit-call           the kit calls a method KIT_CALLS does not charge
+
 Web apps' calls go through the runtime's serviceAliases first (the names
 OSE renamed: com.palm.systemservice and so on), as on a device. URIs built
 at run time from parts the checker cannot follow are not checked; a
@@ -146,7 +153,8 @@ def sysbus_files(root):
     Node service's (install-rootfs.py), the native services' (their CMake
     installs them), Open webOS's app services' (OSE's bus files for them in
     compat/app-services: install-rootfs.py APP_SERVICES_SYSBUS) and the
-    shell's."""
+    shell's; and Phoenix's own catalog connectors' (connector_dirs), whose
+    sysbus files a device installs with the package."""
     dirs = []
     app_services = os.path.join(root, "compat", "app-services")
     if os.path.isdir(app_services):
@@ -163,10 +171,28 @@ def sysbus_files(root):
                 d = os.path.join(b, name, sub)
                 if os.path.isdir(d):
                     dirs.append(d)
+    for c in connector_dirs(root):
+        d = os.path.join(c, "service", "sysbus")
+        if d not in dirs:
+            dirs.append(d)
     d = os.path.join(root, "shell", "sysbus")
     if os.path.isdir(d):
         dirs.append(d)
     return dirs
+
+
+def connector_dirs(root):
+    """Phoenix's own connector packages under apps/connectors (Bluesky, the
+    drives, Matrix and the rest), one folder deeper than applicationDirs.
+    The catalog's Connections install them, and the Marketplace installs a
+    package's service with its sysbus files (role, api, groups, perm), so
+    their groups are defined on a device that has them, as Accounts' sign-in
+    groups for their pages (phoenix.<name>.signin) expect."""
+    base = os.path.join(root, "apps", "connectors")
+    if not os.path.isdir(base):
+        return []
+    return [os.path.join(base, n) for n in sorted(os.listdir(base))
+            if os.path.isdir(os.path.join(base, n, "service", "sysbus"))]
 
 
 def load_phoenix(root):
@@ -266,6 +292,102 @@ def imported_luna_names(files):
                 if n:
                     names.add(n)
     return names
+
+
+# ---- The connector kit ---------------------------------------------------------------------
+
+# What the connector kit (@phoenix/connector-kit, with synckit's luna.js and
+# schedule.js) calls on a connector service's behalf: the kit's code is one
+# shared library, so its calls are charged to each service that runs a
+# definition on it (KIT_SERVICE), with the bus name of that service. Each
+# entry says when: None for every connector (every account context reads the
+# account and its credentials, service.ts accountContext; every service
+# schedules its syncs), or a pattern the connector's own code must contain
+# (its use of the kit member that makes the call). A literal call in the
+# kit's runtime sources that this table does not name is a "kit-call"
+# finding, so a call the kit gains is charged (or excused) here.
+KIT_SERVICE = re.compile(r"\b(?:runOnDevice|createConnectorService)\s*\(")
+DRIVE = r"""capability\s*:\s*["']DOCUMENTS["'][^{}]*\bfiles\s*:"""
+KIT_CALLS = {
+    ("com.palm.service.accounts", "getAccountInfo"): None,
+    ("com.palm.service.accounts", "readCredentials"): None,
+    ("com.palm.activitymanager", "create"): None,
+    ("com.palm.activitymanager", "cancel"): None,
+    ("com.palm.activitymanager", "complete"): None,
+    ("com.palm.service.accounts", "writeCredentials"): r"\.writeCredentials\s*\(",
+    ("com.webos.notification", "createToast"): r"\.notify\s*\(",
+    ("org.webosports.service.messaging", "putMessage"): r"\.putMessage\s*\(",
+    ("org.webosphoenix.service.oauth", "token"): r"\boauth\.token\s*\(",
+    ("org.webosphoenix.service.oauth", "forget"): r"\boauth\.forget\s*\(|\bforgetOldKey\s*\(",
+    ("org.webosphoenix.service.oauth", "authorize"): r"\boauthSignIn\s*\(",
+    ("org.webosphoenix.service.oauth", "redirectUri"): r"\boauthSignIn\s*\(",
+    ("org.webosphoenix.service.oauth", "broker"): r"\bviaRelay\s*\(",
+    # A drive (a DOCUMENTS capability with files): the Files app's
+    # ongoing-transfer rows.
+    ("org.webosphoenix.ongoing", "set"): DRIVE,
+    ("org.webosphoenix.ongoing", "clear"): DRIVE,
+    # createDriveRouter is the Files service's, not a connector's.
+    ("com.palm.service.accounts", "listAccounts"): r"\bcreateDriveRouter\s*\(",
+    ("com.palm.service.accounts", "listAccountTemplates"): r"\bcreateDriveRouter\s*\(",
+}
+# A service that uses synckit's bus helpers without the kit (DAV:
+# synckit.createLuna's credentials and accountInfo, createScheduler) is
+# charged with the calls of the helpers it uses.
+SYNCKIT_USER = re.compile(r"\b(?:createLuna|createScheduler)\s*\(")
+SYNCKIT_CALLS = {
+    ("com.palm.service.accounts", "readCredentials"): r"\.credentials\b",
+    ("com.palm.service.accounts", "getAccountInfo"): r"\.accountInfo\b",
+    ("com.palm.service.accounts", "writeCredentials"): r"\.writeCredentials\b",
+    ("com.palm.activitymanager", "create"): r"\bcreateScheduler\s*\(",
+    ("com.palm.activitymanager", "cancel"): r"\bcreateScheduler\s*\(",
+    ("com.palm.activitymanager", "complete"): r"\bcreateScheduler\s*\(",
+}
+SYNCKIT_SRC = os.path.join("apps", "shared", "synckit", "src") + os.sep
+# Literal URIs in the kit that are not calls the service makes.
+KIT_NOT_CALLS = {
+    ("com.palm.db", "watch"): "an activity's trigger, which the activity manager calls (service.ts watches)",
+}
+# The kit's sources that do not run on a device: tests, the conformance
+# harness (it plays the accounts service), the developer tools.
+KIT_SKIP = re.compile(r"(\.test\.|/test/|/tools/|test-support\.ts$|conformance\.ts$)")
+
+
+def kit_calls(root):
+    """[(service, method, where)] of the literal calls in the connector kit's
+    runtime sources (connector-kit/src, synckit/src)."""
+    out = []
+    for base in (os.path.join("apps", "shared", "connector-kit", "src"), os.path.join("apps", "shared", "synckit", "src")):
+        if not os.path.isdir(os.path.join(root, base)):
+            continue
+        for path in walk(root, base, (".ts", ".js")):
+            if KIT_SKIP.search(rel(root, path)):
+                continue
+            text = read(path)
+            for svc, method, pos in calls_in(text):
+                if method:
+                    out.append((svc, method, "%s:%d" % (rel(root, path), line_of(text, pos))))
+    return out
+
+
+def kit_charges(c, kit):
+    """The kit's calls charged to the service c: all the kit's (KIT_CALLS)
+    if it runs a connector definition on the kit, synckit's (SYNCKIT_CALLS)
+    if it uses synckit's bus helpers alone, else none."""
+    text = "\n".join(read(p) for p in c.files if not KIT_SKIP.search(p))
+    if KIT_SERVICE.search(text):
+        table, label, only = KIT_CALLS, "connector kit", ""
+    elif SYNCKIT_USER.search(text):
+        table, label, only = SYNCKIT_CALLS, "synckit", SYNCKIT_SRC
+    else:
+        return []
+    out = []
+    for svc, method, where in kit:
+        if not where.startswith(only):
+            continue
+        when = table.get((svc, method), False)
+        if when is None or (when and re.search(when, text)):
+            out.append((svc, method, "%s (%s)" % (where, label)))
+    return out
 
 
 # ---- Clients ---------------------------------------------------------------------------
@@ -460,13 +582,14 @@ def frame_clients(root, out, compat_perms):
 
 def method_groups(methods, method):
     """The groups for a method, from an api file's patterns; None if no
-    pattern matches."""
-    if method in methods:
-        return methods[method]
+    pattern matches. Every group whose pattern matches may call it, the
+    method's own and a wildcard's (com.palm.service.accounts/listAccounts is
+    phoenix.accounts.list's and phoenix.appservices.accounts' "/*"), as
+    luna-hub joins them."""
     found = None
     for pat, groups in methods.items():
-        if fnmatch.fnmatchcase(method, pat) or fnmatch.fnmatchcase("/" + method, pat):
-            found = (found or []) + groups
+        if pat == method or fnmatch.fnmatchcase(method, pat) or fnmatch.fnmatchcase("/" + method, pat):
+            found = (found or []) + [g for g in groups if g not in (found or [])]
     return found
 
 
@@ -503,6 +626,12 @@ def check(root):
                        "servicebus.signal", "service.monitor"})
 
     cl = clients(root, phoenix_perms)
+    kit = kit_calls(root)
+    for svc, method, where in kit:
+        if (svc, method) not in KIT_CALLS and (svc, method) not in KIT_NOT_CALLS:
+            f.add("kit-call", "%s/%s" % (svc, method),
+                  "the connector kit calls %s/%s, which check-luna's KIT_CALLS (tools/devicecheck/luna.py) does not "
+                  "charge to the connectors" % (svc, method), where)
     shell = [c for c in cl if c.kind == "shell"][0]
     for pat, entry in ose.get("clients", {}).items():
         if fnmatch.fnmatchcase(shell.name, pat) and pat != "*" and not pat.endswith(".*"):
@@ -540,6 +669,9 @@ def check(root):
         # What the app imports from @phoenix/luna calls on its behalf.
         for svc, method, where, via in getattr(c, "via", []):
             calls.append((svc, method, "%s (%s)" % (where, via)))
+        # What the connector kit calls for a service that runs on it.
+        if c.kind == "service":
+            calls += kit_charges(c, kit)
         for svc, method, where in calls:
                 name = aliases.get(svc, svc) if c.alias else svc
                 shown = svc + ("/" + method if method else "")

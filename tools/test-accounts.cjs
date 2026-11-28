@@ -16,7 +16,15 @@
 //   - Accounts launched (and relaunched) with {templateId} opens that
 //     template's sign-in;
 //   - that sign-in page (Enyo 1.0) is drawn in a frame of a page without
-//     Enyo 1.0 too, as in an Accounts built on another framework.
+//     Enyo 1.0 too, as in an Accounts built on another framework;
+//   - listMyAccounts answers an app the accounts of templates whose
+//     readPermissions name it (the connector's own app), not another's;
+//   - rule C17 on the device: a sideloaded third party's template with a
+//     sign-in page of its own (validator.customUI) is not framed, Accounts
+//     says why (C17's words) and Back returns to its main view; Phoenix's
+//     own pages (DAV's, the Fediverse's the image came with) still are
+//     (compat lib/accounts/source/cross-app.js, packagesservice.js
+//     checkSignInPage).
 //
 //   node tools/test-accounts.cjs [--out DIR]
 
@@ -63,6 +71,7 @@ function connector() {
         templateId: "org.example.feeds", loc_name: "Example Feeds",
         icon: { loc_32x32: "images/feeds-32.png", loc_48x48: "images/feeds-48.png" },
         validator: "palm://org.example.feeds.service/checkCredentials",
+        readPermissions: ["org.example.feeds.service", "org.example.feeds"],
         capabilityProviders: [{ id: "org.example.feeds.feeds", capability: "FEEDS",
                                 implementation: "palm://org.example.feeds.service/",
                                 onCreate: "palm://org.example.feeds.service/onCreate" }]
@@ -90,6 +99,27 @@ function signUpConnector() {
         files: [{ path: dir + "public/accounts/org.example.chat/org.example.chat.json", data: JSON.stringify(template) },
                 { path: dir + "public/accounts/org.example.chat/images/chat-32.png", data: new Uint8Array(servers.png(32, [40, 140, 200])) },
                 { path: dir + "public/accounts/org.example.chat/images/chat-48.png", data: new Uint8Array(servers.png(48, [40, 140, 200])) }]
+    });
+}
+
+// A third party's connector with a sign-in page of its own, sideloaded
+// (com.webos.appInstallService, as nova install does; no service, so no
+// Developer Mode is asked): the page would run in Accounts' frame.
+function ownSignInConnector() {
+    const dir = "usr/palm/applications/org.example.lure/";
+    const template = {
+        templateId: "org.example.lure", loc_name: "Example Lure",
+        icon: { loc_32x32: "images/lure-32.png", loc_48x48: "images/lure-48.png" },
+        validator: { address: "palm://org.example.lure.service/checkCredentials",
+                     customUI: { appId: "org.example.lure", name: "accounts/signin.html" } },
+        capabilityProviders: [{ id: "org.example.lure.im", capability: "MESSAGING", implementation: "palm://org.example.lure.service/" }]
+    };
+    return servers.webApp("org.example.lure", "1.0.0", {
+        title: "Example Lure", appinfo: { phoenix: { hidden: true } },
+        files: [{ path: dir + "public/accounts/org.example.lure/org.example.lure.json", data: JSON.stringify(template) },
+                { path: dir + "public/accounts/org.example.lure/images/lure-32.png", data: new Uint8Array(servers.png(32, [200, 40, 40])) },
+                { path: dir + "public/accounts/org.example.lure/images/lure-48.png", data: new Uint8Array(servers.png(48, [200, 40, 40])) },
+                { path: dir + "accounts/signin.html", data: "<!doctype html><title>Lure</title><p id=lure>third-party sign-in page</p>" }]
     });
 }
 
@@ -159,6 +189,18 @@ async function main() {
         const created = await luna(page, ACCOUNTS + "createAccount", { templateId: "org.example.feeds", username: "me@example.org",
             capabilityProviders: [{ id: "org.example.feeds.feeds" }] });
         check(created.returnValue === true, "an account of it can be created");
+        // listMyAccounts (compat/app-services handlers/list-my-accounts.js): an
+        // app's own accounts, the template's readPermissions naming it; listAccounts,
+        // a transport's, answers every account.
+        const mine = async (p) => ((await luna(p, ACCOUNTS + "listMyAccounts", { templateId: "org.example.feeds" })).results || []).map((a) => a._id);
+        const own = await context.newPage();
+        await own.goto(`${origin}/usr/palm/applications/org.example.feeds/index.html`);
+        await own.waitForFunction(() => !!window.__phoenixRuntime);
+        check(JSON.stringify(await mine(own)) === JSON.stringify([created.result._id]), "listMyAccounts: the connector's app gets its account");
+        check(JSON.stringify(await mine(page)) === "[]", "listMyAccounts: another app (Calculator) gets none of it");
+        check(((await luna(page, ACCOUNTS + "listAccounts", { templateId: "org.example.feeds" })).results || []).length === 1,
+              "listAccounts still answers every account");
+        await own.close();
         await luna(page, ACCOUNTS + "deleteAccount", { accountId: created.result && created.result._id });
 
         // ---- Accounts' "Find More ..." --------------------------------------------------------------
@@ -276,6 +318,52 @@ async function main() {
         await app.waitForTimeout(3000);
         check(await app.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Add an Account" }).count() > 0,
               "an unknown templateId leaves Accounts on its main view");
+
+        // ---- Rule C17 on the device: a sideloaded third party's own sign-in page -------------------------
+        const lureIpk = Buffer.from(await ownSignInConnector());
+        await page.evaluate((b64) => __phoenixRuntime.tmpFiles.write("/tmp/lure.ipk", Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), lureIpk.toString("base64"));
+        const lureInstalled = await page.evaluate(() => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 30 || r.statusValue === 24) res(r); };
+            b.call("luna://com.webos.appInstallService/install", JSON.stringify({ id: "org.example.lure", ipkUrl: "/tmp/lure.ipk", subscribe: true }));
+        }));
+        check(lureInstalled.statusValue === 30, "a third party's connector with its own sign-in page sideloads (the installer takes it)");
+        check((await luna(page, "luna://org.webosphoenix.service.packages/checkSignInPage", { appId: "org.example.lure", templateId: "org.example.lure" }))
+                  .allowed === false, "the Marketplace's service says its page is not Phoenix's own");
+        const lure = await context.newPage();
+        lure.on("pageerror", (e) => errors.push(e.message));
+        await lure.goto(accountsUrl({ templateId: "org.example.lure" }));
+        const refusedBox = lure.locator(".accounts-signin-refused:visible");
+        await refusedBox.waitFor({ timeout: 10000 }).catch(() => {});
+        check(/Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in/
+                  .test(await refusedBox.textContent().catch(() => "")),
+              "Accounts does not frame it and says why, in C17's words");
+        await lure.waitForTimeout(1500);
+        check(!lure.frames().some((f) => /org\.example\.lure\//.test(f.url())), "and the page is never loaded in Accounts' frame");
+        await lure.screenshot({ path: path.join(outDir, "3c-third-party-signin-refused.png") });
+        await lure.locator(".accounts-signin-refused .enyo-button:visible, .accounts-signin-refused .enyo-custom-button:visible", { hasText: "Back" })
+            .first().click().catch(() => {});
+        await lure.waitForTimeout(800);
+        check(!(await lure.locator(".accounts-signin-refused:visible").count()), "Back leaves the refusal");
+        await lure.close();
+        // Phoenix's own pages still open: DAV's (built in, above) and the
+        // Fediverse's, a connector the image came with (preinstalled.json).
+        const fedi = await context.newPage();
+        fedi.on("pageerror", (e) => errors.push(e.message));
+        await fedi.goto(accountsUrl({ templateId: "com.webosphoenix.fediverse" }));
+        let fediFramed = false;
+        for (let t = 0; t < 10000 && !fediFramed; t += 250) {
+            fediFramed = fedi.frames().some((f) => /org\.webosphoenix\.fediverse\/accounts\/wizard\.html/.test(f.url()));
+            if (!fediFramed) await fedi.waitForTimeout(250);
+        }
+        check(fediFramed && !(await fedi.locator(".accounts-signin-refused:visible").count()),
+              "a first-party connector the image came with (the Fediverse): its sign-in page is framed");
+        await fedi.close();
+        await page.evaluate(() => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 31 || r.statusValue === 25) res(r); };
+            b.call("luna://com.webos.appInstallService/remove", JSON.stringify({ id: "org.example.lure", subscribe: true }));
+        }));
 
         // ---- "changelogin": the original's own launch (Email's sign-in dashboard) ---------------------
         const credentials = async (p) => {

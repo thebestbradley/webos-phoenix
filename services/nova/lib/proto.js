@@ -19,8 +19,9 @@
 //
 // Requests: hello; pair {pA, name}, pairConfirm {confirm, proof} (an
 // unpaired computer may send only these three); status; manifest; push
-// {signature} + the bundle; get {path}; revert {path?}; restart {what};
-// rescan; luna {uri, params}; log {follow, filter}; forward {port}; unpair.
+// {signature} + the bundle; install + the app's .ipk; get {path}; revert
+// {path?}; restart {what}; rescan; luna {uri, params}; log {follow,
+// filter}; forward {port}; unpair.
 
 "use strict";
 
@@ -362,6 +363,11 @@ function serve(nova, opts, socket, c, limits, authed) {
                         if (!body.bytes) throw fail("PROTOCOL", "the bundle was expected");
                         return nova.receive(body.bytes, String(req.signature || ""), { key: clientKey, name: pairedName() },
                                             function (p) { f.send({ progress: p }); });
+                    }).then(function (r) { reply({ result: r }); });
+                case "install":
+                    return f.next().then(function (body) {
+                        if (!body.bytes) throw fail("PROTOCOL", "the package was expected");
+                        return nova.installApp(body.bytes, { key: clientKey, name: pairedName() });
                     }).then(function (r) { reply({ result: r }); });
                 case "get": {
                     var data = nova.readFile(req.path);

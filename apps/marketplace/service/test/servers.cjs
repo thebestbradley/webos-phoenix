@@ -250,9 +250,27 @@ async function startFeed() {
         files: [{ path: "usr/palm/services/org.example.hooked.service/service.js", data: "// a 2011 service" }] }));
     // A Synergy connector: its service in the app's service/ folder (docs/SYNERGY-CONNECTORS.md 3.1).
     const connector = Buffer.from(await webApp("org.example.feeds", "0.1.0", {
-        title: "News Feeds", appinfo: { phoenix: { hidden: true } },
+        title: "News Feeds", appinfo: { phoenix: { hidden: true }, requiredPermissions: [] },
         files: [{ path: "usr/palm/applications/org.example.feeds/service/package.json", data: JSON.stringify({ name: "org.example.service.feeds" }) },
                 { path: "usr/palm/applications/org.example.feeds/service/sysbus/org.example.service.feeds.role.json", data: "{}" }] }));
+    // An account type with a sign-in page of its own (validator.customUI) and
+    // no service, so no Developer Mode is asked: a third party's, refused
+    // (rule C17 on the device); and one whose page is another app's (C7).
+    const signInTemplate = (id, pageApp) => JSON.stringify({ templateId: id, loc_name: id,
+        validator: { address: "palm://" + id + ".service/checkCredentials", customUI: { appId: pageApp, name: "accounts/signin.html" } },
+        capabilityProviders: [{ id: id + ".chat", capability: "MESSAGING", implementation: "palm://" + id + ".service/" }] });
+    const signIn = Buffer.from(await webApp("org.example.signin", "1.0.0", {
+        title: "Own Sign-in", appinfo: { phoenix: { hidden: true } },
+        files: [{ path: "usr/palm/applications/org.example.signin/public/accounts/org.example.signin/org.example.signin.json",
+                  data: signInTemplate("org.example.signin", "org.example.signin") },
+                { path: "usr/palm/applications/org.example.signin/accounts/signin.html", data: "<!doctype html><title>Sign in</title>" }] }));
+    const borrowed = Buffer.from(await webApp("org.example.borrowed", "1.0.0", {
+        title: "Borrowed Sign-in", appinfo: { phoenix: { hidden: true } },
+        files: [{ path: "usr/palm/applications/org.example.borrowed/public/accounts/org.example.borrowed/org.example.borrowed.json",
+                  data: signInTemplate("org.example.borrowed", "org.webosphoenix.dav") }] }));
+    // A web app under a system name (LuneOS's org.webosports): only Phoenix's
+    // own catalog installs those (RESERVED_NAME).
+    const squat = Buffer.from(await webApp("org.webosports.app.squat", "1.0.0", { title: "Squat" }));
     const md5 = (b) => crypto.createHash("md5").update(b).digest("hex");
     const para = (id, v, arch, file, b, title) => [
         `Package: ${id}`, `Version: ${v}`, "Section: misc", `Architecture: ${arch}`, `MD5Sum: ${md5(b)}`, `Size: ${b.length}`, `Filename: ${file}`,
@@ -262,7 +280,10 @@ async function startFeed() {
                     para("org.example.homebrew", "0.9.1", "all", "org.example.homebrew_0.9.1_all.ipk", web, "Homebrew Thing"),
                     para("org.example.nativelib", "1.0", "armv7", "org.example.nativelib_1.0_armv7.ipk", native, "Native Lib"),
                     para("org.example.hooked", "2.0", "all", "org.example.hooked_2.0_all.ipk", hooked, "Hooked"),
-                    para("org.example.feeds", "0.1.0", "all", "org.example.feeds_0.1.0_all.ipk", connector, "News Feeds")].join("\n\n") + "\n";
+                    para("org.example.feeds", "0.1.0", "all", "org.example.feeds_0.1.0_all.ipk", connector, "News Feeds"),
+                    para("org.example.signin", "1.0.0", "all", "org.example.signin_1.0.0_all.ipk", signIn, "Own Sign-in"),
+                    para("org.example.borrowed", "1.0.0", "all", "org.example.borrowed_1.0.0_all.ipk", borrowed, "Borrowed Sign-in"),
+                    para("org.webosports.app.squat", "1.0.0", "all", "org.webosports.app.squat_1.0.0_all.ipk", squat, "Squat")].join("\n\n") + "\n";
     let serveWeb = web;
     const f = await listen((req, res) => {
         const u = req.url.split("?")[0];
@@ -270,6 +291,9 @@ async function startFeed() {
         if (u === "/feed/org.example.homebrew_0.9.1_all.ipk") { res.writeHead(200); res.end(serveWeb); return; }
         if (u === "/feed/org.example.hooked_2.0_all.ipk") { res.writeHead(200); res.end(hooked); return; }
         if (u === "/feed/org.example.feeds_0.1.0_all.ipk") { res.writeHead(200); res.end(connector); return; }
+        if (u === "/feed/org.example.signin_1.0.0_all.ipk") { res.writeHead(200); res.end(signIn); return; }
+        if (u === "/feed/org.example.borrowed_1.0.0_all.ipk") { res.writeHead(200); res.end(borrowed); return; }
+        if (u === "/feed/org.webosports.app.squat_1.0.0_all.ipk") { res.writeHead(200); res.end(squat); return; }
         res.writeHead(404); res.end();
     });
     return Object.assign(f, { feedUrl: f.url + "/feed/", corrupt: () => { serveWeb = Buffer.concat([web, Buffer.from("x")]); } });

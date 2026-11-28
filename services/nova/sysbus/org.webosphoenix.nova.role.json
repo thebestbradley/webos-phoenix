@@ -7,7 +7,7 @@
         {
             "service": "org.webosphoenix.nova",
             "outbound": ["com.webos.applicationManager", "com.palm.applicationManager", "com.palm.configurator", "com.palm.systemmanager",
-                         "com.webos.notification", "com.webos.service.devmode"]
+                         "com.webos.notification", "com.webos.service.devmode", "org.webosphoenix.service.packages"]
         }
     ]
 }

@@ -4275,6 +4275,24 @@
             return clone(list);
         }
         runtime.accountTemplates = allTemplates;
+        // The system image's templates (the folders under
+        // /usr/palm/public/accounts), each with its sign-in page's app
+        // (validator.customUI.appId, or null): the Marketplace's service
+        // checks a sign-in page against them (packagesservice.js
+        // checkSignInPage, deps.systemTemplates).
+        runtime.systemAccountTemplates = function () {
+            var out = [];
+            builtinFiles().forEach(function (file) {
+                var parsed;
+                try { parsed = JSON.parse(PalmSystem.getResource(file) || "null"); } catch (e) { return; }
+                (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId) return;
+                    var v = t.validator && typeof t.validator === "object" ? t.validator : null;
+                    out.push({ templateId: String(t.templateId), appId: v && v.customUI && v.customUI.appId ? String(v.customUI.appId) : null });
+                });
+            });
+            return out;
+        };
 
         // A template the transport block serves: one whose capabilities are
         // implemented by a service on the simulated bus. The original
@@ -14898,6 +14916,29 @@
         accounts["/listAccounts"] = listWithDav("listAccounts");
         accounts["/listAccountsPublic"] = listWithDav("listAccountsPublic");
 
+        // listMyAccounts (Phoenix's addition, compat/app-services/
+        // com.palm.service.accounts/handlers/list-my-accounts.js): listAccounts
+        // less the accounts the caller may not read, by the check the
+        // service's getAccountInfo and readCredentials make (utils.js
+        // hasPermission): the caller against the template's readPermissions
+        // (globs: * and ?), Accounts and the service itself reading all; no
+        // readPermissions, no one else.
+        function mayRead(account, caller) {
+            caller = String(caller || "").split(" ")[0];
+            if (caller === "com.palm.app.accounts" || caller === "com.palm.service.accounts") return true;
+            return (account.readPermissions || []).some(function (glob) {
+                var re = "^" + String(glob).replace(/[.\\+^$|(){}\[\]]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+                return new RegExp(re).test(caller);
+            });
+        }
+        accounts["/listMyAccounts"] = function (p, reply, ctx) {
+            var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            accounts["/listAccounts"](p, function (r) {
+                if (!r.returnValue) return reply(r);
+                reply(ok({ results: (r.results || []).filter(function (a) { return mayRead(a, caller); }) }));
+            }, ctx);
+        };
+
         accounts["/getAccountInfo"] = function (p, reply, ctx) {
             var a = getAccount(p.accountId);
             if (a && isDav(a.templateId)) return reply(ok({ result: annotate(a) }));
@@ -15878,23 +15919,23 @@
                     // appinfo.json is read once per page: the service asks at
                     // every call, and only uses the version the first time it
                     // counts the package as installed.
-                    firstParty: function () {
-                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
-                    },
                     preinstalled: function () {
                         if (!preinstalledInfo) {
                             preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
                                 var info = {};
                                 try { info = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + p.id + "/appinfo.json") || "{}"); }
                                 catch (e) { info = {}; }
-                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id,
+                                         templates: p.templates || [] };
                             });
                         }
                         return preinstalledInfo;
                     },
                     firstParty: function () {
-                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix", templates: p.templates || [] }; });
                     },
+                    // The image's own account templates (checkSignInPage).
+                    systemTemplates: function () { return runtime.systemAccountTemplates ? runtime.systemAccountTemplates() : []; },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page
                     // in the Marketplace meanwhile; a failed one tries the

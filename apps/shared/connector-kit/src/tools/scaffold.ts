@@ -10,7 +10,7 @@
 // target written from the declaration (share.ts shareTarget).
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { GENERIC_KINDS } from "./checks";
+import { GENERIC_KINDS, THIRD_PARTY_APP_GROUPS } from "./checks";
 import { shareTarget } from "../share";
 import type { ShareAccepts } from "../types";
 
@@ -54,11 +54,17 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     const kind = (id: string, ext?: string) => js(Object.assign({ id, owner: service, sync: false }, ext ? { extends: [ext] } : {}, {
         indexes: [{ name: "accountId", props: [{ name: "accountId" }] }] }));
 
-    const shareGroup = name.replace(/\./g, "-") + ".share";
+    // A group of its own is named in its namespace (rule C18: luna-hub joins
+    // groups of the same name across packages).
+    const shareGroup = service + ".share";
     const phoenix: Record<string, unknown> = { hidden: true };
     if (share) phoenix.shareTargets = [shareTarget({ service, templateIds: [templateId], share: { accepts: SCAFFOLD_ACCEPTS, send: async () => ({}) } }, name)];
+    // The app's own groups (rule C19, checks.ts THIRD_PARTY_APP_GROUPS): none
+    // for the page that only says where the account is added; the compose
+    // page's three with sharing. Always a list: without one the installer
+    // gives the app the public group.
     files["appinfo.json"] = js({ id: appId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: name,
-                                 icon: "icon.png", phoenix, requiredPermissions: ["accounts.transport"].concat(share ? [shareGroup] : []) });
+                                 icon: "icon.png", phoenix, requiredPermissions: share ? [shareGroup].concat(THIRD_PARTY_APP_GROUPS) : [] });
     if (share) Object.assign(files, sharePageFiles());
     else files["index.html"] = "<!doctype html>\n<!-- " + appId + " carries a Synergy connector: add the account in Accounts. -->\n" +
         "<html><head><meta charset=\"utf-8\"><title>" + name + "</title></head><body><p>Add the account in Accounts.</p></body></html>\n";
@@ -144,7 +150,12 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
         permissions: [{ service, outbound: [service, "com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts"] }] });
     files[sysbus + ".api.json"] = js(Object.assign({ "accounts.transport": ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"]
         .map((m) => service + "/" + m) }, share ? { [shareGroup]: [service + "/share"], [SYSTEM_SHARE_GROUP]: [service + "/share"] } : {}));
-    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.operation", "accounts.transport"] });
+    // The kit reads each account and its credentials (service.ts
+    // accountContext): the accounts service's two read groups, not the whole
+    // service; the template's readPermissions still decide which accounts.
+    // Only groups rule C18 lets a third party claim (checks.ts THIRD_PARTY_GROUPS).
+    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.transport",
+        "phoenix.accounts.info", "phoenix.accounts.read-credentials"] });
     files[sysbus + ".groups.json"] = js(Object.assign({ allowedNames: [service], "accounts.transport": ["oem"] }, share ? { [shareGroup]: ["oem"], [SYSTEM_SHARE_GROUP]: ["oem"] } : {}));
     files[sysbus + ".manifest.json"] = js({ id: service, version: "0.1.0",
         roleFiles: ["/usr/share/luna-service2/roles.d/" + service + ".role.json"],

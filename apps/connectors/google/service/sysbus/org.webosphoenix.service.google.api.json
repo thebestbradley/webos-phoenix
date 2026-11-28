@@ -10,5 +10,10 @@
     "google.account": [
         "org.webosphoenix.service.google/providerInfo",
         "org.webosphoenix.service.google/signIn"
+    ],
+    "phoenix.google.signin": [
+        "org.webosphoenix.service.google/providerInfo",
+        "org.webosphoenix.service.google/checkCredentials",
+        "org.webosphoenix.service.google/signIn"
     ]
 }

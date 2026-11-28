@@ -54,6 +54,7 @@
     "requiredPermissions": [
         "accounts.transport",
         "bluesky.account",
-        "phoenix.appmanager.launch"
+        "phoenix.appmanager.launch",
+        "phoenix.accounts.mine"
     ]
 }

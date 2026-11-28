@@ -68,6 +68,23 @@ for svc in ("com.palm.service.accounts", "com.palm.service.contacts", "com.palm.
     check("/usr/share/luna-service2/roles.d/%s.role.json" % svc in paths, svc + ": with OSE's bus files")
     check(not any(p.startswith("/usr/palm/services/%s/files/" % svc) or "/tests/" in p and svc in p for p in paths),
           svc + ": not its luna-service 1 files or tests")
+# Phoenix's additions to their code (compat/app-services/<id>/ beside
+# sysbus/): accounts' listMyAccounts, its handler loaded by the overlaid
+# sources.json and named by the overlaid services.json.
+ACCT = os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts")
+ORIGINAL = os.path.join(REPO, "third_party", "app-services", "com.palm.service.accounts")
+check("/usr/palm/services/com.palm.service.accounts/handlers/list-my-accounts.js" in paths,
+      "accounts: Phoenix's listMyAccounts handler is installed")
+with open(os.path.join(ACCT, "sources.json"), encoding="utf-8") as f:
+    srcs = [e.get("source") for e in json.load(f)]
+with open(os.path.join(ACCT, "services.json"), encoding="utf-8") as f:
+    cmds = {c["name"]: c for c in json.load(f)["services"][0]["commands"]}
+check("handlers/list-my-accounts.js" in srcs and srcs.index("handlers/list-my-accounts.js") > srcs.index("handlers/list-accounts.js")
+      and all(os.path.isfile(os.path.join(ACCT, s)) or os.path.isfile(os.path.join(ORIGINAL, s)) for s in srcs if s),
+      "accounts: the overlaid sources.json loads the handler after list-accounts.js, and every source exists")
+check(cmds.get("listMyAccounts", {}).get("assistant") == "ListMyAccountsCommandAssistant" and not cmds["listMyAccounts"].get("public")
+      and "listAccounts" in cmds and "readCredentials" in cmds,
+      "accounts: the overlaid services.json keeps the original's commands and adds listMyAccounts")
 check("/etc/palm/db/kinds/com.palm.service.accounts/com.palm.account" in paths, "app services: db8 kinds in /etc/palm/db")
 check("/etc/palm/tempdb/kinds/com.palm.service.accounts/com.palm.signaling" in paths, "app services: tempdb kinds")
 check("/etc/palm/activities/applications/com.palm.app.clock/com.palm.app.clock.update.json" in paths
@@ -182,6 +199,45 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError as e:
         stamped = "manifest.json" in str(e)
     check(stamped, "devpush.py: stamping without a manifest says so")
+
+# meta-phoenix's lib/phoenix/developerapps.py at image time
+# (phoenix-developer-apps.bbclass): the platform's test apps listed in
+# conf/developer-apps.json get Phoenix's developer flag in their appinfo.json
+# (docs/APP-RUNTIME.md "Developer apps").
+from phoenix import developerapps as da  # noqa: E402
+dev_listed = da.load(os.path.join(REPO, "meta-phoenix", "conf", "developer-apps.json"))
+check("com.webos.app.test.youtube" in dev_listed and not any(i.startswith("org.webosphoenix.") for i in dev_listed),
+      "developer-apps.json: the platform's test apps, none of Phoenix's own (their appinfo.json says so)")
+with tempfile.TemporaryDirectory() as tmp:
+    def appinfo(app_id, text):
+        os.makedirs(os.path.join(tmp, da.APPS_DIR, app_id))
+        with open(os.path.join(tmp, da.APPS_DIR, app_id, "appinfo.json"), "w") as f:
+            f.write(text)
+    appinfo("com.webos.app.test.youtube", '{"id": "com.webos.app.test.youtube", "title": "YouTube", "visible": true}')
+    appinfo("org.example.flagged", '{"id": "org.example.flagged", "phoenix": {"developer": true, "launcherTab": 1}}')
+    appinfo("org.example.broken", '{"id": ')
+    appinfo("org.example.odd", '{"id": "org.example.odd", "phoenix": "yes"}')
+    marked, missing, failed = da.mark(tmp, ["com.webos.app.test.youtube", "org.example.flagged", "org.example.gone",
+                                            "org.example.broken", "org.example.odd"])
+    yt = json.load(open(os.path.join(tmp, da.APPS_DIR, "com.webos.app.test.youtube", "appinfo.json")))
+    flagged = json.load(open(os.path.join(tmp, da.APPS_DIR, "org.example.flagged", "appinfo.json")))
+    check(marked == ["com.webos.app.test.youtube", "org.example.flagged"] and missing == ["org.example.gone"]
+          and [f[0] for f in failed] == ["org.example.broken", "org.example.odd"],
+          "developerapps.py: listed apps marked, a missing one skipped, a bad appinfo.json reported")
+    check(yt == {"id": "com.webos.app.test.youtube", "title": "YouTube", "visible": True, "phoenix": {"developer": True}}
+          and flagged["phoenix"] == {"developer": True, "launcherTab": 1},
+          "developerapps.py: the flag added beside what the appinfo.json had")
+    bad = os.path.join(tmp, "list.json")
+    for text, why in (('{"apps": {"org.webosphoenix.notificationlab": "x"}}', "Phoenix's own"),
+                      ('{"apps": {"com.example.test": ""}}', "a reason"), ('{"apps": {"bad id": "x"}}', "not an app id")):
+        with open(bad, "w") as f:
+            f.write(text)
+        try:
+            da.load(bad)
+            refused = False
+        except ValueError as e:
+            refused = why in str(e)
+        check(refused, "developerapps.py: a list naming %s refused" % ("an app without " + why if why == "a reason" else why))
 
 # The release notes ship without "unreleased", the next version's notes
 # while work goes on (docs/APP-STORE.md 3.15); the versions as they are.

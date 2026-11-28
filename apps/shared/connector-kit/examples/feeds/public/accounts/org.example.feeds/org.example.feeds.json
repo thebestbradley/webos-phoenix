@@ -5,13 +5,9 @@
         "loc_32x32": "images/feeds-32x32.png",
         "loc_48x48": "images/feeds-48x48.png"
     },
-    "validator": {
-        "customUI": {
-            "appId": "org.example.feeds",
-            "name": "accounts/signin.html"
-        },
-        "address": "palm://org.example.service.feeds/checkCredentials"
-    },
+    "loc_usernameLabel": "FEED ADDRESS",
+    "loc_passwordLabel": "PASSWORD (NOT USED: TYPE ANY WORD)",
+    "validator": "palm://org.example.service.feeds/checkCredentials",
     "readPermissions": [
         "org.example.service.feeds",
         "org.example.feeds"
