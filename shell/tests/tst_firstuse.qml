@@ -61,6 +61,12 @@ Item {
             shell.gestureUp();
             verify(!shell.launcherOpen);
             verify(shell.maximized, "swipe up does not leave First Use");
+            // Nor does Back with nothing left to go back to (the Welcome
+            // page): it minimized First Use to card view, its only card,
+            // with the "Dismissing Cards" hint over it.
+            shell.gestureBack();
+            wait(Theme.cardMinimizeDuration + 100);
+            verify(shell.maximized && shell.cardView.maximizeProgress === 1, "back does not leave First Use");
             shell.homeKey();
             verify(!shell.launcherOpen);
             shell.openSystemMenu();

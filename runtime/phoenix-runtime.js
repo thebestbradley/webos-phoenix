@@ -3373,6 +3373,24 @@
     // Ids unique across pages, so the shell finds the view a picture is of.
     var webViewPrefix = "wv" + Math.random().toString(36).slice(2, 8) + "-";
 
+    // The iframe engine's pages opened for a new card (a link with a target):
+    // identifier -> {url, at}, in the store the new card's page reads too.
+    // Kept a minute rather than taken once: the card's page view connects
+    // again when Enyo renders it again (a new <object>, a new adapter).
+    var FRAME_PENDING_MS = 60000;
+    function framePark(url) {
+        var id = "phoenix-frame-" + Date.now().toString(36) + "-" + (nextWebView++);
+        var all = store.get("webViewPending", null) || {}, now = Date.now();
+        Object.keys(all).forEach(function (k) { if (!(all[k] && now - all[k].at < FRAME_PENDING_MS)) delete all[k]; });
+        all[id] = { url: String(url), at: now };
+        store.set("webViewPending", all);
+        return id;
+    }
+    function framePending(id) {
+        var all = store.get("webViewPending", null) || {}, p = id && all[id];
+        return p && Date.now() - p.at < FRAME_PENDING_MS ? p.url : "";
+    }
+
     function WebViewAdapter(node) {
         this.node = node;
         this.id = webViewPrefix + (nextWebView++);
@@ -3415,15 +3433,21 @@
             if (this.connected) return;
             this.connected = true;
             if (nativeWebViews) {
-                this.post("create", { "private": !!this.privateMode });
+                // The identifier: a page another page opened for this card
+                // (createPage; WebAppWindow.qml hands it to this view).
+                this.post("create", { "private": !!this.privateMode, identifier: String(this.pageIdentifier || "") });
                 this.track();
             } else {
+                var opened = framePending(this.pageIdentifier);
                 var frame = this.frame = global.document.createElement("iframe");
                 frame.style.cssText = "border:0;width:100%;height:100%;display:block;background:white";
                 frame.addEventListener("load", function () { self.frameLoaded(); });
                 this.node.appendChild(frame);
             }
-            setTimeout(function () { self.listener("serverConnected"); }, 0);
+            setTimeout(function () {
+                self.listener("serverConnected");
+                if (opened) self.frameNavigate(opened);
+            }, 0);
         },
         // Keep the native view on the object's rectangle, and out of the way
         // while the object is hidden or an Enyo popup (menu, dialog) or the
@@ -3553,7 +3577,16 @@
                 var a = e.target && e.target.closest && e.target.closest("a[href]");
                 if (!a) return;
                 var cookie = self.redirectFor(a.href);
-                if (cookie === null) return;
+                if (cookie === null) {
+                    // A link with a target: a new card (BrowserAdapter's
+                    // createPage), its page waiting for the card's view
+                    // (connect with the identifier: framePending).
+                    var t = String(a.getAttribute("target") || "").toLowerCase();
+                    if (!t || t === "_self" || t === "_parent" || t === "_top") return;
+                    e.preventDefault();
+                    self.listener("createPage", framePark(a.href));
+                    return;
+                }
                 e.preventDefault();
                 self.listener("urlRedirected", a.href, cookie);
             }, false);
@@ -3663,7 +3696,13 @@
             pageFocused: function () {},
             interrogateClicks: function () {},
             setShowClickedLink: function () {},
-            setBlockPopups: function () {},
+            // (block): a script opens a window only from a tap (WebKit's
+            // JavaScriptCanOpenWindowsAutomatically off); BasicWebView sets
+            // it as it connects (BasicWebView.js:171, 244-246).
+            setBlockPopups: function (block) {
+                this.blockPopups = block !== false;
+                if (nativeWebViews) this.post("blockPopups", { on: this.blockPopups });
+            },
             setAcceptCookies: function () {},
             setEnableJavaScript: function () {},
             setMinFontSize: function () {},
@@ -3703,7 +3742,20 @@
             selectAll: function () { this.edit("selectAll"); },
             insertStringAtCursor: function () {},
             selectPopupMenuItem: function () {},
-            sendDialogResponse: function () {},
+            // ("1" accept, "2" accept once, "0" refuse): the answer to the
+            // SSL dialog (dialogSSLConfirm). Chromium shows the page's own
+            // alerts, confirms and prompts, which never reach the app, so
+            // that is the only dialog asked here. Trust Always ("1") keeps
+            // the certificate for the host in the certificate store.
+            sendDialogResponse: function (response) {
+                var c = this.pendingCert;
+                if (!c) return;
+                this.pendingCert = null;
+                response = String(response);
+                if (response === "1" && runtime.certificates && runtime.certificates.trustSite)
+                    runtime.certificates.trustSite(c.host, c.pem);
+                if (nativeWebViews) this.post("dialogResponse", { response: response });
+            },
             inspectUrlAtPoint: function () {},
             getImageInfoAtPoint: function () {},
             saveImageAtPoint: function () {},
@@ -3788,6 +3840,20 @@
             return;
         }
         if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
+        // Whether the page at an address is secure (https, its certificate
+        // not one the user let through): the browser's padlock
+        // (webViewSecure).
+        if (name === "phoenixSecurity") { a.security = { url: String(args[0]), secure: args[1] === null ? null : !!args[1] }; return; }
+        // A certificate Chromium refused, (host, code, pem, sha256): the
+        // browser asks with BrowserServer's callback, dialogSSLConfirm(host,
+        // code, certFile), its file one the certificate manager reads
+        // (getcertificatedetails: View Certificate).
+        if (name === "phoenixCertificateError") {
+            a.pendingCert = { host: String(args[0]), pem: String(args[2]) };
+            var file = runtime.certificates && runtime.certificates.siteFile ? runtime.certificates.siteFile(a.pendingCert.pem) : "";
+            a.listener("dialogSSLConfirm", a.pendingCert.host, args[1], file);
+            return;
+        }
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         // A picture of the page as the native view stepped aside for a
         // popup or the share sheet (WebAppWindow.qml): shown in its place
@@ -3802,6 +3868,21 @@
             return;
         }
         a.listener.apply(a, [name].concat(args || []));
+    };
+
+    // Whether the page view showing url says it is secure: true or false
+    // (false for a page whose certificate the user let through: Trust Once,
+    // Trust Always), null while no view shows it (loading, refused);
+    // undefined with the iframe engine, which cannot tell (the address
+    // decides, as it did on webOS: isis-browser AddressInput.js:84).
+    runtime.webViewSecure = function (url) {
+        if (!nativeWebViews) return undefined;
+        var ids = Object.keys(webViews);
+        for (var i = 0; i < ids.length; i++) {
+            var s = webViews[ids[i]].security;
+            if (s && s.url === String(url)) return s.secure;
+        }
+        return null;
     };
 
     // A page view nobody sees, showing some HTML: what Email prints its
@@ -12196,10 +12277,11 @@
             var out = [];
             systemList().forEach(function (c) {
                 var o = st.system[c.certificateId] || {};
-                if (!o.removed) out.push({ certificateId: c.certificateId, der: c.der, trusted: o.trusted !== false, system: true });
+                if (!o.removed) out.push({ certificateId: c.certificateId, der: c.der, trusted: o.trusted !== false, system: true, sites: [] });
             });
             st.user.forEach(function (c) {
-                out.push({ certificateId: c.certificateId, der: b64Bytes(c.der), trusted: c.trusted !== false, system: false });
+                out.push({ certificateId: c.certificateId, der: b64Bytes(c.der), trusted: c.trusted !== false, system: false,
+                           sites: c.sites || [] });
             });
             return out;
         }
@@ -12218,13 +12300,58 @@
             return { certificateId: c.certificateId, certificateFilename: filename(c),
                      commonname: p.subject.commonname || "", organization: p.subject.organization || "",
                      issuer: displayName(p.issuer), startdate: p.startdate, expiredate: p.expiredate,
-                     trusted: c.trusted, system: c.system, isCA: p.isCA };
+                     trusted: c.trusted, system: c.system, isCA: p.isCA, sites: c.sites || [] };
         }
         function find(p) {
-            return all().filter(function (c) {
+            var c = all().filter(function (c) {
                 return (p.certificateId !== undefined && String(c.certificateId) === String(p.certificateId))
                     || (p.certificateFilename && filename(c) === p.certificateFilename);
             })[0] || null;
+            if (!c && p.certificateFilename && siteCerts[p.certificateFilename])
+                c = { certificateId: "site-" + p.certificateFilename.replace(/^.*\//, "").replace(/\.pem$/, ""), der: siteCerts[p.certificateFilename],
+                      trusted: false, system: false, sites: [], site: true };
+            return c;
+        }
+
+        // ---- Sites' certificates (the browser's SSL dialog) ---------------------------------
+        // A site's certificate that the page view refused, shown by the
+        // browser's View Certificate (getcertificatedetails {certificateFilename},
+        // isis-browser CertificateDetail.js:198), and Trust Always: the
+        // certificate kept in the store, trusted for that host
+        // ({sites: [host]}), so the page view lets it through again for that
+        // host only, until the user distrusts or removes it in Settings >
+        // Certificate Manager.
+        var siteCerts = {};     // file -> der, for this page's life
+        function pemDer(pem) { return certsIn(new Uint8Array(String(pem).split("").map(function (ch) { return ch.charCodeAt(0) & 0xff; })))[0] || null; }
+        function siteFile(pem) {
+            var der = pemDer(pem);
+            if (!der) return "";
+            var file = "/var/luna/data/browser/certificates/" + sha(der, false).replace(/:/g, "").toLowerCase() + ".pem";
+            siteCerts[file] = der;
+            return file;
+        }
+        function siteTrusted(host, sha256) {
+            host = String(host || "").toLowerCase();
+            return all().some(function (c) {
+                return !c.system && c.trusted && c.sites.indexOf(host) >= 0 && sha(c.der, false) === String(sha256).toUpperCase();
+            });
+        }
+        function trustSite(host, pem) {
+            host = String(host || "").toLowerCase();
+            var der = pemDer(pem);
+            if (!host || !der) return false;
+            try { parse(der); } catch (e) { return false; }
+            var st = load(), mine = null;
+            st.user.forEach(function (u) { if (!mine && sameDer(b64Bytes(u.der), der)) mine = u; });
+            if (!mine) {
+                mine = { certificateId: "user-" + st.nextId++, der: bytesB64(der), trusted: true, added: Date.now(), sites: [] };
+                st.user.push(mine);
+            }
+            mine.sites = mine.sites || [];
+            if (mine.sites.indexOf(host) < 0) mine.sites.push(host);
+            mine.trusted = true;
+            save(st);
+            return true;
         }
         function sameDer(a, b) {
             if (a.length !== b.length) return false;
@@ -12259,6 +12386,7 @@
                 r.certificateFilename = filename(c);
                 r.trusted = c.trusted;
                 r.system = c.system;
+                r.sites = c.sites || [];
                 r.fingerprints = { sha256: sha(c.der, false), sha1: sha(c.der, true) };
                 r.pem = "-----BEGIN CERTIFICATE-----\n" + bytesB64(c.der).replace(/(.{64})/g, "$1\n").replace(/\n$/, "") + "\n-----END CERTIFICATE-----\n";
                 reply(r);
@@ -12316,7 +12444,8 @@
             }
         });
         runtime.certificates = { parse: function (der) { return parse(der); }, sha256: function (b) { return sha(b, false); },
-                                 sha1: function (b) { return sha(b, true); }, certsIn: certsIn };
+                                 sha1: function (b) { return sha(b, true); }, certsIn: certsIn,
+                                 siteFile: siteFile, siteTrusted: siteTrusted, trustSite: trustSite };
     })();
 
     // ================================================================================

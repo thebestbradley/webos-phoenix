@@ -90,7 +90,9 @@ export function ImageViewer({ images, start, onClose }: { images: FileEntry[]; s
 
 // ---- Text editor ------------------------------------------------------------------
 
-export function TextEditor({ entry, onClose, onSaved }: { entry: FileEntry; onClose: () => void; onSaved: () => void }) {
+/** onNotText: what to do with a file that turns out not to be text (a tap on a
+ *  file of no known type: Files offers Open With instead of a dead end). */
+export function TextEditor({ entry, onClose, onSaved, onNotText }: { entry: FileEntry; onClose: () => void; onSaved: () => void; onNotText?: () => void }) {
     const [text, setText] = useState<string | null>(null);
     const [saved, setSaved] = useState("");
     const [error, setError] = useState("");
@@ -104,7 +106,10 @@ export function TextEditor({ entry, onClose, onSaved }: { entry: FileEntry; onCl
         let live = true;
         fileManager.readText(entry.path, TEXT_EDIT_LIMIT).then((t) => {
             if (!live) return;
-            if (!looksLikeText(t)) { setError("This file is not text."); return; }
+            if (!looksLikeText(t)) {
+                if (onNotText) onNotText(); else setError("This file is not text.");
+                return;
+            }
             setText(t);
             setSaved(t);
         }, (e) => { if (live) setError(e.errorText ?? String(e)); });

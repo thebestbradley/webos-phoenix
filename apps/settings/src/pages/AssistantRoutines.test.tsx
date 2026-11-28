@@ -18,6 +18,7 @@ type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 type R = { returnValue: boolean; [k: string]: any };
 const ps = () => (window as unknown as { PalmSystem: PS }).PalmSystem;
 const REPO = resolve(__dirname, "../../../..");
+const ask = async (text: string) => ((await call("luna://org.webosphoenix.assistant/ask", { text, newThread: true })) as unknown as R).messages.at(-1);
 
 beforeAll(() => {
     (window as unknown as Record<string, unknown>).phoenixHost = { postToHost: () => {} };
@@ -33,8 +34,21 @@ beforeAll(() => {
     ps().appIdentifier = "org.webosphoenix.settings";
 });
 beforeAll(async () => { await call("luna://com.palm.applicationManager/listLaunchPoints", {}); }, 30000);
+// The Assistant's first save is its cold start: the first routine checked
+// reads each step with the grammar and prepares it through its command
+// (commands-routines.js normalized), code run for the first time, ~100 ms
+// here against ~10 ms after. The tests wait 1 s (findBy) for the page
+// after Save, and under load that first save took longer ("Good night",
+// unable to find it). Saved and removed here, in a hook's own time, so a
+// test waits for its page, not for the service warming up.
+beforeAll(async () => {
+    const { starters } = await assistant.routines();
+    const night = starters.find((r) => r.starter === "goodnight")!;
+    const { routine } = await assistant.setRoutine({ ...night, id: undefined, phrases: ["warm up"] });
+    await assistant.removeRoutine(routine.id);
+    await ask("what time is it");
+}, 30000);
 
-const ask = async (text: string) => ((await call("luna://org.webosphoenix.assistant/ask", { text, newThread: true })) as unknown as R).messages.at(-1);
 
 describe("Settings > Assistant > Routines", () => {
     it("adds the Good night starter, which then runs on its words", async () => {

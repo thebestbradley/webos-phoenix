@@ -50,9 +50,12 @@ function useWide(): boolean {
     return wide;
 }
 
-/** One step's page: its title, what it is for, the content, and the buttons. */
-function StepPage({ title, intro, children, onBack, onNext, nextLabel = "Next", onSkip, nextDisabled, testId, buttons = true }: {
-    title: string; intro?: ReactNode; children?: ReactNode; onBack?: () => void; onNext: () => void; nextLabel?: string;
+/** One step's page: its title, what it is for, the content, and the buttons.
+ *  note: what closes the step, laid out above the buttons, where the body
+ *  scrolls under it (at the end of the body, a phone's card left it half
+ *  under the buttons). */
+function StepPage({ title, intro, children, note, onBack, onNext, nextLabel = "Next", onSkip, nextDisabled, testId, buttons = true }: {
+    title: string; intro?: ReactNode; children?: ReactNode; note?: ReactNode; onBack?: () => void; onNext: () => void; nextLabel?: string;
     onSkip?: () => void; nextDisabled?: boolean; testId: string; buttons?: boolean;
 }) {
     return (
@@ -63,6 +66,7 @@ function StepPage({ title, intro, children, onBack, onNext, nextLabel = "Next", 
             </div>
             {intro && <div className="fu-intro">{intro}</div>}
             <div className="fu-body">{children}</div>
+            {note && <div className="fu-note"><Note>{note}</Note></div>}
             {buttons && <div className="fu-buttons">
                 {onBack ? <Button variant="dark" onClick={onBack} data-testid="back">Back</Button> : <span />}
                 <Button variant="affirmative" onClick={onNext} disabled={nextDisabled} data-testid="next">{nextLabel}</Button>
@@ -220,7 +224,8 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
     };
     return (
         <StepPage testId="hardware" title="Hardware" {...nav}
-                  intro="Some of your hardware needs firmware or a driver that does not come with Phoenix. Install it now, or later.">
+                  intro="Some of your hardware needs firmware or a driver that does not come with Phoenix. Install it now, or later."
+                  note={<>Skip this to install them later from Settings &gt; Hardware, which also has optional drivers.</>}>
             {!nav.list && <Row title="Looking at your hardware…"><Spinner /></Row>}
             <Group>
                 {devices.map((d) => {
@@ -238,7 +243,6 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
                 })}
             </Group>
             {error && <ErrorText testId="fu-hw-error">{error}</ErrorText>}
-            <Note>Skip this to install them later from Settings &gt; Hardware, which also has optional drivers.</Note>
             <Dialog open={!!asking} title={asking?.offer.license.name ?? ""} onClose={() => setAsking(null)} testId="fu-hw-license"
                     message={asking ? `${asking.offer.title} is not open source. Read its licence before installing it.` : undefined}>
                 <pre className="fu-license-text">{reflowLicense(asking?.offer.license.text ?? "")}</pre>
@@ -277,9 +281,8 @@ function AccountStep(nav: NavProps & { status: AccountStatus | undefined }) {
     }
     if (st?.state === "signedIn") {
         return (
-            <StepPage testId="account" title={name} {...nav} onSkip={undefined} intro={`Signed in as ${st.account?.email ?? ""}.`}>
-                <Note>Your cloud backups are offered in the next step.</Note>
-            </StepPage>
+            <StepPage testId="account" title={name} {...nav} onSkip={undefined} intro={`Signed in as ${st.account?.email ?? ""}.`}
+                      note="Your cloud backups are offered in the next step." />
         );
     }
     if (st?.state === "signingIn" && st.signIn?.userCode) {
@@ -294,11 +297,11 @@ function AccountStep(nav: NavProps & { status: AccountStatus | undefined }) {
     }
     return (
         <StepPage testId="account" title={name} {...nav}
-                  intro={`Sign in to your ${name} (optional): it keeps encrypted backups of this device in the cloud, and restores them on a new one.`}>
+                  intro={`Sign in to your ${name} (optional): it keeps encrypted backups of this device in the cloud, and restores them on a new one.`}
+                  note="Nothing else needs an account. You can sign in later in Settings.">
             <Group>
                 <Row title="Sign In" chevron testId="account-sign-in" onClick={() => void signIn()} />
             </Group>
-            <Note>Nothing else needs an account. You can sign in later in Settings.</Note>
             {(error || st?.error) && <ErrorText testId="account-error">{error ?? st?.error?.errorText}</ErrorText>}
         </StepPage>
     );
@@ -485,6 +488,13 @@ function AccountsStep(nav: NavProps) {
         <StepPage testId="accounts" title="Accounts" {...nav}
                   intro={<>With <b>Synergy</b>, the contacts and calendars of all your accounts come together: one list of
                       people, one calendar.</>}>
+            {/* Before the list: six lines on a phone, too many to keep above
+                the buttons, and at the list's end they sat half under them. */}
+            <Note>
+                Phoenix syncs contacts and calendars with CardDAV and CalDAV: iCloud, Fastmail, Nextcloud and others. Use an app
+                password where your provider has them. Google, Microsoft and chat networks are planned. You can add accounts
+                later in the Accounts app.
+            </Note>
             <Group label="Your accounts">
                 {accounts === null && <Row title="Loading…"><Spinner /></Row>}
                 {accounts?.length === 0 && <Row title="No accounts yet" />}
@@ -493,11 +503,6 @@ function AccountsStep(nav: NavProps) {
                 ))}
                 <Row title="Add an account" chevron testId="add-account" onClick={() => void apps.launch("com.palm.app.accounts")} />
             </Group>
-            <Note>
-                Phoenix syncs contacts and calendars with CardDAV and CalDAV: iCloud, Fastmail, Nextcloud and others. Use an app
-                password where your provider has them. Google, Microsoft and chat networks are planned. You can add accounts
-                later in the Accounts app.
-            </Note>
         </StepPage>
     );
 }
@@ -531,15 +536,16 @@ function PasscodeStep(nav: NavProps) {
     if (mode && mode !== "none") {
         return (
             <StepPage testId="passcode" title="Passcode" {...nav}
-                      intro={`A ${mode === "pin" ? "PIN" : "password"} already locks this device.`}>
-                <Note>Change it or turn it off in Settings &gt; Screen &amp; Lock.</Note>
-            </StepPage>
+                      intro={`A ${mode === "pin" ? "PIN" : "password"} already locks this device.`}
+                      note={<>Change it or turn it off in Settings &gt; Screen &amp; Lock.</>} />
         );
     }
     const isPin = kind === "pin";
     return (
         <StepPage testId="passcode" title="Passcode" {...nav} onNext={next} nextLabel={kind === "none" ? "Next" : saving ? "Saving…" : "Set"}
-                  nextDisabled={saving} intro="Lock the device so only you can unlock it. The lock screen asks for it after you drag the padlock up.">
+                  nextDisabled={saving} intro="Lock the device so only you can unlock it. The lock screen asks for it after you drag the padlock up."
+                  note={<>On the PIN pad, Emergency Call works without the passcode, and shows your Medical ID if you add one in
+                      Settings &gt; Emergency Info.</>}>
             <Group>
                 {([["none", "No passcode"], ["pin", "Simple PIN"], ["password", "Password"]] as [LockMode, string][]).map(([v, label]) => (
                     <Row key={v} title={label} testId={`lock-${v}`} onClick={() => { setKind(v); setError(null); setCode(""); setConfirm(""); }}>
@@ -556,8 +562,6 @@ function PasscodeStep(nav: NavProps) {
                     {error && <ErrorText>{error}</ErrorText>}
                 </div>
             )}
-            <Note>On the PIN pad, Emergency Call works without the passcode, and shows your Medical ID if you add one in
-                Settings &gt; Emergency Info.</Note>
         </StepPage>
     );
 }
@@ -605,7 +609,7 @@ function PrivacyStep(nav: NavProps) {
 function DoneStep({ onBack, onFinish, rerun }: { onBack: () => void; onFinish: () => void; rerun: boolean }) {
     return (
         <StepPage testId="done" title="All Set" onBack={onBack} onNext={onFinish} nextLabel={rerun ? "Done" : "Start"}
-                  intro="Your device is ready.">
+                  intro="Your device is ready." note="Run setup again at any time from Settings > Device Info.">
             <div className="fu-done">
                 <div className="fu-hello"><img src="icon-256x256.png" alt="" /></div>
                 <Group>
@@ -614,7 +618,6 @@ function DoneStep({ onBack, onFinish, rerun }: { onBack: () => void; onFinish: (
                     <Row title="Emergency Info" subtitle="A medical ID for the lock screen" chevron
                          onClick={() => void apps.launch("org.webosphoenix.settings", { page: "emergency" })} />
                 </Group>
-                <Note>Run setup again at any time from Settings &gt; Device Info.</Note>
             </div>
         </StepPage>
     );

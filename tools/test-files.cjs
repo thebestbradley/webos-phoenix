@@ -246,7 +246,10 @@ async function main() {
         check(true, "back with unsaved changes asks first");
         await page.click("[data-testid='discard-save']");
         await page.waitForSelector("[data-testid='text-editor']", { state: "detached" });
-        await page.waitForSelector(row("todo.txt"));
+        // The row is there from New File on (an empty file, 0 B): wait for the
+        // list read again after the save, not just for the row.
+        await page.waitForFunction((sel) => /^11 B/.test(document.querySelector(sel)?.textContent ?? ""),
+                                   `${row("todo.txt")} .pui-row-subtitle`, { timeout: 5000 }).catch(() => {});
         check((await page.textContent(`${row("todo.txt")} .pui-row-subtitle`)).startsWith("11 B"), "new file: todo.txt saved (11 B)");
 
         // ---- Back gesture, info, delete ------------------------------------------------------------
@@ -369,6 +372,32 @@ async function main() {
         const launch = lastHost("launch");
         check(launch && launch.payload.id === "org.webosphoenix.music" && launch.payload.params.target === "/media/internal/Music/morning-boot.ogg",
             "open with Music launches it with the file");
+
+        // ---- Files the editor cannot show ------------------------------------------------------------
+        // A small KeePass database has a type and an app for it (Passwords):
+        // it opens with that app, not in the text editor, which could only
+        // say "This file is not text." with no way on. A small file of no
+        // known type that turns out not to be text offers Open With.
+        const kdbx = Buffer.concat([Buffer.from([0x03, 0xd9, 0xa2, 0x9a, 0x67, 0xfb, 0x4b, 0xb5]), Buffer.alloc(600, 7)]).toString("base64");
+        await luna("luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Music/Vault.kdbx", data: kdbx, encoding: "base64" });
+        await luna("luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Music/blob.qa", data: kdbx, encoding: "base64" });
+        await favorite("Pictures");
+        await favorite("Music");
+        await page.waitForSelector(row("Vault.kdbx"));
+        await page.click(row("Vault.kdbx"));
+        const kdbxOpens = await page.waitForSelector("[data-testid='open-with-org.webosphoenix.passwords']", { timeout: 3000 }).then(() => true, () => false);
+        check(kdbxOpens, "a small .kdbx offers Passwords (Open with), not the text editor");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='open-with-dialog'], [data-testid='text-editor']", { state: "detached" }).catch(() => {});
+        if (await page.locator("[data-testid='text-editor']").count()) { await page.keyboard.press("Escape"); await page.waitForTimeout(300); }
+        await page.click(row("blob.qa"));
+        const binOpens = await page.waitForSelector("[data-testid='open-with-dialog']", { timeout: 3000 }).then(() => true, () => false);
+        check(binOpens, "a small file of no known type that is not text offers Open With");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='open-with-dialog'], [data-testid='text-editor']", { state: "detached" }).catch(() => {});
+        if (await page.locator("[data-testid='text-editor']").count()) { await page.keyboard.press("Escape"); await page.waitForTimeout(300); }
+        await luna("luna://org.webosphoenix.filemanager/remove", { path: "/media/internal/Music/Vault.kdbx" });
+        await luna("luna://org.webosphoenix.filemanager/remove", { path: "/media/internal/Music/blob.qa" });
 
         // ---- System files ----------------------------------------------------------------------------
         await page.click("[data-testid='crumb-0']");

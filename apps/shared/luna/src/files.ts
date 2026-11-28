@@ -375,6 +375,8 @@ const KINDS: Record<string, [FileKind, string]> = {
     pptx: ["document", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
     doc: ["document", "application/msword"], xls: ["document", "application/vnd.ms-excel"], ppt: ["document", "application/vnd.ms-powerpoint"],
     odt: ["document", "application/vnd.oasis.opendocument.text"],
+    ods: ["document", "application/vnd.oasis.opendocument.spreadsheet"],
+    odp: ["document", "application/vnd.oasis.opendocument.presentation"],
     epub: ["book", "application/epub+zip"],
 };
 
@@ -399,12 +401,13 @@ export function kindLabel(entry: Pick<FileEntry, "name" | "type">): string {
     return KIND_LABELS[kindOf(entry)];
 }
 
-/** Files the built-in editor opens: text and code, and small files of unknown type. */
+/** Files the built-in editor opens: text and code, and small files of unknown type
+ *  (a file whose type is known, a KeePass database, goes to the apps for that type). */
 export const TEXT_EDIT_LIMIT = 256 * 1024;
 export function opensAsText(entry: Pick<FileEntry, "name" | "type" | "size">): boolean {
     const k = kindOf(entry);
     if (k === "text" || k === "code") return entry.size <= TEXT_EDIT_LIMIT;
-    return k === "file" && entry.size <= 64 * 1024;
+    return k === "file" && mimeOf(entry.name) === "application/octet-stream" && entry.size <= 64 * 1024;
 }
 
 /** Does this look like text (no NUL bytes, few control characters)? */
