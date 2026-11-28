@@ -124,6 +124,7 @@ handlers, which Settings > Location Services turns on and off:
 | The Mac's own position | `gps` | VMs on a Mac (UTM, `scripts/vm.sh`) | The VM has a virtio serial port, `org.webosphoenix.gps.0` (`/dev/virtio-ports/…`, the VM machine's gpsConfig.conf), whose QEMU end connects to 127.0.0.1:45570. There the Mac app **Phoenix VM Location** (`tools/vm-location`, Core Location; build it with `tools/vm-location/build.sh` and open it, and allow it the location once) sends `$GPGGA`/`$GPRMC` each second. `tools/vm-location/nmea-feed.py --fixed LAT,LON` sends a fixed position instead (the image regression suite does the same, at the Eiffel Tower). `make-utm.sh --for mac` and `vm.sh` add the port (`--gps PORT\|off`) |
 | Wi-Fi access points and cells | `network` | Anything with Wi-Fi or a modem | The service posts them (Ichnaea / Google Geolocation API) to the platform's `/v1/location/geolocate` (`/etc/location/geolocate.conf`, from `PHOENIX_API_URL`), which looks them up in [beaconDB](https://beacondb.net) without the device's address; with no platform address, to beaconDB directly |
 | The internet address | `network` | VMs on an iPad or a Mac without the helper, tablets on a wired network, phones without a SIM | With no Wi-Fi or cell data within 4 s of a request, the service posts `{"considerIp": true}`; the platform looks the address up in DB-IP's IP to City Lite on its own server (a city, 25 km) |
+| Another of the user's devices | `network` | VMs on an iPad, anything without its own | The position another device shares through the Phoenix Account (Safari on the iPad, a Shortcut), when Settings › Location Services › **Use my other device's position** is on: [below](#another-devices-position-location-sharing) |
 | The user's own | `network` | Anywhere | Settings > Location Services > **Set my location**: a town searched by name (`getGeoCodeLocation`), kept by the service (`setNetworkProvider {provider: "manual", position}`, luna-prefs) and answered at once, without a connection, until **Find my location automatically** |
 
 Place names (`getReverseLocation`: Weather's Current Location, Maps'
@@ -147,6 +148,63 @@ handler answers it alone.
 meta-phoenix replaces `wsp.conf` and drops the patch, and GeoClue's Wi-Fi
 and IP lookups go to the platform too (Qt Positioning still depends on
 GeoClue; webOS's own clients do not use it).
+
+### Another device's position (location sharing)
+
+A device that cannot find itself well, above all a VM in UTM on an iPad
+(UTM on iOS passes no Core Location, Wi-Fi, Bluetooth or USB into the VM,
+so the only position there is a city from the internet address), can use
+the street-level position of another device the user owns, relayed through
+their Phoenix Account (since 28 November 2026):
+
+1. **Sharing** (the platform, `/v1/me/location`; Phoenix-Web-Services
+   `App\Domain\Location\LocationRelay`): the website's **Your account ›
+   Location sharing** page turns it on for the account. Opened in Safari on
+   the iPad with **Start sharing**, the page sends the browser's position
+   (the Geolocation API) about every 15 seconds while it is open. An Apple
+   Shortcut can send it instead (`POST /v1/location/relay` with the page's
+   Shortcut key), and a Phoenix device with GPS can (`PUT /v1/me/location`).
+2. **The device's switch** (the account service,
+   `org.webosphoenix.service.account` `setLocationRelay {enabled}`,
+   Settings › Location Services › **Use my other device's position**): off
+   by default. Settings shows where the position came from ("From iPad,
+   2 min ago, within 8 m") or why there is none.
+3. **The source** (the location service's network handler, meta-phoenix's
+   `0002-Another-of-the-account-s-devices-position-location-sharing.patch`):
+   at every request, and every minute while one runs, it asks the account
+   service's `locationRelay`, which reads `GET /v1/me/location` (reused for
+   15 s). A position there is the network handler's answer, with its own
+   accuracy and the time it was measured.
+
+**Order.** With the switch on and a fresh shared position, the network
+handler answers with it, ahead of the town the user set (Set my location,
+which then answers only when there is no shared position; the handler
+waits up to 3 s for the account service) and ahead of Wi-Fi, cells and the
+internet address (no query is posted while the shared position is in use,
+2.5 minutes after it last came). The GPS handler is not affected: in a
+hybrid request a running GPS still answers too, by the rules above (first
+fix; then better than 100 m or a minute apart). Without a shared position,
+everything is as before: GPS, then Wi-Fi and cells, then the internet
+address, or the town the user set.
+
+**Privacy rules.**
+
+- Off twice over: the account's sharing is off until the website's page
+  turns it on, and each device's switch is off until Settings turns it on.
+  Turning the account's sharing off deletes the position at once and
+  refuses new ones; the device's switch stops the device asking.
+- Only the account's own devices read it: `GET /v1/me/location` needs the
+  account's token with the `account` scope. The Shortcut key can only post
+  a position, is kept on the server only as a SHA-256 hash, and is replaced
+  or deleted on the page.
+- Only the latest position is kept, and only for 30 minutes from when it
+  was measured (`LOCATION_RELAY_TTL`); an older one is refused, a read never
+  returns an expired one, and the server clears expired ones every five
+  minutes. A position measured before the kept one is ignored. The device
+  uses none older than 30 minutes by its own count either.
+- A device never uses a position it shared itself (`OWN_POSITION`).
+- The position is in the account's export (`location-sharing.jsonl`) and
+  goes with the account.
 
 ## Decisions
 
