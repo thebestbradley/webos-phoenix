@@ -24,7 +24,10 @@
 //      the app gets the device's copy and where it came from;
 //   7. a big upload: its progress in the notification area's ongoing
 //      activities, then cleared;
-//   8. offline: the drive's folder says it cannot be reached, with Try Again.
+//   8. offline: the drive's folder says it cannot be reached, with Try Again;
+//   9. WebDAV and S3 (MinIO): a wrong password says so, the right one signs
+//      in; a file put on the server shows at Refresh, a folder made in Files
+//      is on the server; Remove Account in Accounts takes the drive away.
 //
 //   node tools/test-drives.cjs [--phone] [--out DIR]
 //
@@ -419,6 +422,71 @@ async function main() {
         await files.click("[data-testid=retry]");
         await files.waitForSelector("[data-testid=empty]", { timeout: 15000 }).catch(() => {});
         check(await files.locator("[data-testid=folder-error]").count() === 0, "online again: Try Again lists the folder");
+
+        // ---- 9. WebDAV and S3: a wrong password, the right one, both ways, Remove Account -------------------
+        // As a person goes: the fields filled, Sign In tapped; the drive in
+        // Files (a change on the server shows at Refresh, a folder made here
+        // is on the server); removed in Accounts with its own Remove Account.
+        const kinds = [
+            { templateId: "com.webosphoenix.drive.webdav", name: "WebDAV", fields: { server: fake.origin + "/remote.php/dav/files/phoenix/", username: fake.users.dav.user },
+              password: fake.users.dav.password, onServer: (n) => !!fake.trees.dav.byPath("/" + n),
+              addOnServer: (n) => { const t = fake.trees.dav; const id = t.newId(); t.nodes.set(id, { id, name: n, parent: t.root.id, type: "file", bytes: Buffer.from("hi"), mtime: Date.now(), version: 1 }); } },
+            { templateId: "com.webosphoenix.drive.s3", name: "S3", preset: "minio",
+              fields: { server: fake.origin, region: fake.users.s3.region, bucket: fake.users.s3.bucket, username: fake.users.s3.accessKeyId },
+              password: fake.users.s3.secretAccessKey, onServer: (n) => [...fake.s3keys.keys()].some((k) => k.indexOf(n + "/") === 0),
+              addOnServer: (n) => fake.s3keys.set(n, { bytes: Buffer.from("hi"), mtime: Date.now() }) }
+        ];
+        for (const k of kinds) {
+            w = await wizardOf(k.templateId);
+            const fill = (password) => w.evaluate(([f, p, preset]) => {
+                const d = enyo.$.drivesWizard;
+                if (preset) { d.$.preset.setValue(preset); d.presetChanged(); }
+                Object.keys(f).forEach((n) => d.$[n].setValue(f[n]));
+                d.$.password.setValue(p);
+                d.fieldChanged();
+            }, [k.fields, password, k.preset || null]);
+            const shownError = () => w.evaluate(() => enyo.$.drivesWizard.$.errorBox.getShowing() ? enyo.$.drivesWizard.$.errorMessage.getContent() : "");
+            await fill("not-the-password");
+            await tapSignIn(w);
+            const said = await until(shownError, 15000);
+            check(/credentials you entered are incorrect/.test(said || ""), k.name + ": a wrong password says so (" + said + ")");
+            await shot(accounts, "19-" + k.name + "-wrong-password");
+            await fill(k.password);
+            await tapSignIn(w);
+            const create3 = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
+            await create3.waitFor({ timeout: 20000 }).catch(() => {});
+            await create3.click().catch(() => {});
+            const acc = await until(async () => (await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId: k.templateId })).results[0], 10000);
+            if (!check(!!acc, k.name + ": the right one makes the account")) continue;
+            await files.goto(appUrl("org.webosphoenix.files", { path: "/media/drives/" + acc._id }));
+            await files.waitForSelector("[data-testid='file-Photos']", { timeout: 15000 }).catch(() => {});
+            check(await files.locator("[data-testid='file-Photos']").count() === 1, k.name + ": its folders in Files");
+            k.addOnServer("from-the-server.txt");
+            await files.click("[data-testid=menu]");
+            await files.click(`.pui-menu-item:has-text("Refresh")`);
+            await files.waitForSelector("[data-testid='file-from-the-server.txt']", { timeout: 15000 }).catch(() => {});
+            check(await files.locator("[data-testid='file-from-the-server.txt']").count() === 1, k.name + ": a file put on the server shows at Refresh");
+            await files.click("[data-testid='new']");
+            await files.click(`.pui-menu-item:has-text("New Folder")`);
+            await files.waitForSelector("[data-testid='name-dialog']");
+            await files.fill("[data-testid='name-field']", "Made on Phoenix");
+            await files.click("[data-testid='name-ok']");
+            check(!!(await until(() => k.onServer("Made on Phoenix"), 15000)), k.name + ": a folder made in Files is on the server");
+            await shot(files, "20-" + k.name + "-files");
+            // Accounts: the account, Remove Account, and its confirmation.
+            await accounts.goto(appUrl("com.palm.app.accounts"));
+            await accounts.getByText(acc.alias || k.name, { exact: false }).first().click({ timeout: 15000 });
+            const removeButtons = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Remove Account" });
+            await removeButtons.first().click({ timeout: 15000 });
+            await accounts.waitForFunction(() => document.querySelectorAll(".enyo-button, .enyo-custom-button").length > 0);
+            await until(async () => (await removeButtons.count()) > 1, 5000);
+            await removeButtons.last().click();
+            check(!!(await until(async () => !(await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId: k.templateId })).results.length, 10000)),
+                  k.name + ": Remove Account in Accounts removes it");
+            const drivesNow = await luna(files, "luna://org.webosphoenix.filemanager/list", { path: "/media/drives" });
+            check(drivesNow.returnValue && !(drivesNow.entries || []).some((e) => e.path.indexOf(acc._id) >= 0),
+                  k.name + ": its drive is gone from Files (" + (drivesNow.entries || []).map((e) => e.name).join(", ") + ")");
+        }
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     } finally {

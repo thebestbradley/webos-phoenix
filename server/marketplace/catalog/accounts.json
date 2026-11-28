@@ -264,7 +264,7 @@
             "server": "fixed",
             "privacy": { "dataGoesTo": "Todoist", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
-            "status": "experimental",
+            "status": "beta",
             "package": { "id": "org.webosphoenix.todoist", "builtin": false },
             "signUp": "https://app.todoist.com/auth/signup"
         },
@@ -285,7 +285,7 @@
             "server": "discovered",
             "privacy": { "dataGoesTo": "your Bluesky server (PDS) and Bluesky's app and chat services", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
-            "status": "experimental",
+            "status": "beta",
             "package": { "id": "org.webosphoenix.bluesky", "builtin": false },
             "signUp": "https://bsky.app/"
         },

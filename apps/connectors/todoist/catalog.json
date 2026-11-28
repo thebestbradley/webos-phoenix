@@ -14,7 +14,7 @@
             "server": "fixed",
             "privacy": { "dataGoesTo": "Todoist", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
-            "status": "experimental"
+            "status": "beta"
         }
     ]
 }

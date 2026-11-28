@@ -13,7 +13,8 @@
 //      Feeds); each package, Phoenix's own from the catalog the device
 //      ships with, installs without Developer Mode;
 //   2. Todoist in Accounts: "Sign In with Todoist is not available in this
-//      build", the API token instead; the account is made;
+//      build", the API token instead (a wrong one refused, saying so); the
+//      account is made;
 //   3. Tasks: Todoist's projects are lists under the account, with their
 //      tasks; a task added in Tasks and one ticked off reach Todoist;
 //   4. the share sheet's Add to Todoist makes a task of a link;
@@ -22,7 +23,8 @@
 //   6. the people followed are contacts; a direct message is a Messaging
 //      conversation labelled not end-to-end encrypted, and a reply goes
 //      back; a new follower is a notification;
-//   7. the share sheet posts a link to Bluesky.
+//   7. the share sheet posts a link to Bluesky;
+//   8. each removed in Accounts (Remove Account, confirmed): its records go.
 //
 //   node tools/test-connectors.cjs [--tablet] [--out DIR]
 //
@@ -368,7 +370,7 @@ async function main() {
             await market.click(row);
             await market.waitForSelector("[data-testid=account-page]");
             const text = await market.textContent("[data-testid=account-page]");
-            check(/Phoenix's servers: none/.test(text) && /experimental/i.test(text), name + "'s page: no Phoenix server in between, experimental");
+            check(/Phoenix's servers: none/.test(text) && /Beta: it works/.test(text), name + "'s page: no Phoenix server in between, beta");
             await shot(market, "2-" + name + "-page");
             const clickAt = await market.evaluate(() => (window.__phoenixLunaTrace ? window.__phoenixLunaTrace.now() : 0)), clickWall = Date.now();
             await market.click("[data-testid=connector-install]");
@@ -395,7 +397,13 @@ async function main() {
             await accounts.goto(appUrl("com.palm.app.accounts", { templateId }));
             const re = new RegExp(app.replace(/\./g, "\\.") + "\\/accounts\\/wizard\\.html");
             const w = await until(() => accounts.frames().find((f) => re.test(f.url())), 15000);
-            if (!w) throw new Error("no sign-in page for " + templateId);
+            if (!w) {
+                await shot(accounts, "no-wizard-" + templateId);
+                console.log("    frames: " + accounts.frames().map((f) => f.url()).join(", "));
+                console.log("    the page shows: " + ((await accounts.textContent("body").catch(() => "")) || "").replace(/\s+/g, " ").slice(0, 400));
+                if (errors.length) console.log("    page errors: " + errors.join("; "));
+                throw new Error("no sign-in page for " + templateId);
+            }
             await w.waitForSelector(".connector-wizard", { timeout: 10000 }).catch(async (e) => { await shot(accounts, "wizard-failed"); console.log("errors: " + JSON.stringify(errors)); throw e; });
             await w.waitForSelector(".connector-unavailable", { state: "visible", timeout: 8000 }).catch(() => {});
             return w;
@@ -437,6 +445,13 @@ async function main() {
         check(/Sign In with Todoist is not available in this build/.test(await w.locator(".connector-unavailable").textContent().catch(() => "")),
               "Todoist: Sign In with Todoist is not available in this build (no registration)");
         check(/Don't have an account\? Sign up/.test(await w.locator(".accounts-signup").textContent().catch(() => "")), "and a sign-up link");
+        // A token that is not the account's: Todoist refuses it, and the page says so.
+        await w.locator("input[type=password]").first().fill(td.token.split("").reverse().join(""));
+        await w.locator("input[type=password]").first().press("Tab");
+        await tapSignIn(w, "connectorWizard");
+        const refused = await until(() => w.evaluate(() => enyo.$.connectorWizard_errorBox.getShowing() && enyo.$.connectorWizard_errorMessage.getContent()), 15000);
+        check(refused === "Todoist did not accept the token", "a wrong token: \"" + refused + "\"");
+        await shot(accounts, "3-todoist-wrong-token");
         await w.locator("input[type=password]").first().fill(td.token);
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "3-todoist-sign-in");
@@ -557,6 +572,24 @@ async function main() {
         check(!!post && post.record.facets && post.record.facets[0].features[0].uri === "https://example.org/notes", "posted, the link a facet");
         await compose.waitForSelector("#done:not([hidden])", { timeout: 10000 }).catch(() => {});
         await shot(compose, "16-bluesky-posted");
+
+        // ---- 8. Removed in Accounts: Remove Account, confirmed; the account's data goes ----------------------
+        const ownRecords = (p, id) => p.evaluate((a) => Object.keys(localStorage).filter((x) => x.startsWith("phoenix:db8:com.palm.db/obj/"))
+            .map((x) => JSON.parse(localStorage.getItem(x))).filter((o) => !o._del && o.accountId === a).map((o) => o._kind), id);
+        for (const [acc, templateId, label] of [[todo, TODOIST, "Todoist"], [sky, BLUESKY, "Bluesky"]]) {
+            const before = await ownRecords(accounts, acc._id);
+            await accounts.goto(appUrl("com.palm.app.accounts"));
+            await accounts.getByText(label, { exact: true }).first().click({ timeout: 15000 });
+            const removeButtons = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Remove Account" });
+            await removeButtons.first().click({ timeout: 15000 });
+            await until(async () => (await removeButtons.count()) > 1, 5000);
+            await shot(accounts, "17-" + label.toLowerCase() + "-remove");
+            await removeButtons.last().click();
+            check(!!(await until(async () => !(await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId })).results.length, 10000)),
+                  label + ": Remove Account in Accounts removes it");
+            const left = await until(async () => { const r = await ownRecords(accounts, acc._id); return r.length ? null : r; }, 10000);
+            check(before.length > 0 && !!left, label + ": its " + before.length + " records go with it" + (left ? "" : " (left: " + [...new Set(await ownRecords(accounts, acc._id))].join(", ") + ")"));
+        }
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
     } finally {
