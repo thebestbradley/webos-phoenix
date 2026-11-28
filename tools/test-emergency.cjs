@@ -140,6 +140,22 @@ async function main() {
         let t = await text();
         check(/Emergency calls only/.test(t) && /Dial 911/.test(t), "restricted mode: emergency calls only, 911 offered");
         check(await page.locator("[data-testid=phone-tabs]").count() === 0, "restricted mode: no call log, favourites or contacts");
+        // The title and the number fit the red band: neither is pushed out
+        // over its top (the band lays its lines out from its foot, and the
+        // number row's 64px flex basis made them taller than the band).
+        // Also as the simulator's phone opens it over the lock screen: 432
+        // tall (480 less the status bar and the gesture area).
+        for (const height of tablet ? [viewport.height] : [viewport.height, 432]) {
+            await page.setViewportSize({ width: viewport.width, height });
+            const band = await page.evaluate(() => {
+                const r = (s) => document.querySelector(s).getBoundingClientRect();
+                const d = r(".emergency-display"), title = r("[data-testid=emergency-title]"), num = r("[data-testid=number-display]");
+                return { top: d.top, bottom: d.bottom, titleTop: title.top, titleHeight: title.height, numBottom: num.bottom };
+            });
+            check(band.titleTop >= band.top && band.titleHeight >= 18 && band.numBottom <= band.bottom,
+                `restricted mode, ${height} tall: "Emergency calls only" and the number fit the band (${JSON.stringify(band)})`);
+        }
+        await page.setViewportSize(viewport);
         await shot("phone-emergency");
         for (const k of "5550142") await page.keyboard.press(k);
         await page.click("[data-testid=dial-button]");

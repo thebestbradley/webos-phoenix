@@ -337,7 +337,11 @@ Item {
             tryCompare(shell, "keyboardOpen", true, 2000);
             type("turn on the flashlight");
             tryVerify(function () { return bubbles().indexOf("The flashlight is on.") >= 0; }, 2000);
-            compare(bubbles().indexOf("turn on the flashlight") >= 0, true);
+            // The request's bubble too, once the list has its height: while
+            // the keyboard is still sliding up the list is shorter than its
+            // two bubbles (42 of its 54 px on a busy machine) and the
+            // request's row, out of sight, is not made yet.
+            tryVerify(function () { return bubbles().indexOf("turn on the flashlight") >= 0; }, 2000);
             verify(fake.calls.indexOf("ask turn on the flashlight") >= 0);
             // The speaker's lower corner nearly square, as in the Assistant
             // app and Messaging (assistant.css:33-34): the user's lower

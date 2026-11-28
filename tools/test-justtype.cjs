@@ -204,6 +204,19 @@ async function main() {
         }
         await page.setViewportSize(viewport);
 
+        // Typed and cleared (the field's x, or Just Type closing) before the
+        // search's half-second debounce fires: the search finds no text
+        // and does nothing (it read the cleared filterText's length).
+        const before = errors.length;
+        await page.evaluate(() => enyo.$.justTypeApp.$.justType.forceFocus());
+        await page.keyboard.type("ab", { delay: 40 });
+        await page.evaluate(() => enyo.$.justTypeApp.$.justType.clearSearchText());
+        await page.evaluate(() => enyo.$.justTypeApp.$.justType.forceFocus());
+        await page.keyboard.type("cd", { delay: 40 });
+        await page.evaluate(() => enyo.$.justTypeApp.$.justType.justTypeDeactivated());
+        await page.waitForTimeout(1000);
+        check(errors.length === before, "cleared before its search runs: no error" + (errors.length > before ? ": " + errors[before] : ""));
+
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();
     } finally {
