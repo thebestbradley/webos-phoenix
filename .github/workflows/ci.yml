@@ -358,6 +358,12 @@ jobs:
       - name: Two simulators at once
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-instance-sim.cjs --out app-tests/instance-sim
 
+      # What a page stores survives the simulator stopping: SIGTERM, SIGINT,
+      # SIGHUP, Device > Quit, --screenshot, and --instance, each a clean exit.
+      - name: The simulator keeps the pages' storage when it is stopped
+        timeout-minutes: 10
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-storage-shutdown-sim.cjs
+
       # The activity manager with each app a page of its own: an alarm rings
       # at its minute with the Clock closed, once; activities due together
       # each fire once; --launch 'appId:{json}'.

@@ -1579,6 +1579,12 @@ Two simulators at once with --instance, each with its own data:
 NODE_PATH="$(npm root -g)" node tools/test-instance-sim.cjs
 ```
 
+What a page stores survives phoenix-sim stopping: SIGTERM, SIGINT, SIGHUP, Device > Quit, --screenshot, --instance:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-storage-shutdown-sim.cjs
+```
+
 Jabber against a real Prosody (skipped without it):
 
 ```sh

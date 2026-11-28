@@ -53,7 +53,11 @@
 
 #include <memory>
 
-#ifdef Q_OS_LINUX
+#ifdef Q_OS_UNIX
+#include <QSocketNotifier>
+#include <csignal>
+#include <fcntl.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #endif
 
@@ -150,6 +154,57 @@ static void keepHiddenPagesRunning()
 }
 #endif
 
+#ifdef Q_OS_UNIX
+// SIGTERM (kill, xvfb-run, CI, scripts), SIGINT (Ctrl+C) and SIGHUP (the
+// terminal closed) quit the simulator as Device > Quit and --screenshot do:
+// app.exec() returns and main's locals go in order, the view and with it
+// the web profile before QApplication, which is when Qt WebEngine shuts
+// Chromium down and writes the pages' storage out (localStorage, the
+// runtime's db8 and settings). Left to the signals' default, the process
+// died with the latest writes not yet on disk, and the next start read
+// the old values (tools/test-storage-shutdown-sim.cjs). A handler may only
+// do async-signal-safe things, so it writes a byte to a socket the event
+// loop watches (Qt's "Calling Qt Functions From Unix Signal Handlers").
+// A second signal while quitting has its default effect.
+static int quitSignalFd[2] = { -1, -1 };
+
+static void quitOnSignal(int sig)
+{
+    const char c = char(sig);
+    const ssize_t written = ::write(quitSignalFd[0], &c, 1);
+    (void)written;
+}
+
+static void quitOnSignals(QCoreApplication *app)
+{
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, quitSignalFd) != 0) {
+        qWarning("phoenix-sim: no socket for SIGTERM, SIGINT and SIGHUP: they will stop it without saving");
+        return;
+    }
+    for (int fd : quitSignalFd) {
+        ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+        ::fcntl(fd, F_SETFL, ::fcntl(fd, F_GETFL) | O_NONBLOCK);
+    }
+    static const int quitSignals[] = { SIGTERM, SIGINT, SIGHUP };
+    auto *notifier = new QSocketNotifier(quitSignalFd[1], QSocketNotifier::Read, app);
+    QObject::connect(notifier, &QSocketNotifier::activated, app, [notifier]() {
+        char c = 0;
+        while (::read(quitSignalFd[1], &c, 1) == 1) { }
+        notifier->setEnabled(false);
+        for (int sig : quitSignals)
+            std::signal(sig, SIG_DFL);
+        qInfo("phoenix-sim: %s: quitting", c == SIGINT ? "SIGINT" : c == SIGHUP ? "SIGHUP" : "SIGTERM");
+        QCoreApplication::quit();
+    });
+    struct sigaction action = {};
+    action.sa_handler = quitOnSignal;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    for (int sig : quitSignals)
+        ::sigaction(sig, &action, nullptr);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
@@ -168,6 +223,9 @@ int main(int argc, char *argv[])
 #endif
     // QApplication: the window's menu bar and toolbar are widgets.
     QApplication app(argc, argv);
+#ifdef Q_OS_UNIX
+    quitOnSignals(&app);
+#endif
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0) && !defined(Q_OS_DARWIN)
     // Emoji presentation from the colour font, whatever the text font.
     QFontDatabase::addApplicationEmojiFontFamily(QStringLiteral("Noto Color Emoji"));
