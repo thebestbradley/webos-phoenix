@@ -211,6 +211,30 @@ def main():
     for base in sorted(pages):
         ok(os.path.dirname(base) in callers, "check-luna reads %s" % os.path.dirname(base))
 
+    # OSE's installer checks no signature, so only the Marketplace's service
+    # may reach it: it checks who publishes each package (nova install comes
+    # to it too, packagesservice.js "Who may update an installed app"). No
+    # app, no other service and not nova luna-send's developer role holds
+    # its groups.
+    holders = set()
+    for d in luna.sysbus_files(REPO):
+        for fn in os.listdir(d):
+            if fn.endswith(".perm.json"):
+                with open(os.path.join(d, fn), encoding="utf-8") as f:
+                    for client, groups in json.load(f).items():
+                        if any(str(g).startswith("applicationinstall.") for g in groups if isinstance(groups, list)):
+                            holders.add(client)
+    for d in luna.app_dirs(REPO):
+        info, _ = luna.app_info(d)
+        if info and any(str(g).startswith("applicationinstall.") for g in info.get("requiredPermissions") or []):
+            holders.add(info.get("id"))
+    with open(os.path.join(REPO, "compat", "app-permissions.json"), encoding="utf-8") as f:
+        for client, groups in json.load(f).items():
+            if isinstance(groups, list) and any(str(g).startswith("applicationinstall.") for g in groups):
+                holders.add(client)
+    ok(holders == {"org.webosphoenix.service.packages"},
+       "only the Marketplace's service holds OSE's installer groups (%s)" % ", ".join(sorted(holders)))
+
     # This repository, with its allowlist, as CI runs it.
     for c in CHECKERS:
         status, out = run(c, REPO)

@@ -31,6 +31,9 @@ var INSTALLED_APPS = "/media/cryptofs/apps/usr/palm/applications/";
 // them (app-services com.palm.service.accounts accounts.js TEMPLATE_ROOTS,
 // its first root): every *.json in each folder.
 var SYSTEM_TEMPLATES = "/usr/palm/public/accounts/";
+// nova install's packages: novad (services/nova, root only) writes each here
+// and names it in sideload {file}; read once, then removed.
+var SIDELOAD = "/var/lib/phoenix/sideload";
 
 var service = new Service(packages.SERVICE);
 
@@ -78,6 +81,16 @@ var methods = packages.createPackagesService({
             return file;
         },
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
+    },
+    sideload: {
+        read: function (name, max) {
+            var file = path.join(SIDELOAD, path.basename(name));
+            var st = fs.lstatSync(file);
+            if (!st.isFile()) throw new Error("not a file");
+            if (st.size > max) throw new Error("The package is too big");
+            return new Uint8Array(fs.readFileSync(file));
+        },
+        remove: function (name) { try { fs.unlinkSync(path.join(SIDELOAD, path.basename(name))); } catch (e) { /* gone */ } }
     },
     defaultSources: function () { return (readJson(SOURCES) || {}).sources || []; },
     // The Phoenix catalog and the revocation list: /etc/palm/phoenix/servers.json.

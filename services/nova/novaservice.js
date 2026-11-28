@@ -86,6 +86,10 @@ var DEVMODE_FLAG = "/var/luna/preferences/devmode_enabled";
 var NOVA = "/var/lib/phoenix/nova";
 var OVERLAY = overlayLib.OVERLAY;
 var MANIFEST = "/usr/share/phoenix/manifest.json";
+// nova install's packages, for the Marketplace's service to read
+// (apps/marketplace/service/service.js SIDELOAD): root only.
+var SIDELOAD = "/var/lib/phoenix/sideload";
+var PACKAGES = "luna://org.webosphoenix.service.packages/";
 var PAIR_SECONDS = 120;
 var PAIR_RUNS = 5;
 var RATE_PER_DAY = 10;
@@ -616,6 +620,33 @@ function createNova(deps) {
         });
     }
 
+    // nova install IPK: an app's package from a connected, paired computer
+    // (from: {key, name}). Installed by the Marketplace's service (sideload),
+    // the device's one way to OSE's installer, which checks who publishes it:
+    // a new app, or an update of an app this same key sideloaded; never a
+    // built-in app or another publisher's (packagesservice.js, "Who may
+    // update an installed app"). -> {appId, version, skipped?}
+    function installApp(bytes, from) {
+        if (!devMode()) return Promise.reject(fail("NEEDS_DEVMODE", "Developer Mode is off"));
+        if (!from || !from.key || !isPaired(from.key)) return Promise.reject(fail("NOT_PAIRED", "Only a paired computer installs apps"));
+        if (!bytes || !bytes.length) return Promise.reject(fail("BAD_PARAMS", "The package is empty"));
+        var name = random(12).toString("hex") + ".ipk";
+        var file = P(path.join(SIDELOAD, name));
+        fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(file, Buffer.from(bytes), { mode: 0o600 });
+        return Promise.resolve(luna.call(PACKAGES + "sideload", { file: name, signer: from.key, signerName: from.name || "" })).then(function (r) {
+            if (!r || r.returnValue === false) throw fail((r && r.errorCode) || "INSTALL_FAILED", (r && r.errorText) || "The package was not installed");
+            addLog({ event: "install", appId: r.appId, version: r.version, by: from.key, name: from.name || null });
+            return { appId: r.appId, version: r.version || "", skipped: r.skipped || [] };
+        }).then(function (r) {
+            try { fs.unlinkSync(file); } catch (e) { /* the service removed it */ }
+            return r;
+        }, function (e) {
+            try { fs.unlinkSync(file); } catch (x) { /* the service removed it */ }
+            throw e;
+        });
+    }
+
     // One file back to the image's (4.6), live; or every file: Revert to
     // Image, at the next boot.
     function revertPath(p) {
@@ -922,6 +953,7 @@ function createNova(deps) {
         isRevoked: isRevoked,
         paired: paired,
         receive: receive,
+        installApp: installApp,
         verifyBundle: verifyBundle,
         revertPath: revertPath,
         revertAll: revertAll,
@@ -956,6 +988,6 @@ function pairIdentities(clientKey, deviceKey) {
     return { A: A, B: B, salt: "nova-pair-v1\n" + A + "\n" + B };
 }
 
-module.exports = { SERVICE: SERVICE, METHODS: METHODS, DEVMODE_FLAG: DEVMODE_FLAG, NOVA: NOVA, MANIFEST: MANIFEST, PAIR_RUNS: PAIR_RUNS,
+module.exports = { SERVICE: SERVICE, METHODS: METHODS, DEVMODE_FLAG: DEVMODE_FLAG, NOVA: NOVA, MANIFEST: MANIFEST, SIDELOAD: SIDELOAD, PAIR_RUNS: PAIR_RUNS,
                    PAIR_SECONDS: PAIR_SECONDS, RATE_PER_DAY: RATE_PER_DAY, createNova: createNova, proofText: proofText,
                    pairIdentities: pairIdentities };
