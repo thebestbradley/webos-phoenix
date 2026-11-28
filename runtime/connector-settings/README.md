@@ -28,6 +28,9 @@ The OAuth connectors read their client ids from `/etc/palm/<name>/clients.json`
 (`drives`, `microsoft`, `google`, `todoist`, ...; docs/SYNERGY-CONNECTORS.md
 "The registrations in an image and the simulator"). In the simulator,
 `runtime/rootfs.json` serves `/etc/palm/<name>/` from `clients/<name>/` here.
+Each `clients/<name>/` is kept in git by an empty `.keep` (the simulator's
+`rootfs.json` mounts it, and `siminstaller-test` requires every mounted folder
+to exist); its `clients.json` never is (`.gitignore`).
 Write them from one file kept outside the repository:
 
 ```sh
