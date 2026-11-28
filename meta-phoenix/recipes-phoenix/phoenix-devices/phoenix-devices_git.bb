@@ -24,6 +24,8 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git/services/devices"
 
 inherit cmake pkgconfig systemd
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
 
 EXTRA_OECMAKE = "-DPHOENIX_DEVICES_SYSTEMD_UNITDIR=${systemd_system_unitdir} -DPHOENIX_DEVICES_TESTS=OFF"
 

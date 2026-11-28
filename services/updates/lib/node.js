@@ -44,19 +44,61 @@ function raucCli(command, args) {
     });
 }
 
+// The update slot this boot started from: rauc.slot= on the kernel's
+// command line (the A/B disk's GRUB, files/wic/phoenix-ab-grub.cfg), or
+// null on a boot that did not start from one: a VM started straight from
+// the image's ext4 (`-kernel`, the regression suite, UTM), or a device
+// without A/B slots.
+function bootSlot(file) {
+    var line;
+    try { line = fs.readFileSync(file || "/proc/cmdline", "utf8"); } catch (e) { return null; }
+    var m = /(?:^|\s)rauc\.slot=(\S+)/.exec(line);
+    return m ? m[1] : null;
+}
+
 // RAUC through its command line (the RAUC daemon underneath), as
 // updatesservice.js wants it. options: {command ("rauc"), osRelease (the
 // running system's build, "/etc/os-release"), product (its name and
 // version, "/usr/share/phoenix/product.json"; os-release's NAME and
 // VERSION_ID without one: OSE's own on an image, so the product's is the
-// one Phoenix reports)}.
+// one Phoenix reports), cmdline (the kernel's command line, "/proc/cmdline")}.
+//
+// On a boot without an update slot nothing is asked of RAUC: it has no
+// booted slot there, its daemon does not start (rauc.service runs only
+// with rauc.slot=, meta-phoenix's rauc_%.bbappend), and a `rauc status`
+// would wait for D-Bus to give up on it (25 s, every call: Revision 42's
+// regression VM, 28 November 2026). status() then gives the running
+// system's version with noSlot (no slots to update), and every other call
+// fails at once with NOT_AVAILABLE.
 function createRauc(options) {
     var command = (options && options.command) || "rauc";
     var osReleaseFile = options && options.osRelease;
     var productPath = options && options.product;
+    var slot;
+    function slotted() {
+        if (slot === undefined) slot = bootSlot(options && options.cmdline);
+        if (slot) return Promise.resolve(slot);
+        var e = new Error("System updates are not available on this boot: it did not start from one of the system's update slots");
+        e.code = "NOT_AVAILABLE";
+        return Promise.reject(e);
+    }
+    function cli(args) {
+        return slotted().then(function () { return raucCli(command, args); });
+    }
+    function running() {
+        var os = osRelease(osReleaseFile), product = productFile(productPath);
+        return { name: product.name || os.NAME || "webOS Phoenix",
+                 version: product.version || os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 };
+    }
     var raucApi = {
         status: function () {
-            return raucCli(command, ["status", "--output-format=json"]).then(function (out) {
+            if (slot === undefined) slot = bootSlot(options && options.cmdline);
+            if (!slot) {
+                var r = running();
+                return Promise.resolve({ compatible: "", name: r.name, primary: null, other: null, noSlot: true,
+                                         booted: { slot: null, version: r.version, build: r.build } });
+            }
+            return cli(["status", "--output-format=json"]).then(function (out) {
                 var st = JSON.parse(out);
                 var booted = null, other = null, primary = st.boot_primary || null;
                 (st.slots || []).forEach(function (entry) {
@@ -66,30 +108,30 @@ function createRauc(options) {
                         else other = name;
                     });
                 });
-                var os = osRelease(osReleaseFile), product = productFile(productPath);
+                var r = running();
                 return {
-                    compatible: st.compatible, name: product.name || os.NAME || "webOS Phoenix", primary: primary, other: other,
-                    booted: { slot: booted, version: product.version || os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 }
+                    compatible: st.compatible, name: r.name, primary: primary, other: other,
+                    booted: { slot: booted, version: r.version, build: r.build }
                 };
             });
         },
         info: function (file) {
-            return raucCli(command, ["info", "--output-format=json", file]).then(function (out) {
+            return cli(["info", "--output-format=json", file]).then(function (out) {
                 var m = JSON.parse(out);
                 return { compatible: m.compatible, version: m.version, build: parseInt(m.build, 10) || 0 };
             });
         },
         markActive: function (slot) {
-            return raucCli(command, ["status", "mark-active", slot]);
+            return cli(["status", "mark-active", slot]);
         },
         // The running slot started well: what meta-rauc's
         // rauc-mark-good.service runs at boot (`rauc status mark-good`),
         // which resets the bootloader's attempts for it.
         markGood: function () {
-            return raucCli(command, ["status", "mark-good"]);
+            return cli(["status", "mark-good"]);
         },
         install: function (file, onProgress) {
-            return new Promise(function (resolve, reject) {
+            return slotted().then(function () { return new Promise(function (resolve, reject) {
                 var p = childProcess.spawn(command, ["install", file]);
                 var tail = "";
                 function lines(chunk) {
@@ -103,7 +145,7 @@ function createRauc(options) {
                 p.stderr.on("data", lines);
                 p.on("error", reject);
                 p.on("close", function (code) { code === 0 ? resolve() : reject(new Error(tail || "rauc install failed (" + code + ")")); });
-            });
+            }); });
         }
     };
     return raucApi;
@@ -114,70 +156,159 @@ function createRauc(options) {
 // rest (Range: bytes=<size>-, RFC 9110 14.2): 206 appends to it, 200 (a
 // server without ranges) starts again, 416 means it was all there. The
 // caller checks size and SHA-256 of the whole, so a file that changed on
-// the server meanwhile is caught there. A response cut off before its end
-// rejects and keeps what came.
+// the server meanwhile is caught there.
+//
+// With opts.resume, a response cut off before its end, a connection that
+// stalls for a minute or fails, and a server error (5xx) are taken up again
+// by themselves, from where they stopped, after a pause (opts.retryDelay, 5 s, doubling to a
+// minute): a bundle is a few GB, and a server or a network may end a long
+// response (staging cut every response at about 1 GiB, 28 November 2026,
+// so a 2.3 GB update needed three). It gives up after opts.retries tries in
+// a row that brought nothing (5), rejecting and keeping what came for the
+// next download.
+//
+// What a file already holds is hashed before the request (and again only if
+// a try left the file other than what it hashed), read in chunks so the
+// service keeps answering: hashed in the response's callback, a
+// 2 GB partial held the event loop for over a minute in the VM, the idle
+// socket timed out behind it and every resume was cut off.
 function download(url, file, onProgress, opts) {
-    var req = null, cancelled = false;
-    var promise = new Promise(function (resolve, reject) {
-        var have = 0;
-        if (opts && opts.resume) {
-            try { have = fs.statSync(file).size; } catch (e) { have = 0; }
-        }
-        function hashOf(n) {
+    opts = opts || {};
+    var retries = opts.retries === undefined ? 5 : opts.retries;
+    var delay = opts.retryDelay === undefined ? 5000 : opts.retryDelay;
+    var req = null, out = null, cancelled = false, pause = null, stop = null;
+
+    function cancelledError() { return Object.assign(new Error("Cancelled"), { code: "CANCELLED" }); }
+    function again(e) { return Object.assign(e, { retry: true }); }
+    // A network error in words, without the system's code, which the
+    // service would otherwise report as its own (DOWNLOAD_FAILED it is).
+    function networkError(e) {
+        var code = e && e.code;
+        return again(new Error(code === "ECONNRESET" || code === "EPIPE" ? "the connection was cut off"
+            : code === "ETIMEDOUT" ? "the connection timed out"
+            : /^(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ENETDOWN)$/.test(code || "") ? "the server could not be reached"
+            : (e && e.message) || "the connection failed"));
+    }
+    function sizeOf() {
+        try { return fs.statSync(file).size; } catch (e) { return 0; }
+    }
+    // The SHA-256 of the file's first n bytes, read without blocking.
+    function hashOf(n) {
+        return new Promise(function (resolve, reject) {
             var h = crypto.createHash("sha256");
-            if (n > 0) {
-                var fd = fs.openSync(file, "r"), buf = Buffer.alloc(1 << 20), pos = 0;
-                try {
-                    while (pos < n) {
-                        var got = fs.readSync(fd, buf, 0, Math.min(buf.length, n - pos), pos);
-                        if (got <= 0) break;
-                        h.update(buf.subarray(0, got));
-                        pos += got;
-                    }
-                } finally { fs.closeSync(fd); }
+            if (n <= 0) return resolve(h);
+            var s = fs.createReadStream(file, { start: 0, end: n - 1, highWaterMark: 1 << 20 });
+            s.on("data", function (c) { h.update(c); });
+            s.on("error", reject);
+            s.on("end", function () { resolve(h); });
+        });
+    }
+    // The file closed, with everything written that came.
+    function closeOut() {
+        var o = out;
+        out = null;
+        if (!o) return Promise.resolve();
+        if (!o.stream.writableEnded) o.stream.end();
+        return o.closed;
+    }
+
+    // One request, continuing from have bytes (whose hash is hash): resolves
+    // {size, sha256} with the whole file, or rejects; err.retry for a cut,
+    // with err.size and err.hash for what came (the file once closed).
+    function attempt(have, hash) {
+        return new Promise(function (resolve, reject) {
+            var size = have, settled = false;
+            function fail(e) {
+                if (settled) return;
+                settled = true;
+                e.size = size;
+                e.hash = hash;
+                reject(e);
             }
-            return h;
-        }
-        function get(u, redirects) {
-            var mod = new URL(u).protocol === "https:" ? https : http;
-            var headers = { "User-Agent": "webOS-Phoenix-Updates/0.1" };
-            if (have > 0) headers.Range = "bytes=" + have + "-";
-            req = mod.get(u, { headers: headers }, function (res) {
-                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects < 5) {
-                    res.resume();
-                    return get(new URL(res.headers.location, u).href, redirects + 1);
-                }
-                if (res.statusCode === 416 && have > 0) {
-                    res.resume();
-                    return resolve({ size: have, sha256: hashOf(have).digest("hex") });
-                }
-                if (res.statusCode !== 200 && res.statusCode !== 206) {
-                    res.resume();
-                    return reject(new Error("the server answered " + res.statusCode));
-                }
-                var append = res.statusCode === 206 && have > 0;
-                fs.mkdirSync(path.dirname(file), { recursive: true, mode: 448 });
-                var hash = append ? hashOf(have) : crypto.createHash("sha256"), size = append ? have : 0;
-                var out = fs.createWriteStream(file, { mode: 384, flags: append ? "a" : "w" });
-                res.on("data", function (c) { hash.update(c); size += c.length; onProgress(size); });
-                res.on("error", reject);
-                res.on("aborted", function () { reject(new Error("the connection was cut off")); });
-                res.pipe(out);
-                out.on("finish", function () {
-                    if (!res.complete) return reject(cancelled ? Object.assign(new Error("Cancelled"), { code: "CANCELLED" })
-                                                               : new Error("the connection was cut off"));
-                    resolve({ size: size, sha256: hash.digest("hex") });
+            function get(u, redirects) {
+                var mod = new URL(u).protocol === "https:" ? https : http;
+                var headers = { "User-Agent": "webOS-Phoenix-Updates/0.1" };
+                if (have > 0) headers.Range = "bytes=" + have + "-";
+                req = mod.get(u, { headers: headers }, function (res) {
+                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects < 5) {
+                        res.resume();
+                        return get(new URL(res.headers.location, u).href, redirects + 1);
+                    }
+                    if (res.statusCode === 416 && have > 0) {
+                        res.resume();
+                        settled = true;
+                        return resolve({ size: have, sha256: hash.digest("hex") });
+                    }
+                    if (res.statusCode !== 200 && res.statusCode !== 206) {
+                        res.resume();
+                        var e = new Error("the server answered " + res.statusCode);
+                        return fail(res.statusCode >= 500 ? again(e) : e);
+                    }
+                    if (!(res.statusCode === 206 && have > 0)) {
+                        // From the start: a server that ignored the range.
+                        have = size = 0;
+                        hash = crypto.createHash("sha256");
+                    }
+                    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 448 });
+                    var o = fs.createWriteStream(file, { mode: 384, flags: have > 0 ? "a" : "w" });
+                    out = { stream: o, closed: new Promise(function (r) { o.on("close", r); o.on("error", r); }) };
+                    res.on("data", function (c) { hash.update(c); size += c.length; onProgress(size); });
+                    res.on("error", function () { fail(again(new Error("the connection was cut off"))); });
+                    res.on("aborted", function () { fail(again(new Error("the connection was cut off"))); });
+                    res.pipe(o);
+                    o.on("finish", function () {
+                        if (settled) return;
+                        if (!res.complete) return fail(cancelled ? cancelledError() : again(new Error("the connection was cut off")));
+                        settled = true;
+                        resolve({ size: size, sha256: hash.digest("hex") });
+                    });
+                    o.on("error", fail);
                 });
-                out.on("error", reject);
-            });
-            req.setTimeout(60000, function () { req.destroy(new Error("the connection timed out")); });
-            req.on("error", function (e) {
-                reject(cancelled ? Object.assign(new Error("Cancelled"), { code: "CANCELLED" }) : e);
-            });
+                req.setTimeout(60000, function () { req.destroy(again(new Error("the connection timed out"))); });
+                req.on("error", function (e) {
+                    if (cancelled) return fail(cancelledError());
+                    // No answer, or the network went: worth another try.
+                    fail(e && e.retry ? e : networkError(e));
+                });
+            }
+            get(url, 0);
+        });
+    }
+
+    var promise = new Promise(function (resolve, reject) {
+        var idle = 0, wait = delay;
+        stop = function () { reject(cancelledError()); };
+        function next(hash) {
+            if (cancelled) return reject(cancelledError());
+            var have = opts.resume ? sizeOf() : 0;
+            (hash ? Promise.resolve(hash) : hashOf(have)).then(function (h) {
+                if (cancelled) throw cancelledError();
+                return attempt(have, h);
+            }).then(function (got) {
+                return closeOut().then(function () { resolve(got); });
+            }, function (e) {
+                return closeOut().then(function () {
+                    if (cancelled || (e && e.code === "CANCELLED")) return reject(cancelledError());
+                    if (!(e && e.retry) || !opts.resume) return reject(e);
+                    // A try that brought something starts the count again.
+                    if (sizeOf() > have) { idle = 0; wait = delay; } else idle++;
+                    if (idle >= retries) return reject(e);
+                    var kept = sizeOf() === e.size ? e.hash : null;
+                    pause = setTimeout(function () { pause = null; next(kept); }, wait);
+                    wait = Math.min(wait * 2, 60000);
+                });
+            }).then(null, reject);
         }
-        get(url, 0);
+        next(null);
     });
-    return { promise: promise, cancel: function () { cancelled = true; if (req) req.destroy(); } };
+    return {
+        promise: promise,
+        cancel: function () {
+            cancelled = true;
+            if (pause) { clearTimeout(pause); pause = null; stop(); }
+            if (req) req.destroy();
+        }
+    };
 }
 
 // The battery and whether a charger is connected (/sys/class/power_supply);
@@ -261,5 +392,5 @@ function clearOtherOverlays(opts) {
     return gone;
 }
 
-module.exports = { osRelease: osRelease, clearOtherOverlays: clearOtherOverlays, createRauc: createRauc, download: download, power: power, request: request,
+module.exports = { bootSlot: bootSlot, osRelease: osRelease, clearOtherOverlays: clearOtherOverlays, createRauc: createRauc, download: download, power: power, request: request,
                    requestBytes: requestBytes };

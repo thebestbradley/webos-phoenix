@@ -12,7 +12,8 @@
 // command works), so only the commands that change the slots write the
 // state, read just before they change it; every call is appended to
 // $FAKE_RAUC_STATE.calls, one per line. A read-only command that wrote the
-// whole state back could undo a change made while it ran.
+// whole state back could undo a change made while it ran. infoTimeouts: N
+// in the state makes the next N `info` calls time out as a busy daemon's.
 
 "use strict";
 const fs = require("fs");
@@ -59,6 +60,12 @@ if (args[0] === "status" && args[1] === "--output-format=json") {
     change(() => { st.good = st.booted; });
     process.stdout.write("rauc status: marked slot " + st.booted + " as good\n");
 } else if (args[0] === "info" && args[1] === "--output-format=json") {
+    // RAUC's daemon busy (writing a slot, a slow VM): its D-Bus call times out.
+    if (st.infoTimeouts > 0) {
+        change(() => { st.infoTimeouts -= 1; });
+        process.stderr.write("rauc-Message: error calling D-Bus method \"InspectBundle\": Timeout was reached\n");
+        process.exit(1);
+    }
     const m = manifest(args[2]);
     process.stdout.write(JSON.stringify({ compatible: m.compatible, version: m.version, description: "", build: m.build, hooks: [], images: [] }) + "\n");
 } else if (args[0] === "install") {

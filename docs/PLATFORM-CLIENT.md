@@ -212,10 +212,23 @@ alerts.
 3. **Download**: to `/var/lib/phoenix/updates/phoenix-<build>.raucb`; a
    stopped download is kept and continued with `Range: bytes=<n>-` (206
    appends, 200 restarts, 416 = complete); the whole is checked against
-   `size` and `sha256` (`lib/node.js` `download`).
+   `size` and `sha256` (`lib/node.js` `download`). A response cut off, a
+   connection that stalls for a minute or fails and a 5xx answer are taken
+   up again by themselves after a pause (5 s, doubling to a minute), until
+   five tries in a row bring nothing (`DOWNLOAD_FAILED`, the part kept): a
+   bundle is a few GB and staging ended every response at about 1 GiB
+   (28 November 2026). What the file holds is hashed before the request,
+   in chunks, so the service keeps answering (hashed inside the response,
+   a 2 GB part held it for over a minute and its socket timed out).
 4. **Prepare**: `rauc info` (RAUC verifies the bundle's signature against
    the image's keyring), `compatible`, newer build, the feed's build; `rauc
-   install` writes the other slot; the running slot stays primary.
+   install` writes the other slot; the running slot stays primary. Only a
+   bundle RAUC refuses is thrown away: when RAUC's daemon does not answer
+   (`UPDATER_BUSY`) the download is kept and the next download prepares it
+   without fetching it. RAUC's view of the slots is asked once and kept
+   until the service changes it (install, mark-active, mark-good): while
+   RAUC writes a slot it answers nothing, and a status at every progress
+   tick waited 25 s each for D-Bus.
 5. **Install**: "Install Now" (battery at least 20% or charging) marks the
    prepared slot active and restarts; "Install Later" waits for the charger.
 6. **After the restart**: the service marks the running slot good (`rauc
@@ -229,7 +242,24 @@ alerts.
    (found on Revision 39's A/B disk, 28 November 2026). A system that never
    gets to the System UI is not marked good, so the boot loader's counter
    takes the device back, and the service then says "The update to X did
-   not start".
+   not start". The wake never holds up the start (`Type=exec`, so
+   multi-user.target and "Startup finished" do not wait for it) and gives
+   up by itself: the System UI is asked for up to an hour, then
+   `com.palm.update` three times.
+
+**A boot without an update slot** (no `rauc.slot=` on the kernel's command
+line: a VM started straight from the image's ext4 with `-kernel`, as UTM
+and the regression suite do, or a device without A/B slots): RAUC finds no
+booted slot there, so nothing asks it anything. `rauc.service` does not
+start (`ConditionKernelCommandLine=rauc.slot`, meta-phoenix's
+`rauc_%.bbappend`), nor does `phoenix-update-wake.service`.
+`com.palm.update` answers at once: `getStatus` with the running version
+and `error` `NOT_AVAILABLE` ("System updates are not available on this
+boot", `configured: false`), every other method with that error, and it
+schedules nothing. Before
+this, each call waited 25 s for D-Bus to give up on the RAUC daemon and
+the wake held up the start for an hour (Revision 42's regression VM, 28
+November 2026).
 
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
@@ -268,6 +298,14 @@ over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
   re-signed with the owner's (`rauc resign`, PLATFORM.md 7.2). Test
   releases go on a channel with Phoenix-Web-Services'
   `platform:publish-testing-update`.
+- **What an update does not change: the EFI system partition.** A bundle
+  writes one root slot (and so its kernel). GRUB's binary, its script
+  (`phoenix-ab-grub.cfg`) and the environment's defaults (`PHOENIX_ARGS`,
+  from `PHOENIX_GRUB_ARGS`) stay as the disk was first written, so a change
+  to them reaches new disks only, or a device where someone runs
+  `grub-editenv /boot/efi/EFI/BOOT/grubenv set ...`. Changing them on devices
+  in use needs a boot slot in the bundle or a RAUC post-install hook: to
+  design when the first such change comes.
 
 ## The account and cloud services
 

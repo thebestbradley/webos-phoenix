@@ -200,6 +200,18 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.listInstalled()).apps).toEqual([]);
     });
 
+    // RESERVED_NAME's exception: a catalog's web apps are named under
+    // org.webosphoenix.pwa. by the catalog service, a catalog the user adds
+    // too, and packaged here from the site's manifest.
+    it("installs a web app from a catalog the user added, though its id is under org.webosphoenix.pwa.", async () => {
+        const { service } = makeService([{ ...defaults()[0], key: catalog.key }]);
+        await service.removeSource({ id: "phoenix" });
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const added = (await service.getSources()).sources.find((x: Any) => x.url === catalog.catalogUrl);
+        expect(added.id).not.toBe("phoenix");
+        expect(await service.install({ sourceId: added.id, id: "org.webosphoenix.pwa.tides" })).toMatchObject({ returnValue: true, appId: "org.webosphoenix.pwa.tides" });
+    });
+
     it("installs a web app whose icons are all broken with the icon the catalog made", async () => {
         const { service, world } = makeService(defaults());
         await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
@@ -490,7 +502,8 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         await service.setSource({ id: "precentral", enabled: true });
         const all = (await service.browse({ section: "classics" })).apps.filter((a: Any) => a.kind === "preware");
         expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"],
-                                                                ["org.example.feeds", "0.1.0"], ["org.example.signin", "1.0.0"], ["org.example.borrowed", "1.0.0"]]);
+                                                                ["org.example.feeds", "0.1.0"], ["org.example.signin", "1.0.0"], ["org.example.borrowed", "1.0.0"],
+                                                                ["org.webosports.app.squat", "1.0.0"]]);
         expect(all[0]).toMatchObject({ description: "Line one\nLine two", license: "GPL-2.0", developer: { name: "Homebrewer" } });
         expect(all[1].verdict).toMatchObject({ ok: false });
         const native = await service.install({ sourceId: "precentral", id: "org.example.nativelib" });
@@ -541,6 +554,10 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
             errorText: "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in" });
         world.devMode = true;
         expect(await service.install({ sourceId: "precentral", id: "org.example.signin" })).toMatchObject({ errorCode: "THIRD_PARTY_SIGNIN" });
+        // A system name from a feed (RESERVED_NAME), Developer Mode or not.
+        const squat = await service.install({ sourceId: "precentral", id: "org.webosports.app.squat" });
+        expect(squat).toMatchObject({ errorCode: "RESERVED_NAME" });
+        expect(squat.errorText).toMatch(/org\.webosports\.app\.squat, one of the system's names \(org\.webosports\.\*\)/);
         const borrowed = await service.install({ sourceId: "precentral", id: "org.example.borrowed" });
         expect(borrowed).toMatchObject({ errorCode: "BAD_PACKAGE" });
         expect(borrowed.errorText).toMatch(/must be the package's own app, org\.example\.borrowed/);
@@ -819,7 +836,30 @@ describe("a developer's sideload (nova install)", () => {
                        data: JSON.stringify({ templateId: "com.example.chat", validator: { address: "palm://com.example.chat.service/check",
                                                                                           customUI: { appId: "com.example.chat", name: "signin.html" } } }) };
         expect(await service.sideload({ file: await put("com.example.chat", "1.0.0", { files: [page] }), signer: A })).toMatchObject({ returnValue: false, errorCode: "THIRD_PARTY_SIGNIN" });
+        // The system's names (RESERVED_NAME): an app, package or service id in
+        // com.palm, com.webos, com.lge, org.webosports, org.webosphoenix or
+        // com.webosphoenix, which luna-hub would let it take and the accounts
+        // service reads by (org.webosphoenix.messaging reads the IM accounts).
+        for (const id of ["org.webosphoenix.messaging", "com.palm.app.accountsx", "org.webosports.service.squat", "com.webosphoenix.x"]) {
+            const r = await service.sideload({ file: await put(id, "1.0.0"), signer: A });
+            expect(r).toMatchObject({ returnValue: false, errorCode: "RESERVED_NAME", appId: id });
+            expect(r.errorText).toMatch(/one of the system's names .*only Phoenix's own catalog installs those/);
+        }
+        const svc = (id: string, name: string, info: Any) => ({ appinfo: info, files: [
+            { path: `usr/palm/applications/${id}/service/package.json`, data: JSON.stringify({ name }) },
+            { path: `usr/palm/applications/${id}/service/sysbus/${name}.api.json`,
+              data: JSON.stringify({ "accounts.transport": [name + "/sync"], [name + ".share"]: [name + "/share"], "org.example.borrow": ["com.palm.service.accounts/listAccounts"] }) }] });
+        expect(await service.sideload({ file: await put("com.example.squat", "1.0.0", svc("com.example.squat", "com.palm.service.accounts", { requiredPermissions: [] })), signer: A }))
+            .toMatchObject({ returnValue: false, errorCode: "RESERVED_NAME" });
+        // A third party's connector app (rule C19): its own groups and the compose page's, nothing else.
+        for (const asks of [undefined, ["accounts.transport"], ["phoenix.accounts.list"], ["phoenix.connector.share"], ["org.example.borrow"]]) {
+            const r = await service.sideload({ file: await put("org.example.wall", "1.0.0", svc("org.example.wall", "org.example.service.wall", asks ? { requiredPermissions: asks } : {})), signer: A });
+            expect(r, JSON.stringify(asks)).toMatchObject({ returnValue: false, errorCode: "CONNECTOR_GROUPS" });
+        }
         expect(world.installs).toHaveLength(0);
+        expect(await service.sideload({ file: await put("org.example.wall", "1.0.0", svc("org.example.wall", "org.example.service.wall",
+            { requiredPermissions: ["org.example.service.wall.share", "phoenix.accounts.mine", "phoenix.appmanager.open"] })), signer: A }))
+            .toMatchObject({ returnValue: true, appId: "org.example.wall" });
         // Not wired (the simulator): not available.
         const bare = makeService([phoenix]);
         expect(await bare.service.sideload({ file: "x.ipk", signer: A })).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });

@@ -47,9 +47,9 @@ describe("the kit's compose page", () => {
                                       files: [{ path: "/media/internal/a.jpg", mimeType: "image/jpeg" }, { path: "/media/internal/b.jpg", mimeType: "image/jpeg" },
                                               { path: "/media/internal/c.mp4", mimeType: "video/mp4" }] },
                              accountId: "a2", target },
-                           (uri) => /listAccounts$/.test(uri) ? accounts : answers.shift());
+                           (uri) => /listMyAccounts$/.test(uri) ? accounts : answers.shift());
         for (let i = 0; i < 5; i++) await tick();
-        expect(calls[0]).toEqual({ uri: "luna://com.palm.service.accounts/listAccounts", params: { templateId: "org.example.wall" } });
+        expect(calls[0]).toEqual({ uri: "luna://com.palm.service.accounts/listMyAccounts", params: { templateId: "org.example.wall" } });
         expect($("compose").hidden).toBe(false);
         expect($("heading").textContent).toBe("Post to Wall");
         expect($("account").value).toBe("a2");
@@ -80,17 +80,17 @@ describe("the kit's compose page", () => {
     });
 
     it("with no account signed in, offers to add one", async () => {
-        const calls = open({ share: { text: "Hi" }, target }, (uri) => /listAccounts$/.test(uri) ? { returnValue: true, results: [] } : { returnValue: true });
+        const calls = open({ share: { text: "Hi" }, target }, (uri) => /listMyAccounts$/.test(uri) ? { returnValue: true, results: [] } : { returnValue: true });
         for (let i = 0; i < 5; i++) await tick();
         expect($("none").hidden).toBe(false);
         expect($("compose").hidden).toBe(true);
         $("setup").click();
         await tick();
-        expect(calls.pop()).toEqual({ uri: "luna://com.palm.applicationManager/launch", params: { id: "com.palm.app.accounts", params: { templateId: "org.example.wall" } } });
+        expect(calls.pop()).toEqual({ uri: "luna://com.palm.applicationManager/open", params: { id: "com.palm.app.accounts", params: { templateId: "org.example.wall" } } });
     });
 
     it("too long a text cannot be posted", async () => {
-        open({ share: { text: "x".repeat(25) }, accountId: "a1", target }, (uri) => /listAccounts$/.test(uri) ? accounts : { returnValue: true });
+        open({ share: { text: "x".repeat(25) }, accountId: "a1", target }, (uri) => /listMyAccounts$/.test(uri) ? accounts : { returnValue: true });
         for (let i = 0; i < 5; i++) await tick();
         expect($("count").className).toBe("count over");
         expect($("post").disabled).toBe(true);
