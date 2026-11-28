@@ -267,7 +267,11 @@ def main():
         ok("listMyAccounts" in [c["name"] for c in json.load(f)["services"][0]["commands"]],
            "the accounts service's services.json (compat overlay) has listMyAccounts")
     reads = {"phoenix.accounts.info", "phoenix.accounts.read-credentials"}
-    lists = {"bluesky", "deltachat", "drives", "matrix", "slack", "xmpp"}
+    # google: it revokes at Google only when no other account here is the
+    # same Google user, and Google Drive in Files (the drives connector's
+    # template) shares its Google project, so it lists every account
+    # (connector.js sameGoogleAccount).
+    lists = {"bluesky", "deltachat", "drives", "google", "matrix", "slack", "xmpp"}
     for name in sorted(os.listdir(os.path.join(REPO, "apps", "connectors"))):
         perm = os.path.join(REPO, "apps", "connectors", name, "service", "sysbus",
                             "org.webosphoenix.service.%s.perm.json" % name)

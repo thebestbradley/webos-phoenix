@@ -5,6 +5,7 @@
         "accounts.operation",
         "accounts.transport",
         "oauth.signin",
+        "phoenix.accounts.list",
         "phoenix.accounts.info",
         "phoenix.accounts.read-credentials"
     ]
