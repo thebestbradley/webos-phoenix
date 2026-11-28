@@ -55,6 +55,9 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
     .fu-step { overflow-y: auto; }
     .fu-body { flex: none; overflow: visible; }
 }
+/* The note that closes a step, above the buttons; the body scrolls under it. */
+.fu-note { flex: none; padding-top: 2px; }
+.fu-note .pui-note { padding-bottom: 0; }
 .fu-buttons { flex: none; display: flex; justify-content: space-between; gap: 10px; padding: 8px 0 10px; }
 /* Each about half the width, but never narrower than its label: a long one
    (Restore's "Set Up as New" on a 320px phone) takes room from the other. */

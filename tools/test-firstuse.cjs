@@ -99,6 +99,37 @@ async function main() {
             const cut = await page.evaluate(() => [...document.querySelectorAll(".fu-buttons .pui-button")]
                 .filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
             check(cut.length === 0, `${id}: the buttons' labels fit${cut.length ? " (cut: " + cut.join(", ") + ")" : ""}`);
+            // A step's notes on a phone's card (320x480 less the status bar
+            // and the gesture bar: 432 px high): the one closing a step never
+            // half under the buttons, and on the steps that QA found so
+            // (what Skip means, what syncs, the PIN pad's Emergency Call,
+            // and where to run setup again) every note read whole without
+            // scrolling.
+            if (!tablet) {
+                await page.setViewportSize({ width: viewport.width, height: 432 });
+                await page.waitForTimeout(150);
+                const notes = await page.evaluate(() => [...document.querySelectorAll(".fu-step .pui-note")].filter((n) => !n.closest(".pui-dialog")).map((n) => {
+                    const r = n.getBoundingClientRect();
+                    let clip = innerHeight;
+                    for (let a = n.parentElement; a; a = a.parentElement) {
+                        if (/auto|scroll|hidden/.test(getComputedStyle(a).overflowY)) clip = Math.min(clip, a.getBoundingClientRect().bottom);
+                    }
+                    const bar = document.querySelector(".fu-buttons");
+                    if (bar) clip = Math.min(clip, bar.getBoundingClientRect().top);
+                    const shown = Math.max(0, Math.min(r.bottom, clip) - Math.max(r.top, 0));
+                    // Closing the step: nothing of the body comes after it.
+                    const body = n.closest(".fu-step").querySelector(".fu-body");
+                    const after = [...body.querySelectorAll("*")].some((e) => e !== n && !n.contains(e) && !e.contains(n)
+                        && (n.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING) && e.getClientRects().length > 0);
+                    return { note: n.textContent.trim().slice(0, 24), shown: Math.round(shown), height: Math.round(r.height), closing: !after };
+                }));
+                const whole = (n) => n.shown >= n.height - 1;
+                const must = ["hardware", "account", "accounts", "passcode", "done"].includes(id);
+                const bad = notes.filter((n) => !whole(n) && (must || (n.closing && n.shown > 0)));
+                check(bad.length === 0, `${id}: no note half under the buttons on a phone${bad.length ? " (" + JSON.stringify(bad) + ")" : ""}`);
+                await page.setViewportSize(viewport);
+                await page.waitForTimeout(150);
+            }
         };
         const next = () => page.click("[data-testid=next]");
         const pref = async (key) => (await luna(page, "luna://com.webos.service.systemservice/getPreferences", { keys: [key] }))[key];
