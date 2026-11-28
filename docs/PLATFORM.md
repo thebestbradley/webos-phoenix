@@ -557,7 +557,11 @@ for that device:
    `org.webosphoenix.service.oauth` as the Fediverse does
    ([APP-RUNTIME.md](APP-RUNTIME.md#synergy-connectors-and-the-fediverse)),
    once the sheet exists on devices (Q29). "Sign in on this device" as the
-   second choice.
+   second choice, offered only where the server's discovery document has an
+   `authorization_endpoint` (and, if it lists its grants,
+   `authorization_code`): the account service's `getStatus` `methods`.
+   Phoenix-Web-Services under its preview lock offers the code only, and
+   its `phoenix-device` client has no authorization code grant yet.
 
 Then the device registers itself:
 

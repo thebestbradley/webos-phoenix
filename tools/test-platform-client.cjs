@@ -487,6 +487,10 @@ async function ui(P, control, servers) {
 
         await page.goto(settings({ page: "account" }));
         await page.waitForSelector("[data-testid=account-sign-in]", { timeout: 15000 });
+        // Offered once the server's discovery says it has a sign-in page for
+        // this device (getStatus methods): the mock platform has.
+        await page.waitForSelector("[data-testid=account-sign-in-browser]", { timeout: 15000 }).catch(() => null);
+        check(await page.locator("[data-testid=account-sign-in-browser]").count() === 1, "Settings > Phoenix Account: Sign In on This Device, where the server offers it");
         await shot("5-account-signed-out");
         await page.click("[data-testid=account-sign-in]");
         await page.waitForSelector("[data-testid=account-code]", { timeout: 15000 });
