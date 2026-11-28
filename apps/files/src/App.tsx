@@ -67,7 +67,8 @@ type Sheet =
     | { kind: "install"; entry: FileEntry }
     | null;
 
-type Viewer = { kind: "image"; images: FileEntry[]; index: number } | { kind: "text"; entry: FileEntry } | null;
+// "guessed": opened as text because its type is unknown (not chosen in Open With).
+type Viewer = { kind: "image"; images: FileEntry[]; index: number } | { kind: "text"; entry: FileEntry; guessed?: boolean } | null;
 
 type Menu = { anchor: HTMLElement; kind: "main" | "favorites" | "new" | "more" } | null;
 
@@ -351,7 +352,7 @@ function Browser() {
         } else if (kind === "package") {
             setSheet({ kind: "install", entry: e });
         } else if (opensAsText(e) && (kind === "text" || kind === "code" || kind === "file")) {
-            setViewer({ kind: "text", entry: e });
+            setViewer({ kind: "text", entry: e, guessed: kind === "file" });
         } else {
             setSheet({ kind: "open-with", entry: e });
         }
@@ -703,7 +704,10 @@ function Browser() {
             {sheet?.kind === "install" && <InstallDialog entry={sheet.entry} onClose={() => setSheet(null)} />}
 
             {viewer?.kind === "image" && <ImageViewer images={viewer.images} start={viewer.index} onClose={() => setViewer(null)} />}
-            {viewer?.kind === "text" && <TextEditor entry={viewer.entry} onClose={() => { setViewer(null); reload(); }} onSaved={() => reload()} />}
+            {viewer?.kind === "text" && (
+                <TextEditor entry={viewer.entry} onClose={() => { setViewer(null); reload(); }} onSaved={() => reload()}
+                            onNotText={viewer.guessed ? () => { const entry = viewer.entry; setViewer(null); openWithSheet(entry); } : undefined} />
+            )}
         </div>
     );
 }
