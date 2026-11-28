@@ -470,6 +470,13 @@ prints the QEMU command UTM builds; `tools/test-make-utm.py --boot` starts
 that command with a stand-in kernel. The procedure:
 [BUILDING-MAC.md, "Run it on an iPad with UTM"](BUILDING-MAC.md#run-it-on-an-ipad-with-utm).
 
+**In other VM software** (VMware, VirtualBox, Parallels, Hyper-V, libvirt,
+Proxmox, Apple Virtualization): `scripts/make-vm-packages.sh` wraps the A/B
+disk for each. [VIRTUALIZATION.md](VIRTUALIZATION.md) has which host CPU runs
+which package (an arm64 image: Apple silicon, Windows on Arm, arm64 Linux;
+PCs need an x86-64 machine meta-phoenix does not have yet, and what it
+takes), what is tested, and local's checklist.
+
 **Not booted yet.** No `phoenix-vm-arm64` image has been built: the
 container this was written in cannot build Chromium. The first boot is the
 owner's, on the Mac: `scripts/mac-build.sh phoenix-vm-arm64` (with

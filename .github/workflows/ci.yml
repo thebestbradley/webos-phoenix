@@ -44,10 +44,12 @@ jobs:
 
       # ffmpeg: the feedback tones (MP3) are checked by decoding them.
       # rsync: the Mac's image build copies the checkout with it
-      # (tools/test-mac-build.py).
+      # (tools/test-mac-build.py). qemu-utils (qemu-img) and libvirt-clients
+      # (libvirt's domain schema, virt-xml-validate): the other hypervisors'
+      # packages (tools/test-make-vm-packages.py).
       - uses: ./.github/actions/setup
         with:
-          apt: ffmpeg rsync
+          apt: ffmpeg rsync qemu-utils libvirt-clients
 
       # Each check's result and time is in its summary at the end; a failed
       # one is also an annotation.

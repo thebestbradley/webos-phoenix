@@ -965,6 +965,12 @@ python3 tools/test-serve-rootfs.py
 python3 tools/test-make-utm.py
 ```
 
+The other hypervisors' packages; --boot DISK starts each under QEMU:
+
+```sh
+python3 tools/test-make-vm-packages.py
+```
+
 ```sh
 python3 tools/test-install-rootfs.py
 ```
@@ -2603,6 +2609,28 @@ Replace an existing bundle:
 
 ```sh
 scripts/make-utm.sh fairphone-fp6 --for mac --force
+```
+
+### Packages for other VM software
+
+From the VM's A/B disk (the .wic, or .wic.zst): VMware (.vmwarevm), an OVA, VirtualBox (VDI + VBoxManage script), Parallels (.hdd + prlctl script), libvirt (qcow2 + domain XML), Proxmox (qcow2 + qm script), Hyper-V (VHDX + PowerShell), raw. Needs qemu-img. Which host CPU runs which: docs/VIRTUALIZATION.md.
+
+Run in `the image's deploy folder` · Mac + Linux · Source: `webos-phoenix/scripts/make-vm-packages.sh:12-58 · docs/VIRTUALIZATION.md`
+
+Every target, into vm/ beside the disk:
+
+```sh
+scripts/make-vm-packages.sh --disk webos-phoenix-image-phoenix-vm-arm64.rootfs.wic
+```
+
+Only these:
+
+```sh
+scripts/make-vm-packages.sh --disk <disk>.wic vmware parallels
+```
+
+```sh
+scripts/make-vm-packages.sh --disk <disk>.wic --dry-run
 ```
 
 ### Flash the Fairphone

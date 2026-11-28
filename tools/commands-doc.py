@@ -209,7 +209,7 @@ it("Device-readiness checks", "The static checks a device image would trip on.",
 it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-155 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
     ("python3 tools/test-serve-rootfs.py", "a browser's burst of connections while tools/serve-rootfs.py is busy"),
-    "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", ("python3 tools/test-packageconfig-check.py", "the PACKAGECONFIG options meta-phoenix asks for"), "python3 tools/test-sounds-pcm.py",
+    "python3 tools/test-make-utm.py", ("python3 tools/test-make-vm-packages.py", "the other hypervisors' packages; --boot DISK starts each under QEMU"), "python3 tools/test-install-rootfs.py", ("python3 tools/test-packageconfig-check.py", "the PACKAGECONFIG options meta-phoenix asks for"), "python3 tools/test-sounds-pcm.py",
     ("node tools/test-nova-bundle.cjs", "dev bundles: the image's manifest, the bundle maker, the device's checks"),
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
 it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144",
@@ -401,6 +401,10 @@ it("Run the ARM64 VM as a device", "QEMU 8.2 or later. HVF on Apple silicon, KVM
     ("journalctl -u phoenix-device-select", "inside the VM: which device it became", {"r": "inside the VM"}), ("systemd-analyze", "boot time", {"r": "inside the VM"}), ("phoenix-diag", "collect logs", {"r": "inside the VM"})])
 it("A UTM bundle for the Mac", "", B, WP, "webos-phoenix/scripts/make-utm.sh:17-46 · docs/BUILDING-MAC.md:213",
    ["scripts/make-utm.sh fairphone-fp6 --for mac", ("scripts/make-utm.sh fairphone-fp6 --for mac --force", "replace an existing bundle")])
+it("Packages for other VM software", "From the VM's A/B disk (the .wic, or .wic.zst): VMware (.vmwarevm), an OVA, VirtualBox (VDI + VBoxManage script), Parallels (.hdd + prlctl script), libvirt (qcow2 + domain XML), Proxmox (qcow2 + qm script), Hyper-V (VHDX + PowerShell), raw. Needs qemu-img. Which host CPU runs which: docs/VIRTUALIZATION.md.", B, "the image's deploy folder",
+   "webos-phoenix/scripts/make-vm-packages.sh:12-58 · docs/VIRTUALIZATION.md",
+   [("scripts/make-vm-packages.sh --disk webos-phoenix-image-phoenix-vm-arm64.rootfs.wic", "every target, into vm/ beside the disk"),
+    ("scripts/make-vm-packages.sh --disk <disk>.wic vmware parallels", "only these"), ("scripts/make-vm-packages.sh --disk <disk>.wic --dry-run", "")])
 it("Flash the Fairphone", "fastboot comes with Android's platform tools. Firmware extraction needs mtools, simg2img, lpunpack and debugfs and hasn't been run against a real factory image yet.", B, "the image's deploy folder",
    "webos-phoenix/docs/HARDWARE.md:200,214-223,239-243 · tools/device-firmware.py:14-16,30-36",
    [("tools/device-firmware.py extract fairphone-fp6 --factory-zip <factory zip> --out fw/", "", {"os": L}),

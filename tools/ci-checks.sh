@@ -153,6 +153,7 @@ checks() {
     check packageconfig "PACKAGECONFIG options meta-phoenix asks for (scripts/packageconfig-check.py)" python3 tools/test-packageconfig-check.py
     check rauc-slots "The A/B layout for system updates: grubenv, the data mounts, the names they share" python3 tools/test-rauc-slots.py
     check make-utm "UTM bundles (scripts/make-utm.sh, tools/check-utm-bundle.py)" python3 tools/test-make-utm.py
+    check make-vm-packages "Other hypervisors' packages (scripts/make-vm-packages.sh): every disk and config" --needs qemu-img python3 tools/test-make-vm-packages.py
     check mac-build "The Mac's image build on either layer stack (scripts/mac-build.sh, container-build.sh)" --needs rsync python3 tools/test-mac-build.py
     check php-marketplace "Marketplace catalog service (PHP)" --needs php php server/marketplace/tests/run.php
     check php-updates "Update feed publisher (server/updates, PHP)" --needs php php server/updates/tests/run.php
