@@ -48,6 +48,7 @@
         "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
         "/usr/palm/public/accounts/com.webosphoenix.dav/": "apps/dav/public/accounts/com.webosphoenix.dav/",
         "/usr/palm/public/accounts/com.webosphoenix.webcal/": "apps/dav/public/accounts/com.webosphoenix.webcal/",
+        "/usr/palm/public/accounts/com.webosphoenix.icloud/": "apps/dav/public/accounts/com.webosphoenix.icloud/",
         "/usr/share/phoenix/runtime/": "runtime/",
         "/usr/lib/phoenix/node_modules/@phoenix/synckit/": "apps/shared/synckit/",
         "/usr/lib/phoenix/node_modules/@phoenix/connector-kit/": "apps/shared/connector-kit/",

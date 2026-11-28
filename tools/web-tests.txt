@@ -108,6 +108,8 @@
 11 node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
 43 node tools/test-dav-sync.cjs --out app-tests/dav-phone
 44 node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
+40 node tools/test-icloud-sync.cjs --out app-tests/icloud-phone
+40 node tools/test-icloud-sync.cjs --tablet --out app-tests/icloud-tablet
 28 node tools/test-accounts.cjs --out app-tests/accounts
 22 node tools/test-connectors.cjs --out app-tests/connectors-phone
 22 node tools/test-connectors.cjs --tablet --out app-tests/connectors-tablet
