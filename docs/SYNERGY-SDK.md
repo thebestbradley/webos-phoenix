@@ -75,6 +75,24 @@ service's own name there. Never ask for the whole accounts service
 account). `tools/check-luna.py` charges the kit's calls to each service that
 runs on it (`KIT_CALLS` in `tools/devicecheck/luna.py`).
 
+Your `.perm.json` may claim only your own groups and the few the kit's
+features need (rule C18, `THIRD_PARTY_GROUPS` in the kit's `checks.ts`):
+`database.operation`, `tempdatabase.operation`, `activity.operation`,
+`accounts.transport`, `phoenix.accounts.info`,
+`phoenix.accounts.read-credentials`, `oauth.signin` (`ctx.oauth`, section 6)
+and `notification.operation` (`ctx.notify`). Each service keeps you to your
+own data there: your kinds' permissions, your templates' `readPermissions`,
+the OAuth keys you made. A group of your own is one your `.api.json`
+defines, named in your namespace (`org.example.service.feeds.share`), with
+only your service's methods: luna-hub's group names are global, and a group
+named like another package's would join it. Your `.groups.json` sets the
+trust of your own groups only; `accounts.transport` and
+`phoenix.connector.share`, which every connector adds its methods to, stay
+`oem`. Any other group is refused by name, among them another connector's
+(`phoenix.<name>.signin`, `phoenix.<name>.messaging`, `<name>.account`), the
+whole accounts service, `phoenix.accounts.list` (it answers every account)
+and groups no service defines.
+
 The whole connector (`service/connector.js`, shortened):
 
 ```js
@@ -507,9 +525,10 @@ luna://<service>/share {accountId, content: {title?, text?, url?, files?: [{path
     or {returnValue: false, errorCode, errorText, retryable, retryAt?}
 ```
 
-List it in your service's `.api.json`, in a group your app's
-`requiredPermissions` names (the Fediverse's `fediverse.account`), so your
-compose page may call it (C15).
+List it in your service's `.api.json`, in a group of your own that your
+app's `requiredPermissions` names (`phoenix-connector new --share` writes
+`<service>.share`, in your namespace as rule C18 asks), so your compose page
+may call it (C15).
 
 ### The compose page
 
@@ -670,6 +689,7 @@ starts with its rule:
 | C15 | sharing reaches the service: `<service>/share` in an `.api.json` group the app's `requiredPermissions` names; the app's main page (the compose page) in the package |
 | C16 | the template's `signUp`: `https://` addresses only (`url`, `servers[].url`), each server with a name |
 | C17 | a sign-in page of its own (`validator.customUI`) only in Phoenix's own connectors (an `org.webosphoenix.*` app checked with Phoenix's namespaces, which the catalogs give only to Phoenix's uploads): the page would run with Accounts' permissions; use the standard sign-in (section 2) |
+| C18 | a third-party connector's groups: the `.perm.json` names only your service and claims only your own groups and `database.operation`, `tempdatabase.operation`, `activity.operation`, `accounts.transport`, `phoenix.accounts.info`, `phoenix.accounts.read-credentials`, `oauth.signin`, `notification.operation` (section 2); your own groups are your `.api.json`'s, named in your namespace, with only your service's methods (`accounts.transport` and `phoenix.connector.share` are the protocol's); the `.groups.json` sets your own groups' trust and leaves the protocol's `oem`. Phoenix's own connectors are checked against their calls instead (`tools/check-luna.py`) |
 
 `pack` writes `appinfo.json`'s share target from the definition (section
 7), validates, then writes the `.ipk` the Marketplace takes: every

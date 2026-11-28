@@ -43,6 +43,15 @@
 //       sign-in group (docs/DEVICE-AUDIT.md). Until each page runs as its own
 //       connector (docs/ROADMAP.md, per-connector sign-in isolation), a
 //       third-party connector uses the standard sign-in
+//   C18 a third-party connector's (not isFirstParty) bus groups, least
+//       privilege: its service's perm.json claims only groups of its own
+//       and THIRD_PARTY_GROUPS; a group of its own is one its api.json
+//       defines, named in its namespace, listing only its service's methods
+//       (luna-hub's groups are global and joined across packages); the perm
+//       file names only its service; its groups.json sets the trust of its
+//       own groups only and leaves SHARED_GROUPS at oem. Phoenix's own
+//       connectors are checked against what their calls need instead
+//       (tools/check-luna.py, tools/test-devicecheck.py)
 //
 // Phase C4 (connector packages in the catalog) uses this: Catalog::submitPackage
 // takes a package with a service only when checkIpk finds no error (Ipk::check
@@ -75,6 +84,18 @@ final class Connector
 
     /** Phoenix's namespace (isFirstParty). */
     public const PHOENIX_NAMESPACE = 'org.webosphoenix';
+    /**
+     * C18: the groups a third-party connector's service may claim besides its own: each one
+     * the kit's calls need, confined by the service that provides it to the caller's own data
+     * (the reasons, group by group: connector-kit checks.ts THIRD_PARTY_GROUPS). Refused among
+     * others: phoenix.appservices.accounts, phoenix.accounts.list (every account),
+     * phoenix.ongoing, oauth.card/erase, every connector's own groups, and groups no service
+     * defines (accounts.operation, messaging.operation).
+     */
+    public const THIRD_PARTY_GROUPS = ['database.operation', 'tempdatabase.operation', 'activity.operation', 'accounts.transport',
+                                       'phoenix.accounts.info', 'phoenix.accounts.read-credentials', 'oauth.signin', 'notification.operation'];
+    /** The connector protocol's groups, which every connector's api.json adds to; their trust is the system's (oem). */
+    public const SHARED_GROUPS = ['accounts.transport', 'phoenix.connector.share'];
     /** C17's answer to a third-party connector's own sign-in page. */
     public const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
     private const CALLBACKS = ['onCreate', 'onEnabled', 'onDelete', 'onCredentialsChanged', 'sync'];
@@ -270,6 +291,11 @@ final class Connector
             $errors[] = 'C2 no account template (public/accounts/<templateId>/<templateId>.json)';
         }
 
+        // C18
+        if (!$firstParty && $service !== '' && preg_match(self::ID, $service)) {
+            self::checkGroups($files, $service, $namespaces, $inNs, $json, $errors);
+        }
+
         // C14, C15
         $targets = is_array($info['phoenix'] ?? null) ? ($info['phoenix']['shareTargets'] ?? null) : null;
         if ($targets !== null) {
@@ -424,6 +450,98 @@ final class Connector
             $out[] = 'audience.label: a string';
         }
         return $out;
+    }
+
+    /**
+     * C18 (THIRD_PARTY_GROUPS, SHARED_GROUPS): a third-party connector's api.json, perm.json
+     * and groups.json.
+     *
+     * @param array<string, string> $files
+     * @param string[] $namespaces
+     * @param string[] $errors
+     */
+    private static function checkGroups(array $files, string $service, array $namespaces, callable $inNs, callable $json, array &$errors): void
+    {
+        $ns = implode(', ', $namespaces);
+        $isObject = fn ($v): bool => is_array($v) && (!array_is_list($v) || $v === []);
+        $own = [];
+        $apiPath = "service/sysbus/$service.api.json";
+        [$aok, $api] = $json($apiPath);
+        if (isset($files[$apiPath]) && (!$aok || !$isObject($api))) {
+            $errors[] = "C18 $apiPath: not valid JSON (an object: each group and its methods)";
+        } elseif ($aok) {
+            foreach ($api as $g => $methods) {
+                $g = (string) $g;
+                $shared = in_array($g, self::SHARED_GROUPS, true);
+                if (!$shared && !$inNs($g)) {
+                    $errors[] = "C18 the api.json's group $g is not in the namespace $ns: name a group of your own in it (" . implode(' and ', self::SHARED_GROUPS) . " are the connector protocol's)";
+                }
+                $others = is_array($methods) && array_is_list($methods)
+                    ? array_values(array_filter($methods, fn ($m) => !is_string($m) || !str_starts_with($m, "$service/")))
+                    : [$methods];
+                foreach ($others as $m) {
+                    $errors[] = "C18 the api.json's group $g lists " . json_encode($m, JSON_UNESCAPED_SLASHES) . ": a connector's groups list only its service's methods ($service/<method>)";
+                }
+                if (!$shared && $inNs($g) && !$others) {
+                    $own[] = $g;
+                }
+            }
+        }
+        $claims = "a third-party connector claims only its own groups (its api.json's, named in $ns) and " . implode(', ', self::THIRD_PARTY_GROUPS);
+        $paths = array_map('strval', array_keys($files));
+        sort($paths);
+        foreach ($paths as $p) {
+            if (!preg_match('#^service/sysbus/[^/]+\.perm\.json$#', $p)) {
+                continue;
+            }
+            [$pok, $perm] = $json($p);
+            if (!$pok || !$isObject($perm)) {
+                $errors[] = "C18 $p: not valid JSON (an object: the service and the groups it claims)";
+                continue;
+            }
+            foreach ($perm as $name => $groups) {
+                $name = (string) $name;
+                if ($name !== $service) {
+                    $errors[] = "C18 $p: claims groups for $name; a connector's perm file names only its service, $service";
+                    continue;
+                }
+                if (!is_array($groups) || !array_is_list($groups)) {
+                    $errors[] = "C18 $p: $service's groups must be a list";
+                    continue;
+                }
+                foreach ($groups as $g) {
+                    if (!is_string($g) || (!in_array($g, $own, true) && !in_array($g, self::THIRD_PARTY_GROUPS, true))) {
+                        $errors[] = "C18 $service may not claim the group " . (is_string($g) ? $g : json_encode($g)) . ": $claims";
+                    }
+                }
+            }
+        }
+        foreach ($paths as $p) {
+            if (!preg_match('#^service/sysbus/[^/]+\.groups\.json$#', $p)) {
+                continue;
+            }
+            [$gok, $gr] = $json($p);
+            if (!$gok || !$isObject($gr)) {
+                $errors[] = "C18 $p: not valid JSON (an object: each group and its trust levels)";
+                continue;
+            }
+            foreach ($gr as $g => $v) {
+                $g = (string) $g;
+                if ($g === 'allowedNames') {
+                    if ($v !== [$service]) {
+                        $errors[] = "C18 $p: allowedNames must be [\"$service\"]";
+                    }
+                } elseif (in_array($g, self::SHARED_GROUPS, true)) {
+                    if ($v !== ['oem']) {
+                        $errors[] = "C18 $p: the trust of $g is the system's, [\"oem\"]; a connector may not change it";
+                    }
+                } elseif (!in_array($g, $own, true)) {
+                    $errors[] = "C18 $p: sets the trust of $g, not a group of the package's own (its api.json's, named in $ns)";
+                } elseif (!is_array($v) || !array_is_list($v) || $v === [] || array_filter($v, fn ($t) => !is_string($t))) {
+                    $errors[] = "C18 $p: the trust of $g must be a list of trust levels";
+                }
+            }
+        }
     }
 
     private static function checkShareTargets(array $list, array $info, array $files, string $service, array $templates, callable $json,

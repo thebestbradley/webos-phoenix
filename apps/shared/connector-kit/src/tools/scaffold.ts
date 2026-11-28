@@ -54,7 +54,9 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     const kind = (id: string, ext?: string) => js(Object.assign({ id, owner: service, sync: false }, ext ? { extends: [ext] } : {}, {
         indexes: [{ name: "accountId", props: [{ name: "accountId" }] }] }));
 
-    const shareGroup = name.replace(/\./g, "-") + ".share";
+    // A group of its own is named in its namespace (rule C18: luna-hub joins
+    // groups of the same name across packages).
+    const shareGroup = service + ".share";
     const phoenix: Record<string, unknown> = { hidden: true };
     if (share) phoenix.shareTargets = [shareTarget({ service, templateIds: [templateId], share: { accepts: SCAFFOLD_ACCEPTS, send: async () => ({}) } }, name)];
     files["appinfo.json"] = js({ id: appId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: name,
@@ -147,7 +149,8 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     // The kit reads each account and its credentials (service.ts
     // accountContext): the accounts service's two read groups, not the whole
     // service; the template's readPermissions still decide which accounts.
-    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.operation", "accounts.transport",
+    // Only groups rule C18 lets a third party claim (checks.ts THIRD_PARTY_GROUPS).
+    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.transport",
         "phoenix.accounts.info", "phoenix.accounts.read-credentials"] });
     files[sysbus + ".groups.json"] = js(Object.assign({ allowedNames: [service], "accounts.transport": ["oem"] }, share ? { [shareGroup]: ["oem"], [SYSTEM_SHARE_GROUP]: ["oem"] } : {}));
     files[sysbus + ".manifest.json"] = js({ id: service, version: "0.1.0",

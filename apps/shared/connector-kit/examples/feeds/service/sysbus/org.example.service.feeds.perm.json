@@ -2,7 +2,6 @@
     "org.example.service.feeds": [
         "database.operation",
         "activity.operation",
-        "accounts.operation",
         "accounts.transport",
         "phoenix.accounts.info",
         "phoenix.accounts.read-credentials"
