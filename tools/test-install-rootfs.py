@@ -183,6 +183,45 @@ with tempfile.TemporaryDirectory() as tmp:
         stamped = "manifest.json" in str(e)
     check(stamped, "devpush.py: stamping without a manifest says so")
 
+# meta-phoenix's lib/phoenix/developerapps.py at image time
+# (phoenix-developer-apps.bbclass): the platform's test apps listed in
+# conf/developer-apps.json get Phoenix's developer flag in their appinfo.json
+# (docs/APP-RUNTIME.md "Developer apps").
+from phoenix import developerapps as da  # noqa: E402
+dev_listed = da.load(os.path.join(REPO, "meta-phoenix", "conf", "developer-apps.json"))
+check("com.webos.app.test.youtube" in dev_listed and not any(i.startswith("org.webosphoenix.") for i in dev_listed),
+      "developer-apps.json: the platform's test apps, none of Phoenix's own (their appinfo.json says so)")
+with tempfile.TemporaryDirectory() as tmp:
+    def appinfo(app_id, text):
+        os.makedirs(os.path.join(tmp, da.APPS_DIR, app_id))
+        with open(os.path.join(tmp, da.APPS_DIR, app_id, "appinfo.json"), "w") as f:
+            f.write(text)
+    appinfo("com.webos.app.test.youtube", '{"id": "com.webos.app.test.youtube", "title": "YouTube", "visible": true}')
+    appinfo("org.example.flagged", '{"id": "org.example.flagged", "phoenix": {"developer": true, "launcherTab": 1}}')
+    appinfo("org.example.broken", '{"id": ')
+    appinfo("org.example.odd", '{"id": "org.example.odd", "phoenix": "yes"}')
+    marked, missing, failed = da.mark(tmp, ["com.webos.app.test.youtube", "org.example.flagged", "org.example.gone",
+                                            "org.example.broken", "org.example.odd"])
+    yt = json.load(open(os.path.join(tmp, da.APPS_DIR, "com.webos.app.test.youtube", "appinfo.json")))
+    flagged = json.load(open(os.path.join(tmp, da.APPS_DIR, "org.example.flagged", "appinfo.json")))
+    check(marked == ["com.webos.app.test.youtube", "org.example.flagged"] and missing == ["org.example.gone"]
+          and [f[0] for f in failed] == ["org.example.broken", "org.example.odd"],
+          "developerapps.py: listed apps marked, a missing one skipped, a bad appinfo.json reported")
+    check(yt == {"id": "com.webos.app.test.youtube", "title": "YouTube", "visible": True, "phoenix": {"developer": True}}
+          and flagged["phoenix"] == {"developer": True, "launcherTab": 1},
+          "developerapps.py: the flag added beside what the appinfo.json had")
+    bad = os.path.join(tmp, "list.json")
+    for text, why in (('{"apps": {"org.webosphoenix.notificationlab": "x"}}', "Phoenix's own"),
+                      ('{"apps": {"com.example.test": ""}}', "a reason"), ('{"apps": {"bad id": "x"}}', "not an app id")):
+        with open(bad, "w") as f:
+            f.write(text)
+        try:
+            da.load(bad)
+            refused = False
+        except ValueError as e:
+            refused = why in str(e)
+        check(refused, "developerapps.py: a list naming %s refused" % ("an app without " + why if why == "a reason" else why))
+
 # The release notes ship without "unreleased", the next version's notes
 # while work goes on (docs/APP-STORE.md 3.15); the versions as they are.
 import importlib.util  # noqa: E402
