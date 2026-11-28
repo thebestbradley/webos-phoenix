@@ -49,6 +49,7 @@ enyo.depends(
     "../accounts/",
     "source/MailApp.js",
     "source/phoenix-compat.js", // Phoenix: see that file
+    "../data/phoenix-gmail-errors.js", // Phoenix: see that file
     "../controls/",
     "../facades/Email.js",
     "../facades/Folder.js",

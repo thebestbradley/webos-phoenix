@@ -202,7 +202,9 @@ enyo.kind({
             this.$.privacy.setContent("Your files go between this device and your server only, encrypted by SSH; no Phoenix server is in between.");
         }
         this.arrange(this.provider === "nextcloud" ? "flow" : "fields");
-        this.$.info.call({templateId: this.templateId});
+        // From an account, Google Drive's answer says what it may see now (the choice shown).
+        this.$.info.call(this.mode === "modify" && this.params.account ? {templateId: this.templateId, accountId: this.params.account._id}
+                                                                        : {templateId: this.templateId});
         if (this.mode === "modify" && this.params.account) {
             // Signing in again: the same account.
             var name = this.params.account.username || "";
@@ -412,6 +414,8 @@ enyo.kind({
     gotInfo: function (inSender, r) {
         if (!r || !r.returnValue) return;
         this.info = r;
+        // Change what Phoenix may see: the account's choice to start from, not the default.
+        if (this.provider === "googledrive" && (r.access === "drive" || r.access === "drive.file")) this.$.access.setValue(r.access);
         if (this.provider === "googledrive") this.accessChanged();
         if (!r.available) {
             this.$.unavailable.setContent(r.reason || "Not available in this build.");
@@ -541,7 +545,7 @@ enyo.kind({
                        "Choose Files you open with Phoenix instead.";
             }
             return "You did not allow Phoenix.";
-        case "NOT_AVAILABLE": case "TIMEOUT": case "UNSUPPORTED_CAPABILITY": return r.errorText;
+        case "NOT_AVAILABLE": case "TIMEOUT": case "UNSUPPORTED_CAPABILITY": case "WRONG_ACCOUNT": return r.errorText;
         case "UNSUPPORTED": return "Signing in this way is not available on this device yet.";
         case "400_BAD_REQUEST": return r.errorText || AccountError.getErrorText("400_BAD_REQUEST");
         }

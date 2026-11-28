@@ -17,7 +17,10 @@
 //     (backoff.retryAt, which the connector kit keeps per account);
 //   - exponential retries (0.5 s, 1 s, ...) for network errors and 502 / 504;
 //   - a timeout per request (timeoutMs, 60 s), by Promise.race on top of the
-//     request's own.
+//     request's own; a transfer (req.transferBytes: a part of a file sent,
+//     a range asked for) has the time its bytes need on a slow network as
+//     well (16 KiB/s: an 8 MB part, 8.5 minutes more), or a slow link would
+//     never move a part that takes longer than the timeout.
 //
 //   createHttp({request, hosts?: [pattern], backoff?: {retryAt}, maxWaitMs?, retries?,
 //               timeoutMs?, now?, sleep?, log?, userAgent?}) -> {
@@ -53,6 +56,9 @@ function hostMatches(pattern, host) {
     return host === pattern;
 }
 
+// The slowest network a transfer is given time for (bytes a second).
+var SLOWEST = 16 * 1024;
+
 function createHttp(options) {
     var request = options.request;
     var log = options.log || function () {};
@@ -78,7 +84,7 @@ function createHttp(options) {
                 var e = new Error("request timed out: " + req.method + " " + req.url);
                 e.code = "ETIMEDOUT";
                 reject(e);
-            }, req.timeoutMs || timeoutMs);
+            }, (req.timeoutMs || timeoutMs) + (req.transferBytes > 0 ? Math.ceil(req.transferBytes / SLOWEST * 1000) : 0));
         });
         return Promise.race([Promise.resolve().then(function () { return request(req); }), limit])
             .then(function (r) { clearTimeout(timer); return r; }, function (e) { clearTimeout(timer); throw e; });

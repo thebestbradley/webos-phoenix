@@ -52,7 +52,11 @@ export function createScheduler(options: { call: (uri: string, params?: object) 
 export function createSerializer(): <T>(key: string, fn: () => Promise<T> | T) => Promise<T>;
 export function intervalSeconds(every: string): number;
 
-export interface HttpRequest { method?: string; url: string; headers?: Record<string, string>; body?: string | Uint8Array; binary?: boolean; timeoutMs?: number }
+export interface HttpRequest {
+    method?: string; url: string; headers?: Record<string, string>; body?: string | Uint8Array; binary?: boolean; timeoutMs?: number;
+    /** The bytes a transfer moves (a part sent, a range asked for): the time they need at 16 KiB/s on top of the timeout. */
+    transferBytes?: number;
+}
 export interface HttpResponse { status: number; headers: Record<string, string>; body?: string; bytes?: Uint8Array }
 export type RequestFn = (req: HttpRequest) => Promise<HttpResponse>;
 export interface Http {

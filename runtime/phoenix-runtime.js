@@ -4436,11 +4436,26 @@
                 var account = getAccount(p.accountId);
                 if (!account || account.beingDeleted) return reply(fail(-1, "Unable to find account"));
                 callNow("palm://com.palm.db/merge", { objects: [{ _id: account._id, beingDeleted: true }] });
+                // Each of its capability providers is told first (the template's
+                // onDelete: the mail transports remove the account's mail, its
+                // folders and their account), then its objects and credentials go.
+                var template = templateFor(account.templateId);
+                var ids = (account.capabilityProviders || []).map(function (c) { return c.id; });
+                var calls = ((template && template.capabilityProviders) || []).filter(function (cp) { return cp.onDelete && ids.indexOf(cp.id) >= 0; })
+                    .map(function (cp) { return cp.onDelete; }).filter(function (uri, i, all) { return all.indexOf(uri) === i; });
                 setTimeout(function () {
-                    callNow("palm://com.palm.db/del", { query: { where: [{ prop: "accountId", op: "=", val: account._id }] } });
-                    callNow("palm://com.palm.db/del", { ids: [account._id] });
-                    credentials.set(account._id, undefined);
-                    reply(ok({}));
+                    (function next(i) {
+                        if (i < calls.length) {
+                            return dispatch(calls[i], { accountId: account._id }, function (r) {
+                                if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + calls[i] + " failed: " + toJson(r));
+                                next(i + 1);
+                            }, { cancelled: function () { return false; } });
+                        }
+                        callNow("palm://com.palm.db/del", { query: { where: [{ prop: "accountId", op: "=", val: account._id }] } });
+                        callNow("palm://com.palm.db/del", { ids: [account._id] });
+                        credentials.set(account._id, undefined);
+                        reply(ok({}));
+                    })(0);
                 }, 300);
             },
             "/readCredentials": function (p, reply) {
@@ -5172,11 +5187,73 @@
             callNow("palm://com.palm.db/merge", { objects: [email] });
             // "Send" at once: the compose card closes as soon as this
             // returns, taking any timer in this page with it.
-            if (!isDraft && account.sentFolderId) {
+            var refused = !isDraft && smtpRefusal(account, email);
+            if (refused) {
+                // The SMTP server refused it: the email stays in the Outbox with
+                // the server's line (mojomail's sendStatus.error; fatalError:
+                // not tried again, a message too large), and a refused login is
+                // the account's error too (its smtpConfig.error, which Email's
+                // EmailAccount.getErrorCode reads) until a send logs in again.
+                callNow("palm://com.palm.db/merge", { objects: [{ _id: id, sendStatus: { error: refused.error, fatalError: refused.fatal,
+                    retryCount: 1 } }] });
+                if (refused.login) callNow("palm://com.palm.db/merge", { objects: [{ _id: account._id,
+                    smtpConfig: Object.assign({}, account.smtpConfig || {}, { error: refused.error }) }] });
+            } else if (!isDraft && account.sentFolderId) {
                 callNow("palm://com.palm.db/merge", { objects: [{ _id: id, folderId: account.sentFolderId,
                     sendStatus: { error: null, fatalError: false, retryCount: 0, sent: true } }] });
+                if (account.smtpConfig && account.smtpConfig.error) callNow("palm://com.palm.db/merge", { objects: [{ _id: account._id,
+                    smtpConfig: Object.assign({}, account.smtpConfig, { error: null }) }] });
             }
             reply(ok({ _id: id, emailId: id }));
+        }
+
+        // ---- The stand-ins for mail servers (tools/test-email.cjs: Gmail's) ----
+        // "mailServerStandIns": {"<host>": {logins: {"<user>": "<password>"},
+        // refusals: {"<password>": "<line>"}, refusal: "<line>", disabled:
+        // "<line>" or {"<user>": "<line>"} (every login, or that user's,
+        // refused so: Gmail's IMAP turned off), ports: {"<port>": "ssl" |
+        // "tls" | "none"} (how each port speaks),
+        // maxMessageBytes, tooLarge: "<line>" (SMTP: a message over the
+        // server's SIZE)}}. A host without one takes any login.
+        function standInOf(server) {
+            return store.get("mailServerStandIns", {})[String(server || "").toLowerCase()] || null;
+        }
+        // The server's line refusing this login, or null when it is taken.
+        function loginRefusal(standIn, user, password) {
+            if (!standIn) return null;
+            user = String(user || "").toLowerCase();
+            if (typeof standIn.disabled === "string") return standIn.disabled;
+            if (standIn.disabled && standIn.disabled[user]) return standIn.disabled[user];
+            var logins = standIn.logins || {};
+            if (Object.prototype.hasOwnProperty.call(logins, user) && logins[user] === password) return null;
+            return (standIn.refusals || {})[password] || standIn.refusal || "Invalid credentials";
+        }
+        function storedPassword(accountId, name) {
+            var r = callNow("palm://com.palm.service.accounts/readCredentials", { accountId: accountId, name: name });
+            return r && r.credentials ? r.credentials.password : undefined;
+        }
+        // An email to send, as the account's SMTP server (its stand-in) takes
+        // it: null, or {error: {errorCode, errorText}, fatal, login}. The SMTP
+        // password is the account's "smtp" credentials, else its "common"
+        // (mojomail SmtpAccountAdapter: the same login unless set apart).
+        function smtpRefusal(account, email) {
+            var smtp = account.smtpConfig || {}, standIn = standInOf(smtp.server);
+            if (!standIn) return null;
+            var password = storedPassword(account.accountId, "smtp");
+            if (password === undefined) password = storedPassword(account.accountId, "common");
+            var line = loginRefusal(standIn, smtp.username || account.username, password);
+            if (line) return { error: { errorCode: 1000, errorText: line }, fatal: false, login: true };
+            if (standIn.maxMessageBytes) {
+                var size = 0;
+                (email.parts || []).forEach(function (part) {
+                    if (part.path && part.path.indexOf(FILE_CACHE) !== 0 && runtime.fileManager && runtime.fileManager.sizeNow) size += Math.max(0, runtime.fileManager.sizeNow(part.path));
+                    else if (part.path) size += String(store.get("fileCache", {})[part.path] || "").length;
+                });
+                // Attachments go base64 encoded: 4 bytes for every 3.
+                if (size * 4 / 3 > standIn.maxMessageBytes)
+                    return { error: { errorCode: 6000, errorText: standIn.tooLarge || "552 Message size exceeds fixed maximum message size" }, fatal: true };
+            }
+            return null;
         }
 
         // ---- validateAccount (the account wizard's check of a server and login) ----
@@ -5199,14 +5276,15 @@
         function validateAccount(credentialsName) {
             return function (p, reply) {
                 var config = (p && p.config) || {};
-                var standIn = store.get("mailServerStandIns", {})[String(config.server || "").toLowerCase()];
-                if (standIn) {
-                    var user = String(config.username || p.username || "").toLowerCase(), logins = standIn.logins || {};
-                    if (!Object.prototype.hasOwnProperty.call(logins, user) || logins[user] !== p.password) {
-                        var line = (standIn.refusals || {})[p.password] || standIn.refusal || "Invalid credentials";
-                        return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", mailErrorCode: 1000, errorText: line });
-                    }
-                }
+                var standIn = standInOf(config.server);
+                // A server's ports each speak one way ("ports": {"465": "ssl", "587": "tls"}:
+                // Gmail's SMTP): SSL to the STARTTLS port, or the other way, does not connect.
+                var speaks = standIn && standIn.ports && config.port !== undefined && standIn.ports[String(config.port)];
+                if (standIn && standIn.ports && config.port !== undefined && speaks !== String(config.encryption || "none"))
+                    return reply({ returnValue: false, errorCode: "CONNECTION_FAILED", mailErrorCode: 3099,
+                                   errorText: "No " + String(config.encryption || "plain").toUpperCase() + " connection to " + config.server + " on port " + config.port });
+                var line = loginRefusal(standIn, config.username || p.username, p.password);
+                if (line) return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", mailErrorCode: 1000, errorText: line });
                 var credentials = {};
                 credentials[credentialsName] = { password: p.password };
                 reply(ok({ protocolSettings: clone(p), credentials: credentials }));
@@ -5240,7 +5318,7 @@
         // itself) goes and the new one comes; the transport's capability
         // provider and bus address say whose it is (SyncSession.cpp:144-156).
         var SYNC_STATE_KIND = "com.palm.account.syncstate:1";
-        function setSyncState(transport, accountId, collectionId, state) {
+        function setSyncState(transport, accountId, collectionId, state, error) {
             var where = [{ prop: "capabilityProvider", op: "=", val: transport + ".mail" },
                          { prop: "accountId", op: "=", val: accountId },
                          { prop: "collectionId", op: "=", val: collectionId }];
@@ -5249,7 +5327,7 @@
                 { method: "del", params: { query: { from: SYNC_STATE_KIND, where: where }, purge: true } },
                 { method: "put", params: { objects: [{ _kind: SYNC_STATE_KIND, capabilityProvider: transport + ".mail",
                     busAddress: transport, accountId: accountId, collectionId: collectionId, syncState: state,
-                    errorCode: "", errorText: "", metadata: null }] } }
+                    errorCode: (error && error.errorCode) || "", errorText: (error && error.errorText) || "", metadata: null }] } }
             ] });
         }
         // A sync of the account's folder (or, initial, the whole account):
@@ -5259,11 +5337,28 @@
         // local changes (as SyncLocalChangesCommand runs in a folder's sync).
         var SYNC_MS = 1000;
         function sync(transport, accountId, folderId, initial) {
+            // The login first, as mojomail's sync session (LoginCommand): a
+            // stand-in's server refusing the password kept (an app password
+            // revoked at Google) is the account's error, error {errorCode
+            // 1000 BAD_USERNAME_OR_PASSWORD, errorText: the server's line}
+            // (Email's dashboard and account list show it), and the sync's
+            // state ERROR (401_UNAUTHORIZED: Accounts asks to sign in again);
+            // a login taken again clears it.
+            var account = mailAccount(accountId);
+            var line = account && loginRefusal(standInOf(account.server), account.username, storedPassword(accountId, "common"));
+            if (line) {
+                callNow("palm://com.palm.db/merge", { objects: [{ _id: account._id, error: { errorCode: 1000, errorText: line } }] });
+                setSyncState(transport, accountId, null, "ERROR", { errorCode: "401_UNAUTHORIZED", errorText: line });
+                return;
+            }
+            if (account && account.error) callNow("palm://com.palm.db/merge", { objects: [{ _id: account._id, error: null }] });
             var state = initial ? "INITIAL_SYNC" : "INCREMENTAL_SYNC";
             if (initial) setSyncState(transport, accountId, null, state);
             if (folderId) setSyncState(transport, accountId, folderId, state);
             localChanges();
             setTimeout(function () {
+                // (The account removed meanwhile: its sync ended with it, no state left behind.)
+                if (!mailAccount(accountId)) return;
                 if (folderId) setSyncState(transport, accountId, folderId, "IDLE");
                 if (initial) setSyncState(transport, accountId, null, "IDLE");
             }, SYNC_MS);
@@ -5646,6 +5741,29 @@
                     var account = p.accountId && (mailAccount(p.accountId) || createMailAccount(transport, p));
                     reply(ok({}));
                     if (account) sync(transport, p.accountId, account.inboxFolderId, true);
+                },
+                // The account removed: its mail (and the files of it kept on
+                // the device), its folders, its sync states and the transport's
+                // account go, as mojomail's DeleteAccountCommand does them.
+                "/accountDeleted": function (p, reply) {
+                    var account = p.accountId && mailAccount(p.accountId);
+                    if (!account) return reply(ok({}));
+                    var folders = callNow("palm://com.palm.db/find", { query: { from: "com.palm.folder:1",
+                        where: [{ prop: "accountId", op: "=", val: p.accountId }] } }).results || [];
+                    var cache = store.get("fileCache", {}), cacheChanged = false;
+                    folders.forEach(function (f) {
+                        var emails = callNow("palm://com.palm.db/find", { query: { from: "com.palm.email:1",
+                            where: [{ prop: "folderId", op: "=", val: f._id }] } }).results || [];
+                        emails.forEach(function (e) {
+                            Object.keys(cache).forEach(function (k) { if (k.indexOf(FILE_CACHE + e._id + "/") === 0) { delete cache[k]; cacheChanged = true; } });
+                        });
+                        if (emails.length) callNow("palm://com.palm.db/del", { ids: emails.map(function (e) { return e._id; }), purge: true });
+                    });
+                    if (cacheChanged) store.set("fileCache", cache);
+                    if (folders.length) callNow("palm://com.palm.db/del", { ids: folders.map(function (f) { return f._id; }), purge: true });
+                    callNow("palm://com.palm.db/del", { ids: [account._id], purge: true });
+                    callNow("palm://com.palm.tempdb/del", { query: { from: SYNC_STATE_KIND, where: [{ prop: "accountId", op: "=", val: p.accountId }] }, purge: true });
+                    reply(ok({}));
                 },
                 // accountEnabled, accountUpdated, credentialsChanged, ...: nothing to do.
                 "*": function (p, reply) { reply(ok({})); }
@@ -11626,6 +11744,18 @@
                 if (runtime.mediaFiles && p) runtime.mediaFiles.remove(p);
                 if (n) { delete v.nodes[p]; delete v.mediaSeen[p]; save(v); }
                 return Promise.resolve();
+            },
+            // A folder and all in it (a drive account's copies of its files, when it is removed).
+            removeTree: function (path) {
+                var p = norm(path), v = load();
+                if (!p || p === "/") return Promise.reject(new Error("Not a folder to remove: " + path));
+                var gone = Object.keys(v.nodes).filter(function (k) { return k === p || k.indexOf(p + "/") === 0; });
+                gone.forEach(function (k) {
+                    if (runtime.mediaFiles && v.nodes[k].media) runtime.mediaFiles.remove(k);
+                    delete v.nodes[k]; delete v.mediaSeen[k];
+                });
+                if (gone.length) { touch(v, parentOf(p)); save(v); }
+                return Promise.resolve();
             }
         };
         function viaDrives(name) {
@@ -11900,6 +12030,11 @@
 
         var urls = {};
         runtime.fileManager = {
+            /** A file's size now, without waiting (-1: no such file): the mail transports' check of an attachment. */
+            sizeNow: function (path) {
+                var p = norm(path), n = p && load().nodes[p];
+                return n && n.t === "f" && n.size >= 0 ? n.size : -1;
+            },
             /** A URL to show a file: its rootfs path, a blob: URL or a data: URL. */
             url: function (path) {
                 var p = norm(path);

@@ -28,7 +28,10 @@
 //   9. Google Drive asks what Phoenix may see ("Files you open with
 //      Phoenix", "All your Drive", which Google must approve first); with
 //      the first, Google's sign-in asks for drive.file with its Picker, the
-//      account keeps the choice, and Files shows the picked picture only.
+//      account keeps the choice, and Files shows the picked picture only;
+//  10. from the account, Change what Phoenix may see starts at its choice and
+//      picks more, the account staying signed in; a Google Form opens in the
+//      browser; removing the account removes the device's copies of its files.
 //
 //   node tools/test-drives.cjs [--phone] [--out DIR]
 //
@@ -461,6 +464,55 @@ async function main() {
         await files.goto(appUrl("org.webosphoenix.files", { path: "/media/drives/" + (gdAcct && gdAcct._id) }));
         await files.waitForSelector("[data-testid='file-lake.png']", { timeout: 15000 }).catch(() => {});
         await shot(files, "20-googledrive-files");
+
+        // ---- 10. Google Drive from the account: more picked, a Form, the account removed -------------------
+        // Change what Phoenix may see: the account's sign-in page again (as
+        // Accounts opens it, mode "modify"); it starts at the account's choice.
+        const gdId = gdAcct && gdAcct._id;
+        const survey = fake.trees.googledrive.add(fake.trees.googledrive.mkdirp("/Forms").id, "Survey", "file", Buffer.alloc(0));
+        survey.mime = "application/vnd.google-apps.form";
+        const modify = await context.newPage();
+        await modify.goto(appUrl("org.webosphoenix.drives", { mode: "modify", account: gdAcct, template: { templateId: GD, loc_name: "Google Drive" } },
+                                 "accounts/wizard.html"));
+        await modify.waitForFunction(() => !!(window.enyo && enyo.$.drivesWizard && enyo.$.drivesWizard.info), null, { timeout: 15000 });
+        check(await modify.evaluate(() => enyo.$.drivesWizard.$.access.getValue()) === "drive.file" &&
+              /CHANGE WHAT PHOENIX MAY SEE/.test(await modify.evaluate(() => document.body.innerText)),
+              "Change what Phoenix may see: the page starts at the account's choice (Files you open with Phoenix)");
+        await modify.evaluate(() => { window.__result = null; enyo.$.drivesWizard.$.crossAppResult.sendResult = (r) => { window.__result = r; }; });
+        fake.gd.picks = [fake.trees.googledrive.byPath("/Photos/hills.png").id, survey.id];
+        const revokedBefore = fake.revoked || 0;
+        await tapSignIn(modify);
+        const gdPage2 = await until(() => modify.frames().find((f) => f.url().indexOf(fake.origin + "/oauth/googledrive/authorize") === 0), 15000);
+        if (gdPage2) { await gdPage2.waitForSelector("#allow"); await gdPage2.click("#allow"); }
+        const again = await until(() => modify.evaluate(() => window.__result), 20000);
+        check(again && again.returnValue && again.credentials.common.settings.access === "drive.file", "signed in again from the account: more picked in Google's Picker");
+        // What Accounts does with it (writeCredentials), then Files.
+        if (again) await luna(files, "luna://com.palm.service.accounts/writeCredentials", { accountId: gdId, credentials: again.credentials });
+        await modify.close();
+        const gdList2 = await until(async () => { const l = await luna(files, "luna://org.webosphoenix.filemanager/list", { path: "/media/drives/" + gdId });
+                                                   return l.returnValue && l.entries.length === 3 && l; }, 10000);
+        check(gdList2 && JSON.stringify(gdList2.entries.map((e) => e.name).sort()) === JSON.stringify(["Survey", "hills.png", "lake.png"]) &&
+              (fake.revoked || 0) === revokedBefore,
+              "... and the account stays signed in (the old key forgotten, not revoked: Google would end the new one too): " +
+              (gdList2 ? gdList2.entries.map((e) => e.name).join(", ") : "nothing listed"));
+        // A Google Form: it opens in the browser, not as an empty file.
+        await files.goto(appUrl("org.webosphoenix.files", { path: "/media/drives/" + gdId }));
+        await files.waitForSelector("[data-testid='file-Survey']", { timeout: 15000 });
+        await files.evaluate(() => {
+            window.__opened = [];
+            window.__phoenixRuntime.services["com.webos.applicationManager"]["/open"] = (p, reply) => { window.__opened.push(p.target); reply({ returnValue: true }); };
+        });
+        await files.click("[data-testid='file-Survey']");
+        const formOpened = await until(() => files.evaluate(() => window.__opened[0]), 8000);
+        check(formOpened === "https://drive.google.com/file/d/" + survey.id + "/view", "a Google Form opens in the browser, on its Google Drive page (" + formOpened + ")");
+        await shot(files, "21-googledrive-form");
+        // Removed in Accounts: the device's copies of its files go.
+        const gdOpened = await luna(files, "luna://org.webosphoenix.filemanager/open", { path: "/media/drives/" + gdId + "/lake.png" });
+        check(gdOpened.returnValue && gdOpened.path.indexOf("/media/internal/.phoenix/drive-cache/" + gdId + "/") === 0, "a picture of the drive opened: its copy on the device");
+        await luna(files, "luna://com.palm.service.accounts/deleteAccount", { accountId: gdId });
+        const copyGone = await until(async () => (await luna(files, "luna://org.webosphoenix.filemanager/stat", { path: gdOpened.path })).returnValue === false, 10000);
+        const index = await luna(files, "luna://org.webosphoenix.filemanager/read", { path: "/media/internal/.phoenix/drive-cache/index.json" });
+        check(copyGone && !(index.data || "").includes("/" + gdId + "/"), "the account removed: the device's copies of its files are gone, and their index lines");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     } finally {

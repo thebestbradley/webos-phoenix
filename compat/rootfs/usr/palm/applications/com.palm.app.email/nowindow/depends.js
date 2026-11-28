@@ -41,5 +41,7 @@ enyo.depends(
     "../source/DashboardManager.js",
     // Phoenix: the cycling new-email dashboard (see that file)
     "../source/phoenix-dashboard.js",
+    // Phoenix: a Gmail account's errors in plain words (see that file)
+    "../data/phoenix-gmail-errors.js",
     "source/Launch.js"
 );

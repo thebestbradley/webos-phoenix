@@ -385,10 +385,17 @@ export interface AccountContext extends BaseContext {
 export type MethodContext = BaseContext & Partial<AccountContext>;
 
 export interface OAuthClient {
-    /** The access token of a key held by the OAuth service (credentials.common.oauthKey). */
-    token(keyId: string): Promise<string>;
-    /** Forget the key (account deleted). */
-    forget(keyId: string): Promise<void>;
+    /**
+     * The access token of a key held by the OAuth service (credentials.common.oauthKey).
+     * refresh: a new one now, when the provider refused the one kept before it expired here.
+     */
+    token(keyId: string, opts?: { refresh?: boolean }): Promise<string>;
+    /**
+     * Forget the key (account deleted). revoke: false keeps it valid at the
+     * provider (Google ends the app's whole grant on a revocation: a new
+     * sign-in's token, and another account's of the same Google account).
+     */
+    forget(keyId: string, opts?: { revoke?: boolean }): Promise<void>;
 }
 
 /** What the host gives the kit: a device (device.ts), the simulator, the tests. */
@@ -406,6 +413,8 @@ export interface Environment {
     readFile?(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
     /** Longest Retry-After waited out within a sync (ms, default 30000). */
     maxWaitMs?: number;
+    /** How long a request may take (ms, default 60000; a transfer's own may be longer). */
+    timeoutMs?: number;
     /** The device's files, for the DOCUMENTS capability's downloads and uploads. */
     files?: LocalFiles;
     /** /etc/palm/<name> (JSON) of the system image, or null. */

@@ -78,7 +78,8 @@ export function deviceEnvironment(def: ConnectorDefinition, service: Json): Envi
                 else fs.writeFileSync(p, Buffer.from(bytes));
             },
             rename: async (from: string, to: string) => { fs.renameSync(from, to); },
-            remove: async (p: string) => { try { fs.unlinkSync(p); } catch (e) { /* gone already */ } }
+            remove: async (p: string) => { try { fs.unlinkSync(p); } catch (e) { /* gone already */ } },
+            removeTree: async (p: string) => { fs.rmSync(p, { recursive: true, force: true }); }
         },
         // /etc/palm/<name>: what the image was built with (docs/DEVELOPER-APPS.md).
         systemConfig: async (name: string) => {

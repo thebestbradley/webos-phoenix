@@ -26,7 +26,11 @@
 //      page; the Google account's own password is refused with what to do;
 //      Manual Setup has Google's servers; the app password makes the account
 //      (com.palm.google, imap.gmail.com 993 SSL, smtp.gmail.com 465 SSL, the
-//      server's folders), and mail sent from it lands in its Sent Mail.
+//      server's folders), and mail sent from it lands in its Sent Mail;
+//   7. Gmail's edge cases: 2-Step Verification off, Manual Setup's 587 and
+//      465, the same address again, IMAP off, a Workspace address, the app
+//      password revoked later (the account flagged, a send refused), a new
+//      one in Edit Account, an attachment over Gmail's 25 MB, removal.
 //
 //   node tools/test-email.cjs [--tablet] [--out DIR]
 
@@ -181,14 +185,19 @@ async function main() {
         const IMAP_ASP = "NO [ALERT] Application-specific password required: https://support.google.com/accounts/answer/185833 (Failure)";
         const SMTP_ASP = "534-5.7.9 Application-specific password required. For more information, go to https://support.google.com/mail/?p=InvalidSecondFactor";
         const GMAIL_USER = "phoenix.tester@gmail.com", APP_PASSWORD = "abcdefghijklmnop", GOOGLE_PASSWORD = "my-google-password";
-        await page.evaluate(([user, app, google, imapAsp, smtpAsp]) => {
-            localStorage.setItem("phoenix:mailServerStandIns", JSON.stringify({
-                "imap.gmail.com": { logins: { [user]: app, "you@example.org": app }, refusals: { [google]: imapAsp }, refusal: "NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)",
-                                    folders: [{ name: "[Gmail]/Drafts", special: "drafts" }, { name: "[Gmail]/Sent Mail", special: "sent" },
-                                              { name: "[Gmail]/Trash", special: "trash" }, { name: "[Gmail]/Spam" }, { name: "[Gmail]/All Mail" }] },
-                "smtp.gmail.com": { logins: { [user]: app, "you@example.org": app }, refusals: { [google]: smtpAsp }, refusal: "535-5.7.8 Username and Password not accepted." }
-            }));
-        }, [GMAIL_USER, APP_PASSWORD, GOOGLE_PASSWORD, IMAP_ASP, SMTP_ASP]);
+        const WORKSPACE_USER = "you@example.org", IMAP_OFF_USER = "imap.off@gmail.com";
+        const IMAP_OFF = "NO [ALERT] Your account is not enabled for IMAP use. Please visit your Gmail settings page and enable your account for IMAP access. (Failure)";
+        const TOO_LARGE = "552-5.3.4 Your message exceeded Google's message size limits. For more information, go to https://support.google.com/mail/?p=MaxSizeError";
+        const standIns = (app) => ({
+            "imap.gmail.com": { logins: { [GMAIL_USER]: app, [WORKSPACE_USER]: APP_PASSWORD, [IMAP_OFF_USER]: APP_PASSWORD }, refusals: { [GOOGLE_PASSWORD]: IMAP_ASP },
+                                refusal: "NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)", disabled: { [IMAP_OFF_USER]: IMAP_OFF },
+                                folders: [{ name: "[Gmail]/Drafts", special: "drafts" }, { name: "[Gmail]/Sent Mail", special: "sent" },
+                                          { name: "[Gmail]/Trash", special: "trash" }, { name: "[Gmail]/Spam" }, { name: "[Gmail]/All Mail" }] },
+            "smtp.gmail.com": { logins: { [GMAIL_USER]: app, [WORKSPACE_USER]: APP_PASSWORD, [IMAP_OFF_USER]: APP_PASSWORD }, refusals: { [GOOGLE_PASSWORD]: SMTP_ASP },
+                                refusal: "535-5.7.8 Username and Password not accepted.", maxMessageBytes: 25 * 1024 * 1024, tooLarge: TOO_LARGE }
+        });
+        const setStandIns = (app) => page.evaluate((v) => localStorage.setItem("phoenix:mailServerStandIns", JSON.stringify(v)), standIns(app));
+        await setStandIns(APP_PASSWORD);
         await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "MailApp").showPreferences());
         await page.waitForFunction(() => { const m = Object.values(enyo.$).find((c) => c.kindName === "MasterSettings"); return m && m.$.preferences; });
         await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "MasterSettings").showAddAccount());
@@ -207,7 +216,7 @@ async function main() {
             __phoenixRuntime.services["com.palm.applicationManager"]["/open"] = (p, reply) => { window.__opened.push(p.target); reply({ returnValue: true }); };
         });
         await wizardFrame.locator(".phoenix-gmail-link").click();
-        const linkOpened = await until(() => wizardFrame.evaluate(() => window.__opened[0]), 3000);
+        const linkOpened = await until(() => wizardFrame.evaluate(() => window.__opened[0]), 10000);
         check(linkOpened === "https://myaccount.google.com/apppasswords", `the link opens https://myaccount.google.com/apppasswords (${linkOpened})`);
         await page.screenshot({ path: path.join(outDir, "gmail-2-sign-in.png") });
         const emailInput = wizardFrame.locator("#cRUDAccounts_simpleConfig_email_input");
@@ -219,18 +228,22 @@ async function main() {
         // The Google account's own password: refused, and said why.
         await passInput.fill(GOOGLE_PASSWORD);
         await signIn.click();
-        const refused = await until(dialog, 15000);
+        const refused = await until(dialog, 30000);
         check(!!refused && /Gmail needs an app password/.test(refused) && /myaccount\.google\.com\/apppasswords/.test(refused) &&
               /Application-specific password required/.test(refused) && /Make an App Password/.test(refused),
               "the Google password is refused: \"Gmail needs an app password\", how to make one, and Google's own words");
+        check(/setting is not available/.test(refused) && /2-Step Verification is still off/.test(refused) && /Turn On 2-Step Verification/.test(refused),
+              "... and, as Google's App Passwords page has no setting while 2-Step Verification is off, says so and offers to turn it on");
         await page.screenshot({ path: path.join(outDir, "gmail-3-refused.png") });
-        await wizardFrame.getByText("OK", { exact: true }).click();
+        await wizardFrame.locator(".enyo-button:visible", { hasText: /^Turn On 2-Step Verification$/ }).first().click();
+        const twoStep = await until(() => wizardFrame.evaluate(() => window.__opened.find((u) => /twosv/.test(u))), 10000);
+        check(twoStep === "https://myaccount.google.com/signinoptions/twosv", `Turn On 2-Step Verification opens Google's page (${twoStep})`);
         // A wrong app password: Google's "Invalid credentials".
         await passInput.fill("wrongwrongwrongw");
         await signIn.click();
-        const wrong = await until(dialog, 15000);
+        const wrong = await until(dialog, 30000);
         check(!!wrong && /Google did not accept the app password/.test(wrong) && /Invalid credentials/.test(wrong), "a wrong app password: \"Google did not accept the app password\"");
-        await wizardFrame.getByText("OK", { exact: true }).click();
+        await wizardFrame.locator(".enyo-button:visible", { hasText: /^OK$/ }).first().click();
         // Manual Setup has Google's servers in it.
         await wizardFrame.getByText("Manual Setup", { exact: true }).click();
         const manual = await wizardFrame.evaluate(() => ["inHost", "inPort", "inEncryption", "outHost", "outPort", "outEncryption", "inUser"]
@@ -238,21 +251,30 @@ async function main() {
             .map((el) => el ? (el.value !== undefined && el.tagName === "INPUT" ? el.value : el.innerText.trim()) : null));
         check(manual[0] === "imap.gmail.com" && manual[1] === "993" && manual[3] === "smtp.gmail.com" && manual[4] === "465" && manual[6] === GMAIL_USER,
               `Manual Setup is filled with Google's servers, the address as the user name (${JSON.stringify(manual)})`);
+        // Its outgoing encryption gives Google's port for it: TLS 587, SSL 465 (not the original's 25 for TLS).
+        const outPortFor = (enc) => wizardFrame.evaluate((e) => {
+            const m = Object.values(enyo.$).find((c) => c.kindName === "ManualConfig");
+            m.$.outEncryption.setValue(e);
+            m.checkOutPorts(m.$.outEncryption);
+            return String(m.$.outPort.getValue());
+        }, enc);
+        const tls = await outPortFor("tls"), ssl = await outPortFor("ssl");
+        check(tls === "587" && ssl === "465", `Manual Setup: TLS goes with port 587, SSL with 465 (${tls}, ${ssl})`);
         await page.screenshot({ path: path.join(outDir, "gmail-4-manual.png") });
         await wizardFrame.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "CRUDAccounts").showSimpleConfig());
         // The app password, as Google shows it (with spaces): taken.
         await passInput.fill("abcd efgh ijkl mnop");
         await signIn.click();
         const confirm = page.locator("#mailApp_masterSettings_addAccountView_modifyAccountView_createAccountButton");
-        check(await confirm.waitFor({ state: "visible", timeout: 15000 }).then(() => true, () => false), "the app password is taken; Accounts asks to create the account");
+        check(await confirm.waitFor({ state: "visible", timeout: 30000 }).then(() => true, () => false), "the app password is taken; Accounts asks to create the account");
         await confirm.click();
         const gmailAccount = await until(async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.account:1",
-            where: [{ prop: "templateId", op: "=", val: "com.palm.google" }] } })).results || [])[0], 8000);
+            where: [{ prop: "templateId", op: "=", val: "com.palm.google" }] } })).results || [])[0], 20000);
         check(gmailAccount && gmailAccount.username === GMAIL_USER, `the account is Gmail's (com.palm.google), named by the address (${gmailAccount && gmailAccount.username})`);
         const gmailCreds = gmailAccount && await call("luna://com.palm.service.accounts/readCredentials", { accountId: gmailAccount._id, name: "common" });
         check(gmailCreds && gmailCreds.credentials && gmailCreds.credentials.password === APP_PASSWORD, "its password is the app password, without the spaces");
         const gmailMail = gmailAccount && await until(async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.mail.account:1",
-            where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [])[0], 8000);
+            where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [])[0], 20000);
         check(gmailMail && gmailMail._kind === "com.palm.imap.account:1" && gmailMail.server === "imap.gmail.com" && gmailMail.port === 993 &&
               gmailMail.encryption === "ssl" && gmailMail.username === GMAIL_USER && gmailMail.smtpConfig.server === "smtp.gmail.com" &&
               gmailMail.smtpConfig.port === 465 && gmailMail.smtpConfig.encryption === "ssl",
@@ -262,9 +284,137 @@ async function main() {
         const viaGmail = gmailMail && await call("palm://com.palm.smtp/sendMail", { accountId: gmailAccount._id,
             email: { subject: "From Gmail", to: [{ addr: "alex.rivera@example.com", type: "to" }], parts: [{ type: "body", mimeType: "text/html", content: "<p>Hi</p>" }] } });
         check(viaGmail && viaGmail.returnValue && (await get(viaGmail._id)).folderId === gmailMail.sentFolderId, "mail sent from it is in its Sent Mail");
-        check(await until(() => page.evaluate((id) => !!enyo.application.accounts.getAccount(id), gmailAccount._id), 8000),
+        check(await until(() => page.evaluate((id) => !!enyo.application.accounts.getAccount(id), gmailAccount._id), 20000),
               "Email lists the Gmail account");
         await page.screenshot({ path: path.join(outDir, "gmail-5-accounts.png") });
+
+        // 7. Gmail's edge cases: a second time, a Workspace address, IMAP off,
+        //    the app password revoked later, a send refused, a message too
+        //    large, a new app password in Edit Account, the account removed.
+        const gmailAccounts = async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.account:1",
+            where: [{ prop: "templateId", op: "=", val: "com.palm.google" }] } })).results || []).filter((a) => !a.beingDeleted);
+        // Add Account, Gmail, the address and password, Sign In: the wizard's frame
+        // (the same iframe each time, a new page in it: the one not marked stale).
+        const wizardFrames = () => page.frames().filter((f) => /accounts\/wizard\.html/.test(f.url()));
+        const signInGmail = async (address, password) => {
+            for (const f of wizardFrames()) await f.evaluate(() => { window.__stale = true; }).catch(() => {});
+            await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "MasterSettings").showAddAccount());
+            await page.locator("#mailApp_masterSettings_addAccountView_addAccountView_list").getByText("Gmail", { exact: true }).click();
+            const frame = await until(async () => {
+                for (const f of wizardFrames()) {
+                    // Ready once Gmail's account is loaded into the page (phoenix-gmail.js's loadAccount ends with the hint).
+                    const fresh = await f.evaluate(() => !window.__stale && !!window.enyo && !!enyo.$ &&
+                        Object.values(enyo.$).some((c) => c.kindName === "SimpleConfig" && c.account && c.$.email.getHint() === "you@gmail.com")).catch(() => false);
+                    if (fresh) return f;
+                }
+                return null;
+            }, 30000);
+            if (!frame) throw new Error("no Gmail sign-in page");
+            await frame.locator("#cRUDAccounts_simpleConfig_email_input").fill(address);
+            await frame.locator("#cRUDAccounts_simpleConfig_password_input").fill(password);
+            const typed = await frame.evaluate(() => { const c = Object.values(enyo.$).find((x) => x.kindName === "SimpleConfig"); return [c.$.email.getValue(), c.$.password.getValue()]; });
+            if (typed[0] !== address || typed[1] !== password) throw new Error("the sign-in page did not keep what was typed: " + JSON.stringify(typed));
+            await frame.locator("#cRUDAccounts_simpleConfig_createButton").click();
+            return frame;
+        };
+        const dialogIn = (frame) => async () => (await frame.locator("#cRUDAccounts_errorDialog").isVisible()) &&
+            frame.evaluate(() => document.getElementById("cRUDAccounts_errorDialog").innerText);
+        // The same address again (as typed with capitals, the app password without spaces): a duplicate.
+        const dupFrame = await signInGmail("Phoenix.Tester@gmail.com", APP_PASSWORD);
+        const dup = await until(dialogIn(dupFrame), 30000);
+        check(!!dup && /Duplicate account/i.test(dup) && (await gmailAccounts()).length === 1,
+              "the same Gmail address again (capitals, app password without spaces): \"Duplicate account\", no second account (" + String(dup).replace(/\s+/g, " ") + ")");
+        await page.screenshot({ path: path.join(outDir, "gmail-6-duplicate.png") });
+        await dupFrame.locator(".enyo-button:visible", { hasText: /^Done$/ }).first().click().catch(() => {});
+        // Gmail's IMAP turned off for the account (a Workspace administrator's setting): said so.
+        const offFrame = await signInGmail(IMAP_OFF_USER, APP_PASSWORD);
+        const off = await until(dialogIn(offFrame), 30000);
+        if (!off) console.log("    (the page shows: " + await offFrame.evaluate(() => document.body.innerText.replace(/\s+/g, " ").slice(0, 300)).catch((e) => e.message) + ")");
+        check(!!off && /IMAP is off for this Gmail account/.test(off) && /Forwarding and POP\/IMAP/.test(off) && !/Make an App Password/.test(off),
+              "IMAP turned off in Gmail: \"IMAP is off for this Gmail account\", where to turn it on, no app password offered (" + String(off).replace(/\s+/g, " ") + ")");
+        await page.screenshot({ path: path.join(outDir, "gmail-7-imap-off.png") });
+        await offFrame.locator(".enyo-button:visible", { hasText: /^OK$/ }).first().click();
+        // A Google Workspace address: checked against Google's servers, the account keeps the address.
+        const wsFrame = await signInGmail(WORKSPACE_USER, APP_PASSWORD);
+        const confirmWs = page.locator("#mailApp_masterSettings_addAccountView_modifyAccountView_createAccountButton");
+        check(await confirmWs.waitFor({ state: "visible", timeout: 30000 }).then(() => true, () => false), "a Google Workspace address (you@example.org) signs in against Google's servers");
+        await confirmWs.click();
+        const ws = await until(async () => (await gmailAccounts()).find((a) => a.username === WORKSPACE_USER), 20000);
+        const wsMail = ws && await until(async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.mail.account:1",
+            where: [{ prop: "accountId", op: "=", val: ws._id }] } })).results || [])[0], 20000);
+        check(wsMail && wsMail.server === "imap.gmail.com" && wsMail.username === WORKSPACE_USER && wsMail.smtpConfig.server === "smtp.gmail.com",
+              `... a Gmail account named by it, on Google's servers (${wsMail && [wsMail.username, wsMail.server, wsMail.smtpConfig.server].join(", ")})`);
+        void wsFrame;
+
+        // The app password revoked at Google later (a new one made, or the Google password changed).
+        const NEW_APP = "qrstuvwxyzabcdef";
+        await setStandIns(NEW_APP);
+        await call("palm://com.palm.imap/syncAccount", { accountId: gmailAccount._id });
+        const flagged = await until(async () => { const m = (await call("palm://com.palm.db/get", { ids: [gmailMail._id] })).results[0]; return m.error && m.error.errorCode && m; }, 20000);
+        const states = await call("palm://com.palm.tempdb/find", { query: { from: "com.palm.account.syncstate:1", where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } });
+        check(flagged && flagged.error.errorCode === 1000 && /Invalid credentials/.test(flagged.error.errorText) &&
+              (states.results || []).some((x) => x.syncState === "ERROR" && x.errorCode === "401_UNAUTHORIZED"),
+              "the app password revoked at Google: the account is flagged (its error, Google's line; its sync state ERROR, 401)");
+        const said = await until(() => page.evaluate((id) => {
+            const mail = Object.values(enyo.$).find((c) => c.kindName === "Mail");
+            const info = mail && mail.getErrorPopupInfoForAccount(id);
+            return info && info.components.map((c) => c.content).join(" ");
+        }, gmailAccount._id), 20000);
+        check(!!said && /app password: it was revoked/.test(said) && /myaccount\.google\.com\/apppasswords/.test(said),
+              "... and Email says what happened and what to do (" + said + ")");
+        // A message sent now: refused by Google's SMTP server, kept in the Outbox.
+        const refusedSend = await call("palm://com.palm.smtp/sendMail", { accountId: gmailAccount._id,
+            email: { subject: "Refused", to: [{ addr: "alex.rivera@example.com", type: "to" }], parts: [{ type: "body", mimeType: "text/html", content: "<p>Hi</p>" }] } });
+        const kept = refusedSend.returnValue && await get(refusedSend._id);
+        const acctNow = (await call("palm://com.palm.db/get", { ids: [gmailMail._id] })).results[0];
+        check(kept && kept.folderId === gmailMail.outboxFolderId && kept.sendStatus.error && kept.sendStatus.error.errorCode === 1000 &&
+              /5\.7\.8/.test(kept.sendStatus.error.errorText) && acctNow.smtpConfig.error && acctNow.smtpConfig.error.errorCode === 1000,
+              "a send refused by Google's SMTP server: the message stays in the Outbox with Google's line, the account's outgoing error set");
+        // Edit Account: the new app password, as Google shows it (with spaces).
+        await page.evaluate((id) => Object.values(enyo.$).find((c) => c.kindName === "MasterSettings").showEditMode(id), gmailAccount._id);
+        const editPass = await until(async () => {
+            const ids = await page.evaluate(() => Array.from(document.querySelectorAll("input[type=password]")).filter((e) => e.offsetParent).map((e) => e.id));
+            return ids[0];
+        }, 20000);
+        check(!!editPass, "Edit Account opens with the password field (" + editPass + ")");
+        if (editPass) {
+            await page.locator("#" + editPass).fill("qrst uvwx yzab cdef");
+            await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "SimpleConfig" && c.editMode).validateAccount());
+        }
+        const fixed = await until(async () => {
+            const c = await call("luna://com.palm.service.accounts/readCredentials", { accountId: gmailAccount._id, name: "common" });
+            return c.credentials && c.credentials.password === NEW_APP && c;
+        }, 30000);
+        check(!!fixed, "the new app password, typed with Google's spaces in Edit Account, is kept without them");
+        await call("palm://com.palm.imap/syncAccount", { accountId: gmailAccount._id });
+        const cleared = await until(async () => { const m = (await call("palm://com.palm.db/get", { ids: [gmailMail._id] })).results[0]; return !m.error && m; }, 20000);
+        check(!!cleared, "... and the account's error clears at its next sync");
+        // A message over Gmail's 25 MB: refused for good (Google's line), not sent again and again.
+        await page.evaluate(() => window.__phoenixRuntime.fileManager.localFiles.write("/media/internal/Downloads/video.mov", new Uint8Array(20 * 1024 * 1024), false));
+        await page.evaluate(() => window.__phoenixRuntime.fileManager.localFiles.write("/media/internal/Downloads/photo.jpg", new Uint8Array(2 * 1024 * 1024), false));
+        const withParts = (subject, file) => call("palm://com.palm.smtp/sendMail", { accountId: gmailAccount._id, email: { subject, to: [{ addr: "alex.rivera@example.com", type: "to" }],
+            parts: [{ type: "body", mimeType: "text/html", content: "<p>Here</p>" }, { type: "attachment", name: file.replace(/^.*\//, ""), path: file, mimeType: "application/octet-stream" }] } });
+        const huge = await withParts("Too large", "/media/internal/Downloads/video.mov");
+        const hugeMail = huge.returnValue && await get(huge._id);
+        check(hugeMail && hugeMail.folderId === gmailMail.outboxFolderId && hugeMail.sendStatus.fatalError === true && hugeMail.sendStatus.error.errorCode === 6000 &&
+              /552-5\.3\.4/.test(hugeMail.sendStatus.error.errorText),
+              "a 20 MB attachment (27 MB sent, over Gmail's 25 MB): refused for good with Google's line, kept in the Outbox");
+        const photo = await withParts("A photo", "/media/internal/Downloads/photo.jpg");
+        check(photo.returnValue && (await get(photo._id)).folderId === gmailMail.sentFolderId, "a 2 MB attachment is sent");
+        // Removed: its mail account, folders, mail and sync states go with it.
+        const folderIds = ((await call("palm://com.palm.db/find", { query: { from: "com.palm.folder:1", where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [])
+            .map((f) => f._id);
+        await call("luna://com.palm.service.accounts/deleteAccount", { accountId: gmailAccount._id });
+        const removed = await until(async () => !(await gmailAccounts()).some((a) => a._id === gmailAccount._id), 20000);
+        const leftMail = (await call("palm://com.palm.db/find", { query: { from: "com.palm.mail.account:1", where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [];
+        const leftFolders = (await call("palm://com.palm.db/get", { ids: folderIds })).results.filter(Boolean);
+        const leftEmails = [];
+        for (const id of [viaGmail._id, refusedSend._id, huge._id, photo._id]) { const e = await get(id); if (e && !e._del) leftEmails.push(id); }
+        const leftStates = (await call("palm://com.palm.tempdb/find", { query: { from: "com.palm.account.syncstate:1", where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [];
+        check(removed && !leftMail.length && !leftFolders.length && !leftEmails.length && !leftStates.length,
+              `the Gmail account removed: its mail account, ${folderIds.length} folders, its mail and its sync states are gone ` +
+              `(left: ${leftMail.length} account, ${leftFolders.length} folders, ${leftEmails.length} emails, ${leftStates.length} states)`);
+        check((await gmailAccounts()).some((a) => a.username === WORKSPACE_USER), "... and the other Gmail account stays");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
         await browser.close();

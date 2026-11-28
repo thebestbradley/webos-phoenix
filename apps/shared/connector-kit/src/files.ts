@@ -113,6 +113,8 @@ export interface LocalFiles {
     write(path: string, bytes: Uint8Array, append: boolean): Promise<void>;
     rename(from: string, to: string): Promise<void>;
     remove(path: string): Promise<void>;
+    /** Removes a folder and all in it (gone already: nothing). */
+    removeTree?(path: string): Promise<void>;
 }
 
 // ---- Errors -----------------------------------------------------------------------

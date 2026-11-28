@@ -175,11 +175,11 @@ function createFakeDrives(options) {
         };
     };
     fake.users = { dav: { user: "phoenix", password: "app-password-1" }, s3: { accessKeyId: "PHOENIXKEY", secretAccessKey: "phoenix-secret", bucket: "phoenix-files", region: "us-east-1" } };
-    function issue(provider, scope) {
+    function issue(provider, scope, user) {
         const access = "at-" + provider + "-" + crypto.randomBytes(6).toString("hex");
         const rt = "rt-" + provider + "-" + crypto.randomBytes(6).toString("hex");
-        tokens.set(access, { provider, scope, expires: Date.now() + 3600e3 });
-        refresh.set(rt, { provider, scope });
+        tokens.set(access, { provider, scope, user, expires: Date.now() + 3600e3 });
+        refresh.set(rt, { provider, scope, user });
         return { access_token: access, token_type: "bearer", expires_in: 3600, refresh_token: rt, scope: scope || "files" };
     }
     function bearer(req, provider) {
@@ -200,7 +200,26 @@ function createFakeDrives(options) {
     // gd.fullScopeApproved: Google has approved the app for the drive scope
     // (else its consent page refuses: access_denied).
     const GD_FILE = "https://www.googleapis.com/auth/drive.file", GD_ALL = "https://www.googleapis.com/auth/drive";
-    const gd = fake.gd = { appFiles: new Set(), picks: [], fullScopeApproved: true, pickerShown: 0 };
+    // gd.as: the Google account the person signs in with on Google's page
+    // (each has its own files Phoenix may see: gd.appFilesOf(user)); gd.appFiles
+    // are the first one's. gd.grantOnly: the scope the person leaves ticked
+    // on Google's consent page (granular consent), when not all. gd.quotaFull:
+    // the Drive is full (403 storageQuotaExceeded, as Google answers).
+    const GD_USER = "phoenix@gdrive.test";
+    const gdFiles = new Map([[GD_USER, new Set()]]);
+    const gd = fake.gd = { appFiles: gdFiles.get(GD_USER), picks: [], fullScopeApproved: true, pickerShown: 0, as: GD_USER, grantOnly: null,
+                           quotaFull: false, onChunk: null, bytesPerSec: 0,
+                           appFilesOf: (u) => { if (!gdFiles.has(u)) gdFiles.set(u, new Set()); return gdFiles.get(u); } };
+    // Google's revocation ends the grant, not just the token: every token of
+    // the app for that Google account, of every scope ("revokes all of the
+    // scopes that the user granted to the app", Google Identity Services'
+    // google.accounts.oauth2.revoke; https://oauth2.googleapis.com/revoke).
+    function revokeGrant(provider, user) {
+        for (const [k, t] of tokens) if (t.provider === provider && t.user === user) tokens.delete(k);
+        for (const [k, t] of refresh) if (t.provider === provider && t.user === user) refresh.delete(k);
+    }
+    // The person removes Phoenix at myaccount.google.com/permissions.
+    fake.revokeGrant = revokeGrant;
     fake.expireTokens = () => { for (const t of tokens.values()) t.expires = 0; };
     function oauth(req, res, url, provider, rest, body) {
         if (rest === "authorize") {
@@ -225,13 +244,15 @@ function createFakeDrives(options) {
         if (rest === "approve") {
             const q = url.searchParams;
             const code = "code-" + crypto.randomBytes(8).toString("hex");
-            codes.set(code, { provider, challenge: q.get("code_challenge"), redirect: q.get("redirect_uri"), client: q.get("client_id"), scope: q.get("scope") });
+            const user = provider === "googledrive" ? gd.as : undefined;
+            const scope = provider === "googledrive" && gd.grantOnly ? gd.grantOnly : q.get("scope");
+            codes.set(code, { provider, challenge: q.get("code_challenge"), redirect: q.get("redirect_uri"), client: q.get("client_id"), scope, user });
             let picked = "";
             if (provider === "googledrive" && q.get("trigger_onepick") === "true") {
                 // The Picker: what the person picks becomes the app's to see.
                 gd.pickerShown++;
                 const ids = gd.picks.slice(0, q.get("allow_multiple") === "true" ? undefined : 1);
-                ids.forEach((id) => gd.appFiles.add(id));
+                ids.forEach((id) => gd.appFilesOf(user).add(id));
                 if (ids.length) picked = "&picked_file_ids=" + encodeURIComponent(ids.join(","));
             }
             const to = q.get("redirect_uri") + (q.get("redirect_uri").indexOf("?") < 0 ? "?" : "&") + "code=" + code + "&state=" + encodeURIComponent(q.get("state")) + picked;
@@ -246,12 +267,13 @@ function createFakeDrives(options) {
                 if (!c || c.provider !== provider || c.redirect !== f.get("redirect_uri") || c.client !== f.get("client_id")) return send(res, 400, { error: "invalid_grant" });
                 if (b64url(crypto.createHash("sha256").update(f.get("code_verifier") || "").digest()) !== c.challenge) return send(res, 400, { error: "invalid_grant", error_description: "PKCE" });
                 if (provider === "googledrive" && f.get("client_secret") !== "not-secret") return send(res, 401, { error: "invalid_client" });
-                return send(res, 200, issue(provider, provider === "googledrive" ? c.scope : undefined));
+                return send(res, 200, issue(provider, provider === "googledrive" ? c.scope : undefined, c.user));
             }
             if (f.get("grant_type") === "refresh_token") {
                 const was = refresh.get(f.get("refresh_token"));
                 if (!was || was.provider !== provider) return send(res, 400, { error: "invalid_grant" });
-                const t = issue(provider, was.scope);
+                fake.refreshes = (fake.refreshes || 0) + 1;
+                const t = issue(provider, was.scope, was.user);
                 delete t.refresh_token;
                 return send(res, 200, t);
             }
@@ -259,7 +281,10 @@ function createFakeDrives(options) {
         }
         if (rest === "revoke" && req.method === "POST") {
             const f = new URLSearchParams(body.toString("utf8"));
+            const was = tokens.get(f.get("token")) || refresh.get(f.get("token"));
+            if (provider === "googledrive" && was) revokeGrant(provider, was.user);
             tokens.delete(f.get("token"));
+            refresh.delete(f.get("token"));
             fake.revoked = (fake.revoked || 0) + 1;
             return send(res, 200, {});
         }
@@ -709,11 +734,21 @@ function createFakeDrives(options) {
     // ---- Google Drive -----------------------------------------------------------------------
     const FOLDER = "application/vnd.google-apps.folder";
     const resumables = new Map();
+    // A file's metadata as Drive answers it. Google's own documents (Docs,
+    // Forms, shortcuts: application/vnd.google-apps.*) have no size or
+    // checksum; a file shared with the person from someone else's folder
+    // has no parents they may see (Drive v3 leaves out the ones the person
+    // cannot reach); one they may only view has canEdit false.
     function gfile(n) {
         const t = trees.googledrive;
-        const o = { id: n.id === t.root.id ? "gd-root" : n.id, name: n.name || "My Drive", mimeType: n.type === "folder" ? FOLDER : n.mime || (/\.png$/.test(n.name) ? "image/png" : "text/plain"),
-                    modifiedTime: new Date(n.mtime).toISOString(), version: String(n.version), parents: n.parent ? [n.parent] : [], capabilities: { canEdit: true } };
-        if (n.type === "file") { o.size = String(n.bytes.length); o.md5Checksum = t.md5(n); }
+        const mime = n.type === "folder" ? FOLDER : n.mime || (/\.png$/.test(n.name) ? "image/png" : "text/plain");
+        const up = n.parent && t.nodes.get(n.parent);
+        const o = { id: n.id === t.root.id ? "gd-root" : n.id, name: n.name || "My Drive", mimeType: mime,
+                    modifiedTime: new Date(n.mtime).toISOString(), version: String(n.version), parents: n.parent && !(up && up.foreign) ? [n.parent] : [],
+                    capabilities: { canEdit: !n.viewOnly }, webViewLink: "https://drive.google.com/file/d/" + n.id + "/view" };
+        if (n.type === "file" && !/^application\/vnd\.google-apps\./.test(mime)) { o.size = String(n.bytes.length); o.md5Checksum = t.md5(n); }
+        if (n.shortcutTo) o.shortcutDetails = { targetId: n.shortcutTo, targetMimeType: gfile(t.nodes.get(n.shortcutTo)).mimeType };
+        if (n.sharedWithMe) o.sharedWithMe = true;
         return o;
     }
     const gdErr = (res, status, reason) => send(res, status, { error: { code: status, message: reason, errors: [{ reason }] } });
@@ -721,7 +756,6 @@ function createFakeDrives(options) {
     // What a token may reach: everything with drive; with drive.file the app's
     // files (Google answers 404 for the others), and My Drive to make files in.
     let reach = () => true;
-    const mine = (n) => { gd.appFiles.add(n.id); return n; };
     function gquery(q) {
         const t = trees.googledrive;
         const conds = q.split(/ and /);
@@ -731,6 +765,7 @@ function createFakeDrives(options) {
             if ((m = /^trashed = (true|false)$/.exec(c))) return !!n.trashed === (m[1] === "true");
             if ((m = /^name contains '(.*)'$/.exec(c))) return n.name.toLowerCase().includes(m[1].replace(/\\'/g, "'").toLowerCase());
             if ((m = /^name = '(.*)'$/.exec(c))) return n.name === m[1].replace(/\\'/g, "'");
+            if (c === "sharedWithMe = true") return !!n.sharedWithMe;
             return false;
         }));
     }
@@ -750,6 +785,8 @@ function createFakeDrives(options) {
         }
         return [JSON.parse(parts[0].toString("utf8")), parts[1]];
     }
+    // A slow network (gd.bytesPerSec): an answer about bytes only once they would have crossed it.
+    function slow(bytes, fn) { return gd.bytesPerSec ? setTimeout(fn, Math.round(bytes / gd.bytesPerSec * 1000)) : fn(); }
     function gdrive(req, res, u, body) {
         const t = trees.googledrive;
         let m = /^\/gdrive-resumable\/([0-9a-f]+)$/.exec(u.pathname);
@@ -757,41 +794,57 @@ function createFakeDrives(options) {
             const up = resumables.get(m[1]);
             if (!up) return gdErr(res, 404, "notFound");
             if (req.method === "DELETE") { resumables.delete(m[1]); return send(res, 204, ""); }
+            // What Google has so far ("Content-Range: bytes */<total>", no body: resuming).
+            const status = /^bytes \*\/(\d+)$/.exec(req.headers["content-range"] || "");
+            if (status) { res.writeHead(308, up.have ? { Range: "bytes=0-" + (up.have - 1) } : {}); return res.end(); }
             const cr = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(req.headers["content-range"] || "");
-            if (!cr || Number(cr[1]) !== up.have) return gdErr(res, 400, "badRange");
+            // Bytes Google has already are ignored (a part sent again after a lost answer); a gap is refused.
+            if (!cr || Number(cr[1]) > up.have) return gdErr(res, 400, "badRange");
             if (body.length % 262144 !== 0 && Number(cr[2]) + 1 !== Number(cr[3])) return gdErr(res, 400, "badChunk");
-            up.parts.push(body); up.have += body.length;
+            const fresh = body.subarray(up.have - Number(cr[1]));
+            up.parts.push(fresh); up.have += fresh.length;
             fake.gdChunks = (fake.gdChunks || 0) + 1;
-            if (up.have < Number(cr[3])) { res.writeHead(308, { Range: "bytes=0-" + (up.have - 1) }); return res.end(); }
-            resumables.delete(m[1]);
-            const bytes = Buffer.concat(up.parts);
-            let n;
-            if (up.id) { n = gnode(up.id); n.bytes = bytes; n.version++; n.mtime = Date.now(); } else n = mine(t.add(gnode(up.meta.parents[0]).id, up.meta.name, "file", bytes));
-            return send(res, 200, gfile(n));
+            const reply = () => {
+                if (up.have < Number(cr[3])) { res.writeHead(308, { Range: "bytes=0-" + (up.have - 1) }); return res.end(); }
+                finish();
+            };
+            const finish = () => {
+                resumables.delete(m[1]);
+                const bytes = Buffer.concat(up.parts);
+                let n;
+                if (up.id) { n = gnode(up.id); n.bytes = bytes; n.version++; n.mtime = Date.now(); } else n = up.mine(t.add(gnode(up.meta.parents[0]).id, up.meta.name, "file", bytes));
+                return send(res, 200, gfile(n));
+            };
+            // gd.onChunk(n) after each part Google took.
+            return slow(body.length, () => { if (gd.onChunk) gd.onChunk(fake.gdChunks); reply(); });
         }
         const tok = bearer(req, "googledrive");
         if (!tok) return gdErr(res, 401, "authError");
-        reach = tok.scope === GD_ALL ? () => true : (n) => gd.appFiles.has(n.id);
+        const own = gd.appFilesOf(tok.user || GD_USER);
+        reach = (n) => !n.foreign && (tok.scope === GD_ALL || own.has(n.id));
+        const mine = (n) => { own.add(n.id); return n; };
+        const full = () => { if (gd.quotaFull) gdErr(res, 403, "storageQuotaExceeded"); return gd.quotaFull; };
         // A folder to make a file in: My Drive, or one the token reaches.
         const into = (id) => { const n = gnode(id); return n && (n === t.root || reach(n)) ? n : null; };
         if ((m = /^\/gdrive\/upload\/drive\/v3\/files(?:\/([^/]+))?$/.exec(u.pathname))) {
             const type = u.searchParams.get("uploadType");
-            if (type === "multipart") {
+            if (full()) return;
+            if (type === "multipart") return slow(body.length, () => {
                 const [meta, bytes] = related(req, body);
                 let n;
                 if (m[1]) { n = gnode(m[1]); if (!n || !reach(n)) return gdErr(res, 404, "notFound"); n.bytes = Buffer.from(bytes); n.version++; n.mtime = Date.now(); }
                 else { const dir = into(meta.parents[0]); if (!dir) return gdErr(res, 404, "notFound"); n = mine(t.add(dir.id, meta.name, "file", bytes)); }
                 return send(res, 200, gfile(n));
-            }
+            });
             if (type === "resumable") {
                 if (m[1] ? !(gnode(m[1]) && reach(gnode(m[1]))) : !into((JSON.parse(body.toString("utf8") || "{}").parents || [])[0])) return gdErr(res, 404, "notFound");
                 const id = crypto.randomBytes(6).toString("hex");
-                resumables.set(id, { id: m[1], meta: JSON.parse(body.toString("utf8") || "{}"), have: 0, parts: [] });
+                resumables.set(id, { id: m[1], meta: JSON.parse(body.toString("utf8") || "{}"), have: 0, parts: [], mine });
                 return send(res, 200, "", { Location: fake.origin + "/gdrive-resumable/" + id });
             }
             return gdErr(res, 400, "badUploadType");
         }
-        if (u.pathname === "/gdrive/drive/v3/about") return send(res, 200, { user: { emailAddress: "phoenix@gdrive.test", displayName: "Phoenix Tester", permissionId: "p1" },
+        if (u.pathname === "/gdrive/drive/v3/about") return send(res, 200, { user: { emailAddress: tok.user || GD_USER, displayName: "Phoenix Tester", permissionId: "p-" + (tok.user || GD_USER) },
                                                                            storageQuota: { limit: String(15 * 1024 * 1024 * 1024), usage: String(t.used()) } });
         if (u.pathname === "/gdrive/drive/v3/files" && req.method === "GET") {
             const all = gquery(u.searchParams.get("q") || "");
@@ -804,6 +857,7 @@ function createFakeDrives(options) {
         }
         if (u.pathname === "/gdrive/drive/v3/files" && req.method === "POST") {
             const b = JSON.parse(body.toString("utf8"));
+            if (b.mimeType !== FOLDER && full()) return;
             const parent = into(b.parents[0]);
             if (!parent) return gdErr(res, 404, "notFound");
             return send(res, 200, gfile(mine(t.add(parent.id, b.name, b.mimeType === FOLDER ? "folder" : "file", Buffer.alloc(0)))));
@@ -814,15 +868,21 @@ function createFakeDrives(options) {
             // My Drive's own metadata: not for drive.file.
             if (n === t.root && !reach(n) && req.method === "GET") return gdErr(res, 404, "notFound");
             if (m[2] === "/copy") {
+                if (full()) return;
                 const b = JSON.parse(body.toString("utf8"));
                 const dir = into(b.parents[0]);
                 if (!dir) return gdErr(res, 404, "notFound");
                 return send(res, 200, gfile(mine(t.copy(n, dir.id, b.name))));
             }
-            if (m[2] === "/export") return send(res, 200, Buffer.from("exported " + n.name), { "Content-Type": u.searchParams.get("mimeType") });
+            // Google's documents export up to 10 MB (exportSizeLimitExceeded past it); the rest have no bytes to download.
+            if (m[2] === "/export") {
+                if (n.exportTooLarge) return gdErr(res, 403, "exportSizeLimitExceeded");
+                return send(res, 200, Buffer.from("exported " + n.name), { "Content-Type": u.searchParams.get("mimeType") });
+            }
             if (req.method === "GET" && u.searchParams.get("alt") === "media") {
+                if (/^application\/vnd\.google-apps\./.test(gfile(n).mimeType)) return gdErr(res, 403, "fileNotDownloadable");
                 const [st, part, h] = ranged(req, n.bytes);
-                return send(res, st, part, h);
+                return slow(part.length, () => send(res, st, part, h));
             }
             if (req.method === "GET") return send(res, 200, gfile(n));
             if (req.method === "PATCH") {

@@ -163,7 +163,8 @@ function driveFor(ctx) {
     return clientOf(ctx, provider, access).then(function (client) {
         if (!client) throw kit.fileError(kit.FILE_ERRORS.NOT_AVAILABLE, notAvailable(provider).message);
         var key = cred.oauthKey || c.oauthKey;
-        var token = function () { return ctx.oauth.token(key); };
+        // (o: {refresh: true} when the provider refused the token before its time here.)
+        var token = function (o) { return ctx.oauth.token(key, o); };
         var o = Object.assign({ token: token }, client);
         if (provider === "dropbox") return DBX.createDropbox(ctx, o);
         if (provider === "onedrive") return G.createGraph(ctx, o);
@@ -440,6 +441,20 @@ function whoAmI(ctx, provider, client, keyId) {
     });
 }
 
+// Another account here of the same Google account, signed in with Phoenix's
+// Google project (Google Drive, or Phoenix's Google account).
+var GOOGLE_PROJECT = [T.googledrive, "com.webosphoenix.google"];
+function sameGoogleAccount(ctx) {
+    var me = String((ctx.account && ctx.account.username) || "").toLowerCase();
+    if (!me) return Promise.resolve(false);
+    return lunaOk(ctx, "luna://com.palm.service.accounts/listAccounts", {}).then(function (r) {
+        return (r.results || []).some(function (a) {
+            return a && a._id !== ctx.accountId && !a.beingDeleted && GOOGLE_PROJECT.indexOf(a.templateId) >= 0 &&
+                   String(a.username || "").toLowerCase() === me;
+        });
+    }, function () { return true; });
+}
+
 // Google Drive's access goes with the key (credentials.common.settings, which
 // signing in again replaces: changing it) and in the config.
 function oauthResult(provider, keyId, me, access) {
@@ -475,10 +490,23 @@ function signIn(ctx, p) {
         if (client.params) req.params = client.params;
         return lunaOk(ctx, OAUTH + "authorize", req);
     }).then(function (auth) {
-        return whoAmI(ctx, provider, client, auth.keyId).then(function (me) {
-            // Signing in again (the old token refused): the old key goes.
+        // Google ends the app's whole grant on a revocation, the new token
+        // too: a key of Google Drive is only forgotten on the device here.
+        var forgetOpts = provider === "googledrive" ? { revoke: false } : undefined;
+        return whoAmI(ctx, provider, client, auth.keyId).catch(function (e) {
+            return ctx.oauth.forget(auth.keyId, forgetOpts).then(function () { throw e; });
+        }).then(function (me) {
+            // Signing in again from an account: the same account of the provider, or nothing changes.
+            var named = p.accountId && ctx.account && ctx.account.username;
+            if (named && String(named).toLowerCase() !== String(me.username || "").toLowerCase()) {
+                return ctx.oauth.forget(auth.keyId, forgetOpts).then(function () {
+                    throw fail("You signed in to " + NAMES[provider] + " as " + me.username + ", but this account is " + named +
+                               ". Sign in as " + named + ", or add " + me.username + " as another account.", "WRONG_ACCOUNT");
+                });
+            }
+            // Signing in again (the old token refused, or Google Drive's access changed): the old key goes.
             var old = p.accountId ? lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: p.accountId, name: "common" })
-                .then(function (r) { var k = r.credentials && r.credentials.oauthKey; return k && k !== auth.keyId ? ctx.oauth.forget(k) : null; })
+                .then(function (r) { var k = r.credentials && r.credentials.oauthKey; return k && k !== auth.keyId ? ctx.oauth.forget(k, forgetOpts) : null; })
                 .catch(function () {}) : Promise.resolve();
             return old.then(function () { return oauthResult(provider, auth.keyId, me, provider === "googledrive" ? grantedAccess(access, auth.scope) : undefined); });
         });
@@ -572,7 +600,13 @@ module.exports = kit.defineConnector({
                                          headers: { Authorization: "Bearer " + t } });
                 });
             }).catch(function () {}) : Promise.resolve();
-            return revoke.then(function () { return ctx.oauth.forget(key); });
+            // Google Drive: Google ends the grant of Phoenix's Google project for
+            // that Google account, not just this token; while another account
+            // here signs in with it (Phoenix's Google account for Contacts and
+            // Calendar uses the same project: docs/DEVELOPER-APPS.md), the key
+            // is only forgotten on the device.
+            var keep = provider === "googledrive" ? sameGoogleAccount(ctx) : Promise.resolve(false);
+            return revoke.then(function () { return keep; }).then(function (others) { return ctx.oauth.forget(key, others ? { revoke: false } : undefined); });
         }
         var settings = settingsOf(ctx);
         if (provider === "sftp") {
@@ -595,8 +629,9 @@ module.exports = kit.defineConnector({
     },
 
     methods: {
-        // {templateId} -> {available, reason?, provider, presets?, fullScopeApproved? (Google Drive:
-        // Google has approved Phoenix for all of a drive)}: what the sign-in page shows.
+        // {templateId, accountId?} -> {available, reason?, provider, presets?, fullScopeApproved? (Google Drive:
+        // Google has approved Phoenix for all of a drive), access? (Google Drive, with accountId: the
+        // account's now)}: what the sign-in page shows.
         providerInfo: function (ctx, p) {
             var provider = providerOf(p.templateId);
             var out = { provider: provider, name: NAMES[provider], available: true };
@@ -605,6 +640,11 @@ module.exports = kit.defineConnector({
             return clientOf(ctx, provider).then(function (c) {
                 if (!c) { out.available = false; out.reason = notAvailable(provider).message; }
                 else if (provider === "googledrive") out.fullScopeApproved = !!c.fullScopeApproved;
+                // From an account (Change what Phoenix may see): what it has now.
+                if (provider === "googledrive" && p.accountId) {
+                    var cred = ctx.credentials || {};
+                    out.access = accessOf((cred.settings && cred.settings.access) || settingsOf(ctx).access);
+                }
                 return out;
             });
         },
