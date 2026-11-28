@@ -122,13 +122,17 @@ export async function oauthSignIn(ctx: BaseContext, client: RegisteredClient, op
     return String(auth.keyId);
 }
 
-/** Signing an account in again: its old key (credentials.common.oauthKey) is forgotten. */
-export async function forgetOldKey(ctx: BaseContext, accountId: string | undefined, newKey: string): Promise<void> {
+/**
+ * Signing an account in again: its old key (credentials.common.oauthKey) is
+ * forgotten. revoke: false keeps it valid at the provider, for a provider
+ * whose revocation ends the app's whole grant, the new key's too (Google's).
+ */
+export async function forgetOldKey(ctx: BaseContext, accountId: string | undefined, newKey: string, opts?: { revoke?: boolean }): Promise<void> {
     if (!accountId) return;
     try {
         const r = await lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId, name: "common" });
         const k = r.credentials && r.credentials.oauthKey;
-        if (k && k !== newKey) await ctx.oauth.forget(k);
+        if (k && k !== newKey) await ctx.oauth.forget(k, opts);
     } catch (e) { /* no old key */ }
 }
 

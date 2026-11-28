@@ -9,7 +9,10 @@
 // updateContact with its etag checked, deleteContact) and Tasks v1
 // (/google/tasks/v1: lists, tasks, move with destinationTasklist), and
 // Google's OAuth (/oauth/google/: a desktop client, PKCE and the
-// non-secret secret). fake.google: {calendars, events, people, lists, tasks}
+// non-secret secret; a revocation ends the whole grant of that Google
+// user, as Google's does). fake.google: {calendars, events, people, lists,
+// tasks}; gg.as: who signs in on Google's page (gg.me's email when unset);
+// gg.userinfoDown: the userinfo endpoint answers 503.
 
 "use strict";
 
@@ -26,7 +29,8 @@ function addGoogle(base) {
         me: { sub: "109876543210", email: "anna.lee@gmail.example", name: "Anna Lee" },
         calendars: [{ id: "anna.lee@gmail.example", summary: "Anna Lee", accessRole: "owner", primary: true, colorId: "1" },
                     { id: "en.usa#holiday@group.v.calendar.google.com", summary: "Holidays in United States", accessRole: "reader", colorId: "2" }],
-        events: [], people: [], lists: [], tasks: [], pageSize: 2, secret: "google-desktop-not-secret", invalidTokens: false
+        events: [], people: [], lists: [], tasks: [], pageSize: 2, secret: "google-desktop-not-secret", invalidTokens: false,
+        as: null, userinfoDown: false
     };
     const ev = (cal, o) => { const e = touch(Object.assign({ id: id("ev"), calendarId: cal, status: "confirmed", kind: "calendar#event" }, o)); gg.events.push(e); return e; };
     gg.meet = ev("anna.lee@gmail.example", { summary: "Design review", start: { dateTime: "2026-10-14T15:00:00Z", timeZone: "Europe/London" }, end: { dateTime: "2026-10-14T16:00:00Z", timeZone: "Europe/London" },
@@ -47,11 +51,16 @@ function addGoogle(base) {
     task(mine, { title: "Call mum", status: "completed", completed: "2026-10-10T08:00:00.000Z" });
     gg.touch = touch;
 
-    base.oauthProvider("google", { pkce: true, secret: gg.secret, scope: "openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/tasks" });
+    base.oauthProvider("google", { pkce: true, secret: gg.secret, scope: "openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/tasks",
+                             user: () => gg.as || gg.me.email, grantWide: true });
 
     const err = (res, code, status, message) => send(res, code, { error: { code, status, message } });
     base.route("*", /^\/google\//, (req, res) => (base.bearer(req, "google") ? false : err(res, 401, "UNAUTHENTICATED", "Request had invalid authentication credentials.")));
-    base.route("GET", /^\/google\/userinfo$/, (req, res) => send(res, 200, gg.me));
+    base.route("GET", /^\/google\/userinfo$/, (req, res) => {
+        if (gg.userinfoDown) return err(res, 503, "UNAVAILABLE", "The service is currently unavailable.");
+        const t = base.bearer(req, "google");
+        return send(res, 200, t.user && t.user !== gg.me.email ? { sub: "2" + t.user.length + "0000", email: t.user, name: t.user } : gg.me);
+    });
     const page = (c, list, key, extra) => {
         const size = Math.min(Number(c.query.get("maxResults") || c.query.get("pageSize")) || 100, gg.pageSize || 100);
         const start = Number(c.query.get("pageToken") || 0);
