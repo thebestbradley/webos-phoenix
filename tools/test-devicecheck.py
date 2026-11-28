@@ -211,6 +211,41 @@ def main():
     for base in sorted(pages):
         ok(os.path.dirname(base) in callers, "check-luna reads %s" % os.path.dirname(base))
 
+    # A method listed on its own and under a wildcard is callable with either
+    # group, as luna-hub joins every api group whose pattern matches.
+    got = sorted(luna.method_groups({"org.example.s/*": ["example.all"], "org.example.s/m": ["example.m"]},
+                                    "org.example.s/m"))
+    ok(got == ["example.all", "example.m"], "an exact method is callable with its wildcard's group too: %s" % got)
+
+    # The catalog connectors list their own accounts and the drives read their
+    # credentials through the accounts service's narrow groups, never the
+    # whole service (phoenix.appservices.accounts can create, change and
+    # delete any account). The read-only groups hold nothing that writes; which
+    # accounts' credentials a caller may read is still each template's
+    # readPermissions (the accounts service's Utils.hasPermission).
+    acct = os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "sysbus",
+                        "com.palm.service.accounts.api.json")
+    with open(acct, encoding="utf-8") as f:
+        acct = json.load(f)
+    ok(sorted(acct.get("phoenix.accounts.list") or []) == ["com.palm.service.accounts/listAccountTemplates",
+                                                           "com.palm.service.accounts/listAccounts"],
+       "phoenix.accounts.list is listAccounts and listAccountTemplates alone: %s" % acct.get("phoenix.accounts.list"))
+    ok(acct.get("phoenix.accounts.read-credentials") == ["com.palm.service.accounts/readCredentials"],
+       "phoenix.accounts.read-credentials is readCredentials alone: %s" % acct.get("phoenix.accounts.read-credentials"))
+    lists = {"bluesky": [], "deltachat": [], "matrix": [], "slack": [], "xmpp": [],
+             "drives": ["phoenix.accounts.read-credentials"]}
+    for name in sorted(os.listdir(os.path.join(REPO, "apps", "connectors"))):
+        perm = os.path.join(REPO, "apps", "connectors", name, "service", "sysbus",
+                            "org.webosphoenix.service.%s.perm.json" % name)
+        if not os.path.isfile(perm):
+            continue
+        with open(perm, encoding="utf-8") as f:
+            groups = set(json.load(f).get("org.webosphoenix.service." + name) or [])
+        want = {"phoenix.accounts.list"} | set(lists[name]) if name in lists else set()
+        has = groups & {"phoenix.accounts.list", "phoenix.accounts.read-credentials", "phoenix.appservices.accounts"}
+        ok(has == want, "the %s connector's service holds the accounts groups %s: %s"
+           % (name, ", ".join(sorted(want)) or "none", ", ".join(sorted(has)) or "none"))
+
     # OSE's installer checks no signature, so only the Marketplace's service
     # may reach it: it checks who publishes each package (nova install comes
     # to it too, packagesservice.js "Who may update an installed app"). No
