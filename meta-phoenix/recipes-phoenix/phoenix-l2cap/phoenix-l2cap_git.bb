@@ -24,3 +24,5 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git/services/l2cap"
 
 inherit cmake
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files

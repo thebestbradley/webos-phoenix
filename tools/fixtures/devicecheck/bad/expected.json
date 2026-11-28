@@ -33,6 +33,7 @@
     "recipes": [
         "recipes:license:phoenix-apps_git.bb:LICENSE",
         "recipes:license:thing_1.0.bb",
+        "recipes:macos-files:phoenix-apps_git.bb",
         "recipes:missing-file:phoenix-shell_git.bb:product.env",
         "recipes:network:phoenix-apps_git.bb:do_compile",
         "recipes:rdepends:phoenix-apps_git.bb:mojoservicelauncher",

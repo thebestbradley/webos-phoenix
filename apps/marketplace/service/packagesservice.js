@@ -173,6 +173,27 @@
 // A Developer Mode sideload (nova install) comes through sideload here,
 // which refuses to replace a built-in app or another publisher's (above).
 //
+// Names and groups (rules C20 and C19 on the device; docs/DEVICE-AUDIT.md
+// "Names and groups on the hub"). luna-hub keeps no names for the system,
+// and OSE's installer gives a package the names of its id (the app's
+// "<id>-*", its manifest's id, which the hub ranks by version) and copies
+// the app's requiredPermissions into its client permissions as they are,
+// with the oem trust level (appinstalld2 ServiceInstallerUtility.cpp); its
+// own check of system ids (com.palm., com.webos., com.lge.) is for
+// developer installs only, and leaves out LuneOS's and Phoenix's. And the
+// accounts service tells its callers by their ids (a template's
+// readPermissions: org.webosphoenix.messaging reads the IM accounts). So:
+//   - a package whose app, package or service id is in RESERVED_NAMESPACES
+//     installs only from a Phoenix catalog the device ships with (its
+//     publisher), never from another catalog, a feed or a sideload
+//     (RESERVED_NAME); Phoenix's own apps are pushed by `nova push`. Any
+//     catalog's web apps (org.webosphoenix.pwa.<name>, packaged here from
+//     the site's manifest) are the exception (reservedName);
+//   - a third-party connector's app (not firstParty) names only its own
+//     groups (its service's api.json's, named in its namespace, with only
+//     its service's methods) and THIRD_PARTY_APP_GROUPS, what the kit's
+//     compose page calls (CONNECTOR_GROUPS), in Developer Mode too.
+//
 // The Phoenix catalog's address and keys (the built-in "phoenix" source)
 // and the revocation list's address come from /etc/palm/phoenix/servers.json
 // (deps.servers(), @phoenix/platform; docs/PLATFORM-CLIENT.md, "The app
@@ -222,6 +243,11 @@ var MAX_MANIFEST = 256 * 1024;  // a web app manifest the catalog wrote
 // server/marketplace Connector.php): the same words on the device.
 var THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
 var PHOENIX_NAMESPACE = "org.webosphoenix.";
+// Rules C19 and C20 (checks.ts THIRD_PARTY_APP_GROUPS, RESERVED_NAMESPACES;
+// server/marketplace Connector.php) on the device: the same lists.
+var THIRD_PARTY_APP_GROUPS = ["phoenix.accounts.mine", "phoenix.appmanager.open"];
+var RESERVED_NAMESPACES = ["com.palm", "com.webos", "com.lge", "org.webosports", "org.webosphoenix", "com.webosphoenix"];
+var SHARED_GROUPS = ["accounts.transport", "phoenix.connector.share"];
 
 function fail(code, text) {
     return { returnValue: false, errorCode: code, errorText: text };
@@ -1009,6 +1035,46 @@ function createPackagesService(deps) {
             (String(entry.id || "").indexOf(PHOENIX_NAMESPACE) === 0 || (shipped !== null && shipped !== undefined));
     }
 
+    function packageJson(pkg, path) {
+        var f = pkg.files.filter(function (x) { return x.path === path; })[0];
+        if (!f) return null;
+        try { return JSON.parse(typeof f.data === "string" ? f.data : new TextDecoder().decode(f.data)); } catch (e) { return null; }
+    }
+    function reservedNamespace(id) {
+        return RESERVED_NAMESPACES.filter(function (ns) { return id === ns || id.indexOf(ns + ".") === 0; })[0] || "";
+    }
+    // RESERVED_NAME for a checked package (check) from anywhere but a Phoenix
+    // catalog the device ships with (systemSource). A catalog's web app
+    // (kind "pwa") is the exception for its ids under org.webosphoenix.pwa.:
+    // the catalog service names its sites so (server/marketplace,
+    // curated-pwas.json), another catalog running it too, and this service
+    // writes the package itself from the site's manifest (lib/pwa.js: no
+    // service, no requiredPermissions); no template or service reads by
+    // those names.
+    function reservedName(c, systemSource, entry) {
+        if (!c.reserved || systemSource) return;
+        if (entry && entry.kind === "pwa" && /^org\.webosphoenix\.pwa\.[A-Za-z0-9-]+$/.test(c.app.id) && c.reserved.id === c.app.id) return;
+        throw err("RESERVED_NAME", "The package uses " + c.reserved.id + ", one of the system's names (" + c.reserved.ns +
+                  ".*): only Phoenix's own catalog installs those");
+    }
+    // Rule C19 (checks.ts): requiredPermissions a list of the package's own
+    // groups (its service's api.json's, named in the app id's namespace,
+    // listing only its service's methods) and THIRD_PARTY_APP_GROUPS -> "",
+    // or what is wrong.
+    function connectorGroupProblem(pkg, app, service) {
+        var req = app.appinfo.requiredPermissions;
+        if (!Array.isArray(req)) return "A connector's app must list its requiredPermissions (without them it would get the public group)";
+        var ns = app.id.split(".").slice(0, 2).join(".") + ".";
+        var api = service ? packageJson(pkg, app.dir + "service/sysbus/" + service + ".api.json") : null;
+        var own = api && typeof api === "object" && !Array.isArray(api) ? Object.keys(api).filter(function (g) {
+            return SHARED_GROUPS.indexOf(g) < 0 && g.indexOf(ns) === 0 && Array.isArray(api[g]) &&
+                api[g].every(function (m) { return typeof m === "string" && m.indexOf(service + "/") === 0; });
+        }) : [];
+        var other = req.filter(function (g) { return typeof g !== "string" || (own.indexOf(g) < 0 && THIRD_PARTY_APP_GROUPS.indexOf(g) < 0); })[0];
+        return other === undefined ? "" : "A third-party connector's app may not ask for " + (typeof other === "string" ? other : JSON.stringify(other)) +
+            ": only its own groups and " + THIRD_PARTY_APP_GROUPS.join(", ");
+    }
+
     // The package's bytes -> its app, or an error saying why it cannot be installed.
     // dev (Developer Mode): install scripts, services and files outside the
     // app are allowed ({developer: true}: the installer is told so).
@@ -1017,12 +1083,19 @@ function createPackagesService(deps) {
     // phoenixOwn: the package may have sign-in pages of its own (rule C17
     // on the device, "Sign-in pages" above): from a Phoenix catalog the
     // device ships with, and Phoenix's (signInTrusted).
+    // c.reserved: the first of its ids in the system's namespaces
+    // ({id, ns}), which only a Phoenix catalog the device ships with may
+    // install (reservedName, RESERVED_NAME above).
     function check(bytes, entry, dev, firstParty, phoenixOwn) {
         return ipk.read(bytes).then(function (pkg) {
             var app = pkg.apps[0];
             if (!app || pkg.apps.length > 1) throw err("BAD_PACKAGE", "The package does not hold one app");
             if ((entry.kind === "ipk" || entry.kind === "connector") && (app.id !== entry.id || pkg.control.Package !== entry.id))
                 throw err("BAD_PACKAGE", "The package is " + (pkg.control.Package || app.id) + ", not " + entry.id);
+            var service = String((packageJson(pkg, app.dir + "service/package.json") || {}).name || "");
+            var reserved = [app.id, String(pkg.control.Package || ""), service].map(function (id) {
+                return { id: id, ns: reservedNamespace(id) };
+            }).filter(function (r) { return r.ns; })[0] || null;
             var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
             // A Synergy connector carries its service in the app's service/
             // folder (docs/SYNERGY-CONNECTORS.md 3.1): third-party connectors
@@ -1036,6 +1109,11 @@ function createPackagesService(deps) {
                 if (t.appId !== app.id) throw err("BAD_PACKAGE", "The sign-in page of " + t.templateId + " (customUI) must be the package's own app, " + app.id);
             });
             if (pages.length && !phoenixOwn) throw err("THIRD_PARTY_SIGNIN", THIRD_PARTY_SIGNIN);
+            // C19 on the device: a third-party connector's app's groups.
+            if (connector && !firstParty) {
+                var bad = connectorGroupProblem(pkg, app, service);
+                if (bad) throw err("CONNECTOR_GROUPS", bad);
+            }
             var needs = pkg.scripts.length ? "The package runs install scripts as the system"
                 : pkg.services.length ? "The app has background services"
                 : connector && !firstParty ? "It is a Synergy connector (an account type with a background service)"
@@ -1054,7 +1132,7 @@ function createPackagesService(deps) {
                 return m ? m[1] : "";
             }).filter(Boolean);
             return { pkg: pkg, app: app, developer: !!needs, firstParty: !!(connector && firstParty && !needs), plugins: plugins,
-                     signIn: pages.map(function (t) { return t.templateId; }) };
+                     signIn: pages.map(function (t) { return t.templateId; }), reserved: reserved };
         });
     }
 
@@ -1242,6 +1320,7 @@ function createPackagesService(deps) {
             var bytes = got[0];
             return check(bytes, entry, got[1], firstPartyEntry(s, entry), signInTrusted(s, entry, shipped)).then(function (c) {
                 appId = c.app.id;
+                reservedName(c, phoenixSource(sourceOf(s, entry.sourceId)), entry);
                 ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
                 var why = publisherProblem(load(), appId, entry, shipped);
@@ -1352,6 +1431,7 @@ function createPackagesService(deps) {
                     throw err("BUILT_IN", builtInText(c.app.appinfo.title || appId));
                 if (s.installed[appId] || (mine && mine.signer !== signer) || (!mine && removableApps[appId]))
                     throw err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+                reservedName(c, false);
                 busy[appId] = true;
                 return Promise.resolve(deps.temp.write(appId + ".ipk", bytes)).then(function (where) {
                     path = where;

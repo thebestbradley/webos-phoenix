@@ -46,6 +46,11 @@ IMAGE_INSTALL:append = " phoenix-devmode"
 IMAGE_INSTALL:append = "${@' phoenix-devmode-ssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 inherit phoenix-devpush
 
+# No macOS Finder files (.DS_Store, ._*, .localized) in the root file
+# system, from a package of any layer: Phoenix's own recipes already leave
+# them out of their packages (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
+
 # The platform's test, demo and example apps (OSE's YouTube test page, its QML
 # examples) are developer apps, as Phoenix's own Notification Lab, framework
 # demos and Terminal: in the launcher, the dock, Just Type and the app

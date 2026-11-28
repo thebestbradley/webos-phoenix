@@ -20,6 +20,8 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git/services/pty"
 
 inherit cmake pkgconfig systemd useradd
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
 
 EXTRA_OECMAKE = "-DPHOENIX_PTY_SYSTEMD_UNITDIR=${systemd_system_unitdir} -DPHOENIX_PTY_TESTS=OFF"
 
