@@ -44,6 +44,11 @@ export function ComposeBar({ onSend, disabled, autoFocus, initialText, initialPa
     const [open, setOpen] = useState(false);
     const [picking, setPicking] = useState(false);
     const pill = useRef<HTMLButtonElement>(null);
+    const field = useRef<HTMLTextAreaElement>(null);
+    // Emptied (sent): back to the field's first line. A message longer than
+    // the one-line field scrolled it, and the empty field kept that place,
+    // showing only the end of its hint ("here..." on a phone).
+    useEffect(() => { if (!text && field.current) field.current.scrollTop = 0; }, [text]);
     const im = isImService(service);
     const pictures = takesPictures(service);
     // A service that takes no pictures: a waiting picture is taken off when
@@ -89,7 +94,7 @@ export function ComposeBar({ onSend, disabled, autoFocus, initialText, initialPa
                             disabled={disabled || picking} aria-label="Attach a picture"><AttachPicture /></button>
                 )}
                 <div className="compose-field">
-                    <textarea data-testid="message-input" rows={1} value={text} placeholder="Enter message here…"
+                    <textarea ref={field} data-testid="message-input" rows={1} value={text} placeholder="Enter message here…"
                               autoFocus={autoFocus} maxLength={1600}
                               onChange={(e) => setText(e.target.value)}
                               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
