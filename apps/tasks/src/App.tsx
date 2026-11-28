@@ -144,10 +144,14 @@ function TasksApp() {
     }, [lists, sel]);
 
     // Names of the accounts lists sync with (Synergy); "" is this device.
+    // Kept as accounts are added in Accounts while Tasks is open: their
+    // lists come in at once, and were headed "Account" with the names read
+    // once at start.
     useEffect(() => {
-        db.find<{ _kind: string; _id?: string; alias?: string; username?: string; templateId?: string }>({ from: "com.palm.account:1" })
-            .then((acc) => setAccounts(Object.fromEntries(acc.map((a) => [a._id ?? "", a.alias || a.username || a.templateId || "Account"]))),
-                  () => {});
+        const sub = db.watch<{ _kind: string; _id?: string; alias?: string; username?: string; templateId?: string }>({ from: "com.palm.account:1" },
+            (acc) => setAccounts(Object.fromEntries(acc.map((a) => [a._id ?? "", a.alias || a.username || a.templateId || "Account"]))),
+            () => {});
+        return () => sub.cancel();
     }, []);
 
     // Launch and relaunch params.
