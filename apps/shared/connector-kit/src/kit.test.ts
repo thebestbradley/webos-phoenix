@@ -355,6 +355,30 @@ describe("package checks (the Marketplace's cases)", () => {
         expect(r.errors.length).toBeGreaterThan(0);
         expect(r.errors.every((e) => /^C6 com\.webosphoenix\.webcal: the icon \/usr\/palm\/public\//.test(e))).toBe(true);
     });
+
+    // C17: a sign-in page of its own runs in Accounts' frame, with Accounts'
+    // groups, so only Phoenix's own connectors may have one for now.
+    const PAGES = ["apps/connectors/bluesky", "apps/connectors/deltachat", "apps/connectors/drives", "apps/connectors/google",
+                   "apps/connectors/linkedin", "apps/connectors/matrix", "apps/connectors/microsoft", "apps/connectors/slack",
+                   "apps/connectors/todoist", "apps/connectors/xmpp", "apps/connectors/zoom", "apps/fediverse", "apps/telegram"];
+    for (const dir of PAGES) {
+        it("Phoenix's own " + dir + " keeps its sign-in page; as a third party's it is refused (C17)", () => {
+            const files = readFolder(join(REPO, dir));
+            const own = checkConnector(files, { namespaces: ["org.webosphoenix", "com.webosphoenix"] });
+            expect(own.errors.filter((e) => /^C17 /.test(e))).toEqual([]);
+            // The same package under a developer's id: every template with a page is refused.
+            const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8"));
+            const theirs = Object.assign({}, files, { "appinfo.json": new Uint8Array(Buffer.from(JSON.stringify(Object.assign({}, info, { id: "org.example.copy" })))) });
+            const refused = checkConnector(theirs, { namespaces: ["org.webosphoenix", "com.webosphoenix", "org.example"] }).errors.filter((e) => /^C17 /.test(e));
+            expect(refused.length).toBe(own.templates.length);
+            expect(refused[0]).toMatch(/Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in$/);
+        });
+    }
+
+    it("the News Feed example (a third party's) uses the standard sign-in", () => {
+        const r = checkConnector(readFolder(join(REPO, "apps", "shared", "connector-kit", "examples", "feeds")));
+        expect(r.errors).toEqual([]);
+    });
 });
 
 // ---- The CLI and the .ipk -------------------------------------------------------------------

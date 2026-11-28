@@ -7,5 +7,8 @@
     ],
     "matrix.account": [
         "oem"
+    ],
+    "phoenix.matrix.signin": [
+        "oem"
     ]
 }

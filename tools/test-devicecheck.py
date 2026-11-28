@@ -164,6 +164,28 @@ def main():
             (["providerInfo", "checkCredentials", "signIn", "loginFlowStart", "loginFlowPoll", "sftpHostKey",
               "sftpMakeKey", "sftpImportKey", "sftpForgetKey", "sftpPublicKey"],
              ["listFiles", "uploadFile", "removeFile", "driveQuota", "sync", "onDelete"]),
+        # Phoenix's own catalog connectors (preinstalled.json firstParty).
+        # The kit's ConnectorWizard.js pages: providerInfo, checkCredentials, signIn.
+        "apps/connectors/bluesky/service/sysbus/org.webosphoenix.service.bluesky":
+            (["providerInfo", "checkCredentials", "signIn"], ["share", "outbox", "sync", "onDelete"]),
+        "apps/connectors/google/service/sysbus/org.webosphoenix.service.google":
+            (["providerInfo", "checkCredentials", "signIn"], ["sync", "onDelete"]),
+        "apps/connectors/linkedin/service/sysbus/org.webosphoenix.service.linkedin":
+            (["providerInfo", "checkCredentials", "signIn"], ["share", "importConnections", "sync", "onDelete"]),
+        "apps/connectors/microsoft/service/sysbus/org.webosphoenix.service.microsoft":
+            (["providerInfo", "checkCredentials", "signIn"], ["sync", "onDelete"]),
+        "apps/connectors/slack/service/sysbus/org.webosphoenix.service.slack":
+            (["providerInfo", "checkCredentials", "signIn"], ["outbox", "sync", "onDelete"]),
+        "apps/connectors/todoist/service/sysbus/org.webosphoenix.service.todoist":
+            (["providerInfo", "checkCredentials", "signIn"], ["share", "sync", "onDelete"]),
+        "apps/connectors/zoom/service/sysbus/org.webosphoenix.service.zoom":
+            (["providerInfo", "checkCredentials", "signIn"], ["createMeeting", "sync", "onDelete"]),
+        "apps/connectors/matrix/service/sysbus/org.webosphoenix.service.matrix":
+            (["signInOptions", "checkCredentials", "signIn"], ["markRead", "setPresence", "outbox", "connect", "sync"]),
+        "apps/connectors/xmpp/service/sysbus/org.webosphoenix.service.xmpp":
+            (["checkCredentials"], ["setPresence", "markRead", "chatState", "enablePush", "outbox", "connect", "sync"]),
+        "apps/connectors/deltachat/service/sysbus/org.webosphoenix.service.deltachat":
+            (["available", "checkCredentials"], ["markRead", "setPresence", "outbox", "connect", "sync"]),
     }
     for base, (signin, others) in sorted(pages.items()):
         with open(os.path.join(REPO, base + ".api.json"), encoding="utf-8") as f:

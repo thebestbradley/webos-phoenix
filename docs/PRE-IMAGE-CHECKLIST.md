@@ -41,11 +41,11 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | R. Recovery and factory reset | 0 | 0 | 2 | 1 | 3 |
 | G. Debugging a device | 1 | 2 | 1 | 0 | 4 |
 | P. Performance on a Pi 4 | 0 | 0 | 3 | 0 | 3 |
-| X. Security | 1 | 1 | 2 | 1 | 5 |
+| X. Security | 1 | 2 | 3 | 1 | 7 |
 | L. Licences | 1 | 2 | 1 | 0 | 4 |
 | Q. What the platform needs on the device (PLATFORM.md 12) | 0 | 0 | 6 | 1 | 7 |
 | H. Per device | 0 | 2 | 2 | 5 | 9 |
-| **Total** | **13** | **25** | **41** | **12** | **91** |
+| **Total** | **13** | **26** | **42** | **12** | **93** |
 
 **The few that would stop the first image outright**, all fixed here:
 phoenix-apps' `FILES` left 580 installed files unpackaged (do_package's
@@ -231,6 +231,8 @@ its owner. Counts are on 10 October 2026.
 | X3 | Services that run as root | ⬜ | platform | phoenix-devices (needs `/dev/input` and sysfs: udev rules for a `phoenix-devices` user would let it drop root, HARDWARE.md), the Node services run by the hub (as root, as OSE's own do), the Assistant's model runner under them. phoenix-pty runs as `user`. Tighten with dynamic users after the first boot works |
 | X4 | Plain-HTTP servers | ⬜ | owner decision (Q65) | The Marketplace's PreCentral homebrew feed is `http://weboslives.eu` (off by default): anyone on the path can change the packages offered; and the App Museum's host is hard-coded in `appmuseum.js` (Q65) |
 | X5 | The update and catalog keys | 🟡 | platform | Pinned production keys in `sources.json`, `catalog.json` and the RAUC keyring (U3, Q1-Q2) |
+| X6 | Accounts holds connector sign-in groups (interim) | 🟡 | Synergy | A template's sign-in page (`validator.customUI`) is a frame of Accounts' card and calls with Accounts' groups, so Accounts holds each Phoenix connector's narrow sign-in group, only the methods its page calls (`compat/app-permissions.json`; the owner's decision, 27 November 2026): `phoenix.dav.validate`, `.fediverse.signin`, `.telegram.signin`, `.drives.signin`, and `.bluesky`, `.google`, `.linkedin`, `.microsoft`, `.slack`, `.todoist`, `.zoom` (the kit's ConnectorWizard.js: providerInfo, checkCredentials, signIn), `.matrix` (signInOptions, checkCredentials, signIn), `.xmpp` (checkCredentials), `.deltachat` (available, checkCredentials) `.signin`. Posting, sending, syncing and files stay refused (`tools/test-devicecheck.py`). The cost: any page in Accounts' frame holds all of them, so the catalogs refuse a third-party connector's own sign-in page (connector rule C17); those use the standard sign-in. Third-party connectors install only in Developer Mode, where a sideloaded package is not checked. Ends with X7 |
+| X7 | Per-connector sign-in isolation | ⬜ | Synergy, device shell | **Blocker for third-party connectors** with sign-in pages of their own: each page must run under its own connector's app id, holding only its own group, before C17 can be lifted for them and before X6's groups leave Accounts ([ROADMAP.md](ROADMAP.md), M4) |
 
 ## L. Licences
 
