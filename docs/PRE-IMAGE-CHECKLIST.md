@@ -29,7 +29,7 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 
 | Area | ✅ | 🟡 | ⬜ | 🚫 | Rows |
 | --- | --- | --- | --- | --- | --- |
-| B. The image build | 7 | 4 | 4 | 0 | 15 |
+| B. The image build | 7 | 5 | 3 | 0 | 15 |
 | C. Luna calls and permissions (checker rows) | 0 | 1 | 5 | 0 | 6 |
 | F. First boot | 2 | 5 | 3 | 0 | 10 |
 | D. Display | 0 | 3 | 2 | 1 | 6 |
@@ -37,15 +37,15 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | A. Audio | 0 | 1 | 2 | 0 | 3 |
 | N. Networking | 1 | 1 | 1 | 1 | 4 |
 | S. Storage | 0 | 1 | 2 | 0 | 3 |
-| U. Updates | 0 | 1 | 3 | 1 | 5 |
+| U. Updates | 0 | 1 | 4 | 0 | 5 |
 | R. Recovery and factory reset | 0 | 0 | 2 | 1 | 3 |
-| G. Debugging a device | 1 | 2 | 1 | 0 | 4 |
+| G. Debugging a device | 1 | 3 | 1 | 0 | 5 |
 | P. Performance on a Pi 4 | 0 | 0 | 3 | 0 | 3 |
 | X. Security | 1 | 2 | 3 | 1 | 7 |
 | L. Licences | 1 | 2 | 1 | 0 | 4 |
-| Q. What the platform needs on the device (PLATFORM.md 12) | 0 | 0 | 6 | 1 | 7 |
+| Q. What the platform needs on the device (PLATFORM.md 12) | 2 | 1 | 4 | 1 | 8 |
 | H. Per device | 0 | 2 | 2 | 5 | 9 |
-| **Total** | **13** | **27** | **42** | **12** | **94** |
+| **Total** | **15** | **30** | **40** | **11** | **96** |
 
 **The few that would stop the first image outright**, all fixed here:
 phoenix-apps' `FILES` left 580 installed files unpackaged (do_package's
@@ -195,7 +195,7 @@ its owner. Counts are on 10 October 2026.
 | U2 | Slots per target | ⬜ | platform | Pi 4: the firmware's `tryboot` or U-Boot (RAUC documents both); qemux86-64: GRUB or systemd-boot EFI |
 | U3 | The keyring | ⬜ | platform, owner decision | The signing key's public half in the image; LGPL-3.0 (Qt) and GPL-3.0 (bash) need the owner able to install modified versions (LEGAL.md, Source offer): Developer Mode accepting the owner's key, or unsigned bundles in Developer Mode |
 | U4 | The first OTA and rollback | 🟡 | updates service | `services/updates` reads the feed (servers.json `updates`: signed format 2, the root's delegated key, channels stable/beta/dev, staged rollout, revoked builds), downloads with resume, `rauc install`, and marks the running slot good (`rauc status mark-good`) when it first starts after the System UI is up, so a system that does not get there is reverted by the boot counter (PLATFORM-CLIENT.md, System updates). Waits on U1-U3 (RAUC in the image) |
-| U5 | Firmware and driver updates | 🚫 | owner decision | The Hardware app installs opkg packages from the driver feed into the root, which an A/B update replaces: they must be reinstalled after each update, or go to a data overlay |
+| U5 | Firmware and driver updates | ⬜ | platform | **Decided (owner, 27 November 2026): drivers and firmware the Hardware app installs live on the data partition, which updates never touch, and load from there; the A/B root stays the image's** (read-only later, S3). Today the Hardware app installs the driver feed's opkg packages (DRIVERS.md: `lib/modules/<kernel>/updates/`, `lib/firmware/updates/`, `etc/modprobe.d/`) into the root, which an update replaces. To do after the first OTA proof (U4): opkg installs them under `/var/lib/phoenix/drivers` (on the data partition with the A/B layout: phoenix-slots) with their own package database, never the image's; firmware from there through the kernel's extra search path (`firmware_class.path`, set at boot); modules through an overlay on `/lib/modules/<kernel>/updates` (its upper layer there), then `depmod`, before udev's coldplug; `etc/modprobe.d` files from there into `/run/modprobe.d`. Modules are per kernel: after an update to a new kernel the Hardware app offers the same drivers built for it, from the feed, and removes the old kernel's once the new slot is marked good. Without the A/B layout (the plain ext4) the same folder is on the root |
 
 ## R. Recovery and factory reset
 
