@@ -9,7 +9,10 @@
 #   run-if-changed.sh STAMP DIR COMMAND...
 #
 # Changed: a file under DIR newer than STAMP, leaving out what the build
-# writes and the packages (node_modules, dist, notes-core's lib); or
+# writes and the packages (node_modules, dist, and each package's
+# tsconfig.build.json outDir: notes-core's and connector-kit's lib, which
+# the build writes after STAMP, so connector-kit's rebuilt every app on
+# every build); or
 # node_modules/.package-lock.json newer (npm ci ran); or an app's dist/
 # gone. STAMP takes the time the command started, so an edit made while it
 # ran counts next time.
@@ -19,9 +22,23 @@ stamp=$1
 dir=$2
 shift 2
 
+# Each package's tsc output folder, one a line.
+outdirs() {
+    find "$dir" -name node_modules -prune -o -name tsconfig.build.json -print | while IFS= read -r f; do
+        o=$(sed -n 's/.*"outDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -n 1)
+        o=${o#./}; o=${o%/}
+        [ -z "$o" ] || echo "$(dirname "$f")/$o"
+    done
+}
+
 if [ -f "$stamp" ]; then
-    changed=$(find "$dir" \( -name node_modules -o -name dist -o -path "$dir/shared/notes-core/lib" \) -prune \
-                   -o -type f -newer "$stamp" -print | head -n 1)
+    changed=$(
+        set --
+        while IFS= read -r o; do [ -z "$o" ] || set -- "$@" -o -path "$o"; done <<EOF
+$(outdirs)
+EOF
+        find "$dir" \( -name node_modules -o -name dist "$@" \) -prune -o -type f -newer "$stamp" -print | head -n 1
+    )
     [ "$dir/node_modules/.package-lock.json" -nt "$stamp" ] && changed=npm
     # DIR or its apps, each with a build script writing dist/ (not the
     # workspaces' root).
