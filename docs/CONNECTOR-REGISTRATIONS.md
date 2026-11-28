@@ -12,12 +12,16 @@ password manager.
 
 ## Before any provider
 
-1. **The public domain** (OPEN-QUESTIONS Q1). Google's consent screen,
-   Microsoft's publisher verification, Dropbox's production review and
-   Bluesky's client id all name a homepage and a privacy policy on a
-   domain Phoenix owns. The code uses `webosphoenix.org` as a
-   placeholder (`apps/connectors/bluesky/oauth/client-metadata.json`).
-   Have the domain, the homepage and a privacy policy page up first.
+1. **The public domain: `webosphoenix.org`** (OPEN-QUESTIONS Q1; the
+   owner, 28 Nov 2026). Google's consent screen, Microsoft's publisher
+   verification, Dropbox's production review and Bluesky's client id all
+   name its homepage `https://webosphoenix.org/`, privacy policy
+   `https://webosphoenix.org/privacy` and terms
+   `https://webosphoenix.org/terms` (Phoenix-Web-Services
+   `routes/web.php:108-109`). Before the first review, the privacy policy
+   needs a section on connected accounts: what each connector reads, that
+   it stays on the device, and Google's Limited Use statement (the Google
+   API Services User Data Policy).
 2. **One Phoenix project account** per provider (Q16, Q17), not a
    personal account. Turn on two-step sign-in on each.
 3. **Where the ids go.** Each connector reads one JSON file,
@@ -123,8 +127,8 @@ publisher verification for personal accounts.
 3. Google Auth Platform (OAuth consent screen), Get started: App name
    `webOS Phoenix`, support email, audience **External**, contact email.
    Create.
-4. Branding: logo, homepage `https://<domain>/`, privacy policy
-   `https://<domain>/privacy`, terms, authorized domain `<domain>`
+4. Branding: logo, homepage `https://webosphoenix.org/`, privacy policy
+   `https://webosphoenix.org/privacy`, terms, authorized domain `webosphoenix.org`
    (verify it in Google Search Console with the same account).
 5. Data access, Add or remove scopes: `openid`, `.../auth/userinfo.email`,
    `.../auth/userinfo.profile`, `https://www.googleapis.com/auth/calendar`,
@@ -322,7 +326,7 @@ Whether Todoist takes an `http` loopback address: check in its console.
 
 **Bluesky's OAuth (optional).** Nothing to register with Bluesky: host
 `apps/connectors/bluesky/oauth/client-metadata.json` at
-`https://<domain>/oauth/bluesky/client-metadata.json` (its `client_id`
+`https://webosphoenix.org/oauth/bluesky/client-metadata.json` (its `client_id`
 must be that address; Q120), and `bluesky/clients.json`
 `{"bluesky": {"clientId": "<that address>", "redirectUri": "org.webosphoenix:/oauth/bluesky"}}`.
 Still not enough: the OAuth service has no `sheet` method
