@@ -61,6 +61,7 @@ function createDeviceOAuth(o) {
             return loopback.open({ port: loopbackLib.portOf(requested), state: opts && opts.state });
         },
         sheet: function (url, redirectUri, pending) { return card.show(url, redirectUri, pending); },
+        closeSheet: function () { card.cancel(); },
         card: card,
         crypto: {
             randomBytes: function (n) { return new Uint8Array(o.crypto.randomBytes(n)); },

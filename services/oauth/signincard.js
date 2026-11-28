@@ -38,7 +38,9 @@
 //
 // createSignInCard({launch(params) -> Promise, close() -> Promise,
 // bar(info | null), randomId(), appId, timeoutMs, setTimeout,
-// clearTimeout, log}) -> {show, appClosed, pending, current}.
+// clearTimeout, log}) -> {show, appClosed, cancel, pending, current}.
+// cancel(): the open sign-in ends as canceled (null) and its card closes
+// (Settings' Cancel, through the OAuth service's cancel).
 
 "use strict";
 
@@ -120,6 +122,10 @@ function createSignInCard(o) {
         if (current) current.finish(null, null, true);
     }
 
+    function cancel() {
+        if (current) current.finish(null);
+    }
+
     // The card's page asks for the address it is to show.
     function pendingFor(p, caller) {
         if (caller !== appId)
@@ -131,7 +137,7 @@ function createSignInCard(o) {
     }
 
     return {
-        show: show, appClosed: appClosed, pending: pendingFor,
+        show: show, appClosed: appClosed, cancel: cancel, pending: pendingFor,
         current: function () { return current ? { session: current.session, url: current.url } : null; },
         appId: appId
     };

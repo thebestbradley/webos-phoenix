@@ -563,6 +563,26 @@ for that device:
    Phoenix-Web-Services under its preview lock offers the code only, and
    its `phoenix-device` client has no authorization code grant yet.
 
+**How a sign-in ends** (`services/account/accountservice.js`, its `COPY`;
+played live against Phoenix-Web-Services, open and under its preview lock,
+by that repository's `tests/Device/signin-live.cjs`). Signed in with one
+set of tokens, or signed out with none left on the device and the ones it
+got revoked; never a code left polling or a stale "signed in". A second
+Sign In tap while one starts is the same sign-in (one code, one card).
+Polling goes on through a dropped network, 5xx and 429 with a backoff of
+at most 20 s that ends at the next answer, saying "still trying" after two
+in a row, and never past the code's expiry by the device's own clock;
+`access_denied`, `expired_token` and a code the server no longer knows
+(`invalid_grant`) end it with what to do. Cancel stops the polling, or
+closes the browser sign-in's card (the OAuth service's `cancel`) and
+forgets what it brings later. A sign-in that cannot finish (the account
+unreadable, the device not registered) revokes its tokens. Signed in, a
+refused token (401, then `invalid_grant` on the refresh; for a browser
+sign-in the OAuth service's renewal refused) ends the session and forgets
+the OAuth service's key too: the device was removed on the website or the
+account closed, and Settings, which reads the account again when it opens,
+says so. A 5xx or no network keeps the device signed in.
+
 Then the device registers itself:
 
 `POST /v1/devices` (`account`) `{"publicKey": base64 Ed25519 (made on the

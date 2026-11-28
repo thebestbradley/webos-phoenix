@@ -165,5 +165,7 @@ paths:
     post: { tags: [conformance], security: [{ conformance: [] }], summary: "Approve a device code for the test account: {user_code}", responses: { "200": { description: approved }, "404": { description: no such code } } }
   /v1/conformance/deny:
     post: { tags: [conformance], security: [{ conformance: [] }], summary: "Turn a device code down: {user_code}", responses: { "200": { description: denied } } }
+  /v1/conformance/disconnect:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "The website's Disconnect for a device: {deviceId}; the device is removed and its tokens revoked", responses: { "200": { description: disconnected }, "404": { description: no such device } } }
   /v1/conformance/rotate:
     post: { tags: [conformance], security: [{ conformance: [] }], summary: "A new online key for {scope: catalog | updates}, delegated by the staging root", responses: { "200": { description: "{key}" } } }

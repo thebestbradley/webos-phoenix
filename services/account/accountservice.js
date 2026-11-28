@@ -77,10 +77,12 @@
 //                                 position" switch, off by default              Settings
 //
 // Errors: NOT_SET_UP, SIGNED_OUT, SIGNED_IN (signIn while signed in), BUSY, UNSUPPORTED (signIn browser on a server
-// that offers only the code), ACCESS_DENIED, EXPIRED,
-// CONNECTION_FAILED, BAD_SERVER, BAD_SIGNATURE, UNAUTHORIZED, FORBIDDEN,
+// that offers only the code), ACCESS_DENIED, EXPIRED, CANCELED and TIMEOUT
+// (the browser sign-in's card closed, or left open ten minutes),
+// CONNECTION_FAILED, SERVER_ERROR, BAD_SERVER, BAD_SIGNATURE, UNAUTHORIZED, FORBIDDEN,
 // RATE_LIMITED (retryAfter), QUOTA, NEEDS_DEVMODE, NOT_ALLOWED, BAD_PARAMS,
-// and the server's own codes (PLATFORM.md 5).
+// and the server's own codes (PLATFORM.md 5). errorText is what Settings
+// and First Use show: what happened, and what to do (COPY below).
 
 "use strict";
 
@@ -94,6 +96,23 @@ var METHODS = ["getServers", "setServers", "getStatus", "signIn", "cancelSignIn"
 var DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 var TOKENS = "account:tokens";
 var BACKUP = "account:backup";
+
+// What the person reads when a sign-in ends without signing in, or the
+// server is away: what happened and what to do, never an HTTP status or a
+// socket error (those go to the log).
+var COPY = {
+    CONNECTION_FAILED: "Cannot reach the " + ACCOUNT_NAME + " server. Check this device's connection and try again.",
+    STILL_TRYING_OFFLINE: "Cannot reach the " + ACCOUNT_NAME + " server right now; still trying. Check this device's connection.",
+    SERVER_ERROR: "The " + ACCOUNT_NAME + " server is having trouble. Try again in a few minutes.",
+    STILL_TRYING_SERVER: "The " + ACCOUNT_NAME + " server is having trouble; still trying. You can approve the code meanwhile.",
+    EXPIRED: "The code expired before it was approved; sign in again for a new one.",
+    CODE_GONE: "This code no longer works; sign in again for a new one.",
+    ACCESS_DENIED: "The sign-in was turned down; sign in again to try once more.",
+    CANCELED: "The sign-in was closed before it finished; sign in again when you are ready.",
+    TIMEOUT: "The sign-in took too long; sign in again.",
+    NOT_ACCEPTED: "The " + ACCOUNT_NAME + " server did not accept this sign-in; sign in again.",
+    SIGNED_OUT: "This device is no longer signed in to your " + ACCOUNT_NAME + ": it was signed out from the website, or the account was closed. Sign in again to use it."
+};
 
 // Who may call what (on a device luna-service2's permissions say which
 // apps reach the service at all; this is the finer cut, as
@@ -187,8 +206,16 @@ function createAccountService(deps) {
     function save(s) { deps.state.save(s); }
     function http(req) {
         return Promise.resolve(deps.request(req)).then(null, function (e) {
-            throw err("CONNECTION_FAILED", "Cannot reach " + new URL(req.url).host + " (" + (e && e.message) + ")");
+            log("cannot reach " + new URL(req.url).host + ": " + (e && e.message));
+            throw err("CONNECTION_FAILED", COPY.CONNECTION_FAILED);
         });
+    }
+    // The server's error, with the copy above for a server that is away (5xx
+    // without its own words: Laravel's 503 page, a proxy's 502).
+    function apiError(res, what) {
+        var e = platform.http.apiError(res, what, now().getTime());
+        if (res.status >= 500 && /answered \d+$/.test(e.message)) e.message = COPY.SERVER_ERROR;
+        return e;
     }
     function json(res, what) { return platform.http.json(res, what); }
 
@@ -251,7 +278,7 @@ function createAccountService(deps) {
             now().getTime() - Date.parse(s.discovery.fetched) < 24 * 3600 * 1000) return Promise.resolve(s.discovery.doc);
         var url = r.account.issuer + "/.well-known/openid-configuration";
         return http({ method: "GET", url: url, headers: { Accept: "application/json" } }).then(function (res) {
-            if (res.status !== 200) throw platform.http.apiError(res, "The account server");
+            if (res.status !== 200) throw apiError(res, "The account server");
             var d = json(res, "The account server");
             // OpenID Connect Discovery 1.0, 4.3: the issuer must be the one asked.
             if (!d || d.issuer !== r.account.issuer || typeof d.token_endpoint !== "string")
@@ -279,10 +306,19 @@ function createAccountService(deps) {
         return tokens().then(function (t) {
             if (!t) throw err("SIGNED_OUT", "Sign in to your " + ACCOUNT_NAME + " first");
             if (t.via === "browser") {
-                return deps.luna.call("luna://org.webosphoenix.service.oauth/token", { keyId: t.keyId }).then(function (r) {
-                    if (!r || !r.returnValue) throw err(r && r.errorCode === "NOT_FOUND" ? "SIGNED_OUT" : "UNAUTHORIZED",
-                                                        (r && r.errorText) || "The sign-in has ended");
-                    return r.accessToken;
+                // force: the server refused the token the OAuth service kept
+                // (revoked on the website before it expired here), so it is
+                // renewed now (oauthservice.js token {refresh}), not handed back.
+                return deps.luna.call("luna://org.webosphoenix.service.oauth/token", force ? { keyId: t.keyId, refresh: true } : { keyId: t.keyId }).then(function (r) {
+                    if (r && r.returnValue) return r.accessToken;
+                    var code = r && r.errorCode;
+                    log("token: " + code + " " + (r && r.errorText));
+                    // The key gone, or its refresh refused (invalid_grant: the
+                    // device removed on the website, the account closed).
+                    if (code === "NOT_FOUND" || code === "401_UNAUTHORIZED") return endSession(COPY.SIGNED_OUT);
+                    if (code === "500_SERVER_ERROR") throw err("SERVER_ERROR", COPY.SERVER_ERROR);
+                    if (code === "CONNECTION_FAILED") throw err("CONNECTION_FAILED", COPY.CONNECTION_FAILED);
+                    throw err("UNAUTHORIZED", (r && r.errorText) || "The sign-in has ended");
                 });
             }
             if (!force && (!t.expiresAt || t.expiresAt - 60000 > now().getTime())) return t.accessToken;
@@ -294,20 +330,43 @@ function createAccountService(deps) {
                 if (res.status === 400 || res.status === 401) {
                     var b = null;
                     try { b = JSON.parse(res.body); } catch (e) { b = null; }
-                    if (b && (b.error === "invalid_grant" || b.error === "invalid_token")) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again");
+                    if (b && (b.error === "invalid_grant" || b.error === "invalid_token")) return endSession(COPY.SIGNED_OUT);
                 }
-                if (res.status !== 200) throw platform.http.apiError(res, "The account server");
+                if (res.status !== 200) throw apiError(res, "The account server");
                 return keep(json(res), "code").then(function (t2) { return t2.accessToken; });
             });
         });
     }
     // The server no longer takes this device's tokens (signed out on the
-    // web, the device removed): forget them here too.
+    // web, the device removed): forget them here too, the OAuth service's
+    // key of a browser sign-in with them.
     function endSession(text) {
-        return clearLocal().then(function () {
+        return forgetBrowserKey().then(clearLocal).then(function () {
             lastError = { errorCode: "SIGNED_OUT", errorText: text };
             changed();
             throw err("SIGNED_OUT", text);
+        });
+    }
+    // A browser sign-in's tokens are the OAuth service's key: forgotten there
+    // (which revokes them at the server, RFC 7009, where it still can).
+    function forgetBrowserKey() {
+        return tokens().then(function (t) {
+            if (!t || t.via !== "browser" || !t.keyId) return null;
+            return Promise.resolve(deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: t.keyId })).then(null, function () {});
+        }, function () {});
+    }
+    // Every token this device holds, revoked at the server where it can be
+    // (signing out; a sign-in that could not finish), then forgotten.
+    function revokeTokens() {
+        return tokens().then(function (t) {
+            if (!t) return null;
+            if (t.via === "browser") return forgetBrowserKey();
+            // RFC 7009: the refresh token, so the pair is gone on the server.
+            return setUp().then(discovery).then(function (d) {
+                if (!d.revocation_endpoint || !t.refreshToken) return null;
+                return http({ method: "POST", url: d.revocation_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                              body: form({ token: t.refreshToken, token_type_hint: "refresh_token", client_id: sv.account.clientId }) });
+            }).then(null, function (e) { log("revoke: " + e.message); });
         });
     }
     function clearLocal() {
@@ -334,17 +393,17 @@ function createAccountService(deps) {
                     if (opts && opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
                     var req = { method: method, url: url, headers: headers, body: body === undefined ? undefined : JSON.stringify(body) };
                     return opts && opts.bytes && deps.requestBytes
-                        ? Promise.resolve(deps.requestBytes(req)).then(null, function (e) { throw err("CONNECTION_FAILED", "Cannot reach the " + ACCOUNT_NAME + " server (" + e.message + ")"); })
+                        ? Promise.resolve(deps.requestBytes(req)).then(null, function (e) { log("cannot reach the server: " + e.message); throw err("CONNECTION_FAILED", COPY.CONNECTION_FAILED); })
                         : http(req);
                 });
             };
             return once(false).then(function (res) {
                 return res.status === 401 ? once(true) : res;
             }).then(function (res) {
-                if (res.status === 401) return endSession("Your " + ACCOUNT_NAME + " sign-in ended; sign in again");
+                if (res.status === 401) return endSession(COPY.SIGNED_OUT);
                 if (res.status < 200 || res.status >= 300) {
                     if (res.bytes && res.body === undefined) res.body = platform.b64.fromUtf8(res.bytes);
-                    throw platform.http.apiError(res, "The " + ACCOUNT_NAME + " server", now().getTime());
+                    throw apiError(res, "The " + ACCOUNT_NAME + " server");
                 }
                 return res;
             });
@@ -356,19 +415,28 @@ function createAccountService(deps) {
 
     // ---- Sign in --------------------------------------------------------------------------
 
+    // A sign-in being started (discovery and the device code asked for, or
+    // the browser sign-in's card open): a second tap meanwhile is the same
+    // sign-in, never a second device code or card beside it.
+    var starting = null;     // {method, promise}
     function signIn(p) {
         var method = p.method === "browser" ? "browser" : "code";
+        if (starting) return starting.method === method ? starting.promise : Promise.reject(err("BUSY", "A sign-in is in progress"));
         if (pending) return Promise.reject(err("BUSY", "A sign-in is in progress"));
         // Signed in already: never a second set of tokens beside the kept ones
         // (a browser sign-in's would stay in the OAuth service's key store,
         // never revoked). Sign out first.
         if (load().signedIn) return Promise.reject(err("SIGNED_IN", "This device is signed in already; sign out first"));
-        return setUp().then(function (r) {
+        var mine = { method: method };
+        var done = function () { if (starting === mine) starting = null; };
+        mine.promise = setUp().then(function (r) {
             return discovery(r).then(function (d) {
                 lastError = null;
                 return method === "code" ? deviceCode(r, d) : browser(r, d);
             });
-        });
+        }).then(function (v) { done(); return v; }, function (e) { done(); throw e; });
+        starting = mine;
+        return mine.promise;
     }
 
     function deviceCode(r, d) {
@@ -376,7 +444,7 @@ function createAccountService(deps) {
         if (typeof endpoint !== "string") throw err("BAD_SERVER", "The account server does not offer sign-in with a code");
         return http({ method: "POST", url: endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
                       body: form({ client_id: r.account.clientId, scope: r.account.scope }) }).then(function (res) {
-            if (res.status !== 200) throw platform.http.apiError(res, "The account server");
+            if (res.status !== 200) throw apiError(res, "The account server");
             var b = json(res);
             if (!b || typeof b.device_code !== "string" || typeof b.user_code !== "string" || typeof b.verification_uri !== "string")
                 throw err("BAD_SERVER", "The account server's device code reply is incomplete");
@@ -385,38 +453,73 @@ function createAccountService(deps) {
                 verificationUriComplete: b.verification_uri_complete || null,
                 expiresAt: new Date(now().getTime() + (b.expires_in || 600) * 1000).toISOString(),
                 // RFC 8628 3.2: 5 seconds when the server says nothing.
-                interval: Math.max(0, typeof b.interval === "number" ? b.interval : 5), tokenEndpoint: d.token_endpoint, timer: null
+                interval: Math.max(0, typeof b.interval === "number" ? b.interval : 5), tokenEndpoint: d.token_endpoint, timer: null,
+                failures: 0, backoff: 0
             };
             poll(r);
             return changed();
         });
     }
 
+    // Polls the token endpoint (RFC 8628 3.4, 3.5) until the code is
+    // approved, turned down or expired. The wait is the server's interval
+    // (slow_down adds 5 s for good), plus a backoff while the server is away
+    // (offline, 5xx, 429) that ends with its next answer, so an approval is
+    // seen within one interval of the network coming back; never past the
+    // code's expiry by this device's clock. Away twice running, the status
+    // says so (error, the state still signingIn) until it answers again.
     function poll(r) {
         if (!pending || pending.method !== "code") return;
         var mine = pending;
+        var left = Math.max(0, Date.parse(mine.expiresAt) - now().getTime());
         mine.timer = timers.set(function () {
             if (pending !== mine) return;
-            if (Date.parse(mine.expiresAt) <= now().getTime()) return failSignIn("EXPIRED", "The code expired; sign in again");
+            if (Date.parse(mine.expiresAt) <= now().getTime()) return failSignIn("EXPIRED", COPY.EXPIRED);
             http({ method: "POST", url: mine.tokenEndpoint, headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
                    body: form({ grant_type: DEVICE_GRANT, device_code: mine.deviceCode, client_id: r.account.clientId }) }).then(function (res) {
                 if (pending !== mine) return null;
                 var b = null;
                 try { b = JSON.parse(res.body); } catch (e) { b = null; }
-                if (res.status === 200) return keep(b, "code").then(function () { return finishSignIn(); });
                 var code = b && b.error;
+                if (res.status === 429 || res.status >= 500) return away(r, mine, COPY.STILL_TRYING_SERVER, "SERVER_ERROR", "token endpoint answered " + res.status);
+                back(mine);
+                if (res.status === 200) {
+                    // Signed in, or not (finishSignIn has said which and why).
+                    return keep(b, "code").then(finishSignIn).then(null, function (e) {
+                        log("sign-in: " + e.message);
+                        if (pending === mine) return failSignIn(e.code || "BAD_SERVER", e.message);
+                        return null;
+                    });
+                }
                 if (code === "authorization_pending") return poll(r);
                 if (code === "slow_down") { mine.interval += 5; return poll(r); }   // RFC 8628 3.5
-                if (code === "access_denied") return failSignIn("ACCESS_DENIED", "The sign-in was turned down");
-                if (code === "expired_token") return failSignIn("EXPIRED", "The code expired; sign in again");
-                if (res.status === 429 || res.status >= 500) { mine.interval += 5; return poll(r); }
-                return failSignIn("BAD_SERVER", (b && (b.error_description || b.error)) || "The account server answered " + res.status);
+                if (code === "access_denied") return failSignIn("ACCESS_DENIED", COPY.ACCESS_DENIED);
+                if (code === "expired_token") return failSignIn("EXPIRED", COPY.EXPIRED);
+                // The server no longer knows the code, or it was revoked (the
+                // account's codes go with a deletion): a new one is needed.
+                if (code === "invalid_grant" || code === "invalid_request") return failSignIn("EXPIRED", COPY.CODE_GONE);
+                log("token endpoint: " + res.status + " " + ((b && (b.error_description || b.error)) || ""));
+                return failSignIn("BAD_SERVER", COPY.NOT_ACCEPTED);
             }, function (e) {
                 // Offline for a moment: keep asking until the code expires.
-                log("poll: " + e.message);
-                if (pending === mine) { mine.interval = Math.min(60, mine.interval + 5); poll(r); }
-            });
-        }, mine.interval * 1000);
+                if (pending === mine) away(r, mine, COPY.STILL_TRYING_OFFLINE, "CONNECTION_FAILED", e.message);
+            }).then(null, function (e) { log("poll: " + (e && e.message)); });
+        }, Math.min((mine.interval + mine.backoff) * 1000, left));
+    }
+    function away(r, mine, text, code, why) {
+        log("poll: " + why);
+        mine.failures++;
+        mine.backoff = Math.min(20, mine.failures * 5);
+        if (mine.failures >= 2 && !(lastError && lastError.errorText === text)) {
+            lastError = { errorCode: code, errorText: text, retrying: true };
+            changed();
+        }
+        poll(r);
+    }
+    function back(mine) {
+        mine.failures = 0;
+        mine.backoff = 0;
+        if (lastError && lastError.retrying) { lastError = null; changed(); }
     }
 
     function failSignIn(code, text) {
@@ -426,23 +529,38 @@ function createAccountService(deps) {
         return changed();
     }
 
+    // The OAuth service's errors (oauthservice.js authorize) as this
+    // service's, with the copy above.
+    var BROWSER_ERRORS = {
+        CANCELED: ["CANCELED", COPY.CANCELED], TIMEOUT: ["TIMEOUT", COPY.TIMEOUT], ACCESS_DENIED: ["ACCESS_DENIED", COPY.ACCESS_DENIED],
+        "500_SERVER_ERROR": ["SERVER_ERROR", COPY.SERVER_ERROR], CONNECTION_FAILED: ["CONNECTION_FAILED", COPY.CONNECTION_FAILED],
+        "401_UNAUTHORIZED": ["UNAUTHORIZED", COPY.NOT_ACCEPTED]
+    };
     function browser(r, d) {
         var grants = Array.isArray(d.grant_types_supported) ? d.grant_types_supported : null;
         if (typeof d.authorization_endpoint !== "string" || (grants && grants.indexOf("authorization_code") < 0))
             throw err("UNSUPPORTED", "This account server signs in with a code only: choose Sign In");
-        pending = { method: "browser" };
+        var mine = pending = { method: "browser" };
         changed();
-        return deps.luna.call("luna://org.webosphoenix.service.oauth/authorize", {
+        return Promise.resolve(deps.luna.call("luna://org.webosphoenix.service.oauth/authorize", {
             authorizationEndpoint: d.authorization_endpoint, tokenEndpoint: d.token_endpoint, clientId: r.account.clientId,
             scope: r.account.scope, revocationEndpoint: d.revocation_endpoint || undefined
-        }).then(function (res) {
+        })).then(null, function (e) { return { returnValue: false, errorCode: "UNKNOWN_ERROR", errorText: e && e.message }; }).then(function (res) {
+            if (pending !== mine) {
+                // Canceled while the card was open, and the person went on in
+                // it: what it brought is not kept (revoked and forgotten).
+                if (res && res.returnValue && res.keyId)
+                    return Promise.resolve(deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: res.keyId })).then(null, function () {}).then(status);
+                return status();
+            }
             if (!res || !res.returnValue) {
                 pending = null;
-                var code = res && res.errorCode === "CANCELED" ? "CANCELED" : res && res.errorCode === "ACCESS_DENIED" ? "ACCESS_DENIED"
-                    : (res && res.errorCode) || "UNKNOWN_ERROR";
-                lastError = { errorCode: code, errorText: (res && res.errorText) || "The sign-in did not finish" };
+                var known = BROWSER_ERRORS[res && res.errorCode];
+                if (!known) log("authorize: " + (res && res.errorCode) + " " + (res && res.errorText));
+                lastError = known ? { errorCode: known[0], errorText: known[1] }
+                                  : { errorCode: (res && res.errorCode) || "UNKNOWN_ERROR", errorText: (res && res.errorText) || "The sign-in did not finish; sign in again." };
                 changed();
-                throw err(code, lastError.errorText);
+                throw err(lastError.errorCode, lastError.errorText);
             }
             return Promise.resolve(deps.keystore.put(TOKENS, { via: "browser", keyId: res.keyId, scope: res.scope || "" })).then(finishSignIn);
         });
@@ -480,9 +598,11 @@ function createAccountService(deps) {
             }).then(null, function () {});
             return changed();
         }, function (e) {
+            // Not signed in: the tokens it got are revoked and forgotten,
+            // never left live on the server or in a key store.
             pending = null;
             lastError = { errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
-            return clearLocal().then(changed).then(function () { throw e; });
+            return revokeTokens().then(clearLocal).then(changed).then(function () { throw e; });
         });
     }
     function profile(me) {
@@ -497,16 +617,7 @@ function createAccountService(deps) {
             var steps = s.deviceId
                 ? apiJson("DELETE", "v1/devices/" + encodeURIComponent(s.deviceId)).then(null, function (e) { log("unregister: " + e.message); })
                 : Promise.resolve();
-            return steps.then(tokens).then(function (t) {
-                if (!t) return null;
-                if (t.via === "browser") return deps.luna.call("luna://org.webosphoenix.service.oauth/forget", { keyId: t.keyId }).then(null, function () {});
-                // RFC 7009: the refresh token, so the pair is gone on the server.
-                return setUp().then(discovery).then(function (d) {
-                    if (!d.revocation_endpoint || !t.refreshToken) return null;
-                    return http({ method: "POST", url: d.revocation_endpoint, headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                                  body: form({ token: t.refreshToken, token_type_hint: "refresh_token", client_id: sv.account.clientId }) });
-                }).then(null, function (e) { log("revoke: " + e.message); });
-            }).then(clearLocal).then(function () { lastError = null; return changed(); });
+            return steps.then(revokeTokens).then(clearLocal).then(function () { lastError = null; return changed(); });
         });
     }
 
@@ -527,7 +638,7 @@ function createAccountService(deps) {
     function entitlementsKey(r) {
         if (r.account.key) return Promise.resolve(r.account.key);
         return http({ method: "GET", url: r.api + "v1/key.json", headers: { Accept: "application/json" } }).then(function (res) {
-            if (res.status !== 200) throw platform.http.apiError(res, "The account server");
+            if (res.status !== 200) throw apiError(res, "The account server");
             var k = json(res);
             return k && typeof k.key === "string" ? k.key : null;
         });
@@ -744,7 +855,7 @@ function createAccountService(deps) {
             // {url}: a platform's own servers.json (GET <api>/v1/servers.json,
             // which a staging server publishes), read and checked here.
             var fromUrl = p && typeof p.url === "string" && p.url ? http({ method: "GET", url: p.url, headers: { Accept: "application/json" } }).then(function (res) {
-                if (res.status !== 200) throw platform.http.apiError(res, "That server");
+                if (res.status !== 200) throw apiError(res, "That server");
                 return platform.servers.parse(res.body);
             }) : Promise.resolve(p ? p.servers : undefined);
             return fromUrl;
@@ -753,7 +864,7 @@ function createAccountService(deps) {
             if (o !== null) platform.servers.checkOverride(o);
             deps.override.write(o);
             // Another server: this device's sign-in belongs to the old one.
-            return clearLocal().then(function () {
+            return forgetBrowserKey().then(clearLocal).then(function () {
                 var s = load();
                 s.discovery = null;
                 save(s);
@@ -780,7 +891,12 @@ function createAccountService(deps) {
         signIn: guard("signIn", signIn),
         cancelSignIn: guard("cancelSignIn", function () {
             if (pending && pending.timer) timers.clear(pending.timer);
+            // The browser sign-in's card closes too (what it brings later is
+            // forgotten: browser()).
+            if (pending && pending.method === "browser")
+                Promise.resolve(deps.luna.call("luna://org.webosphoenix.service.oauth/cancel", {})).then(null, function () {});
             pending = null;
+            lastError = null;
             return changed();
         }),
         signOut: guard("signOut", signOut),
