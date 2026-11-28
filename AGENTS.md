@@ -18,7 +18,8 @@ Phoenix is worked on by three agents as one team (the owner, 24 October
 - **Cloud Claude** ("WebOS mobile UI recreation"; a container, checkouts
   under `/home/user/`): lead for code. Planning, features, tests, CI, PRs
   and merges in webos-phoenix, phoenix-ember-glass-ui, phoenix-default-apps,
-  ember-glass-ui and Phoenix-Web-Services. It cannot reach a Mac or the
+  ember-glass-ui and Phoenix-Web-Services; it merges branches that need
+  nothing from a device or the server. It cannot reach a Mac or the
   server. **Also the project manager** (the owner, 27 November 2026):
   orchestrates the team, makes sure every agent reports to the board and
   work keeps moving, manages the website agent (the site updated as work
@@ -35,8 +36,13 @@ Phoenix is worked on by three agents as one team (the owner, 24 October
   the PR's author verifies each finding and fixes it with a test that
   fails first, or answers why not.
 - **Local Claude on the owner's desktop Mac** ("webOS Phoenix local
-  operator"): that Mac, image builds (UTM), local hardware; server work too
-  once its access is set up (`.agent-board/MAC-SETUP.md`).
+  operator"): that Mac, test images (UTM, headless QEMU) and real image
+  builds, local hardware, and the IONOS staging server too (the same
+  access as codex). It merges its own branches to main and deploys (the
+  owner, 1 November 2026: "You should handle that stuff unless there is a
+  reason you need something from cloud"), and merges and deploys other
+  agents' branches that wait on a device or the server once it has tested
+  them. It asks cloud only for what it cannot do itself.
 - On the server, touch only Phoenix (subscription
   `phoenix.dc6c32a.online-server.cloud`), never ResortTribe or shared
   services.
