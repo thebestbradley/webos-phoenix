@@ -77,7 +77,20 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The catalog the device ships with ("phoenix"): its address is servers.json's feeds
+    // (docs/PLATFORM-CLIENT.md), here a free port of this test's, not the development
+    // file's 127.0.0.1:8088, where another catalog on this computer (bin/serve.sh) would
+    // answer and the offline card below would not show. Nothing runs there until the
+    // update of a built-in app, which only that catalog may offer (packagesservice.js BUILT_IN).
+    const phoenixPort = await servers.freePort();
+    let phoenixCatalog = null;
+    const device = fs.mkdtempSync(path.join(require("os").tmpdir(), "phoenix-device-"));
+    const serversJson = JSON.parse(fs.readFileSync(path.join(REPO, "services/account/etc/palm/phoenix/servers.json"), "utf8"));
+    serversJson.feeds = `http://127.0.0.1:${phoenixPort}/`;
+    fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     "--extra-rootfs", device], { stdio: "ignore" });
     const appUrl = (id, params) => `${origin}/usr/palm/applications/${id}/index.html` + (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
     try {
@@ -218,10 +231,27 @@ async function main() {
 
         // ---- An update of a built-in app (docs/APP-STORE.md 3.14) -------------------------------------------------
         // Newer than the built-in Flashlight: offered as an update, installed in its
-        // place and removable; removed, the built-in one is back.
+        // place and removable; removed, the built-in one is back. Only from the
+        // Phoenix catalog the device ships with: the one the user added offers it
+        // as built in (BUILT_IN, packagesservice.js install), as Android and iOS
+        // take an update only from the installed app's publisher.
         const builtinBefore = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
-        const own = await catalog.api("POST", "/api/apps/packages", await servers.webApp("org.webosphoenix.flashlight", "9.0.0", { title: "Flashlight" }), catalog.admin);
-        await catalog.api("POST", `/api/admin/releases/${own.release.id}/approve`, {}, catalog.admin);
+        const fromAdded = await catalog.api("POST", "/api/apps/packages", await servers.webApp("org.webosphoenix.flashlight", "9.0.0", { title: "Flashlight" }), catalog.admin);
+        await catalog.api("POST", `/api/admin/releases/${fromAdded.release.id}/approve`, {}, catalog.admin);
+        await luna(P + "refresh", {});
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.click("[data-testid=tab-apps]");
+        await page.waitForSelector("[data-testid='app-org.webosphoenix.flashlight']", { timeout: 15000 });
+        check(/Built In/.test(await page.textContent("[data-testid='app-org.webosphoenix.flashlight']")),
+              "a built-in app's newer version from a catalog the user added is not an update: it stays built in");
+        phoenixCatalog = await servers.startCatalog({ port: phoenixPort });
+        const own = await phoenixCatalog.api("POST", "/api/apps/packages", await servers.webApp("org.webosphoenix.flashlight", "9.0.0", { title: "Flashlight" }), phoenixCatalog.admin);
+        await phoenixCatalog.api("POST", `/api/admin/releases/${own.release.id}/approve`, {}, phoenixCatalog.admin);
+        // The device's own catalog with its key (as an image ships it), switched on again.
+        await luna(P + "trustSource", { url: phoenixCatalog.catalogUrl, key: phoenixCatalog.key });
+        // The added catalog switched off meanwhile: one Flashlight 9.0.0 listed, the Phoenix catalog's.
+        const added = (await luna(P + "getSources", {})).sources.find((x) => x.kind === "phoenix" && !x.builtin);
+        await luna(P + "setSource", { id: added.id, enabled: false });
         await luna(P + "refresh", {});
         await page.goto(appUrl("org.webosphoenix.marketplace"));
         await page.click("[data-testid=tab-apps]");
@@ -246,6 +276,9 @@ async function main() {
         await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
         const back = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
         check(back && !back.removable && back.version === builtinBefore.version, "removing the update brings the built-in app back");
+        // As before: the added catalog on, the device's own off again.
+        await luna(P + "setSource", { id: added.id, enabled: true });
+        await luna(P + "setSource", { id: "phoenix", enabled: false });
 
         // ---- An app's page opened by a launch before the catalogs are read again ----------------------------------
         // (a link to an app published since the device last read its catalog): the first look finds
@@ -590,8 +623,9 @@ async function main() {
     } finally {
         if (browser) await browser.close();
         rootfs.kill();
-        await Promise.all([catalog.stop(), site.close(), museum.close(), feed.close()]);
+        await Promise.all([catalog.stop(), site.close(), museum.close(), feed.close(), phoenixCatalog && phoenixCatalog.stop()]);
         fs.rmSync(installedDir, { recursive: true, force: true });
+        fs.rmSync(device, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed` : `\nAll checks passed. Screenshots in ${outDir}`);
     process.exit(failures ? 1 : 0);

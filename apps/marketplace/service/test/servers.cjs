@@ -13,6 +13,14 @@
 //                   own made-up apps) with a package host: an Enyo app and a
 //                   Mojo app
 //   startFeed()     a Preware feed: Packages and two packages
+//   startPhoenixDevice()  a catalog as the one the device ships with
+//                   ("phoenix": servers.json's feeds, in a folder for
+//                   serve-rootfs's --extra-rootfs), and install(): Phoenix's
+//                   own connector published there by an admin and installed
+//                   from it, as on a device. A connector with a sign-in page
+//                   of its own is framed only when installed that way, not
+//                   sideloaded (rule C17 on the device, packagesservice.js
+//                   checkSignInPage)
 //
 // Packages are made with the service's own .ipk writer.
 
@@ -299,4 +307,56 @@ async function startFeed() {
     return Object.assign(f, { feedUrl: f.url + "/feed/", corrupt: () => { serveWeb = Buffer.concat([web, Buffer.from("x")]); } });
 }
 
-module.exports = { phpAvailable, startCatalog, startSite, startMuseum, startFeed, webApp, png, freePort };
+// ---- The catalog the device ships with --------------------------------------------
+
+// A catalog where the device's own Phoenix catalog looks: its address is
+// servers.json's feeds (docs/PLATFORM-CLIENT.md), so serve-rootfs is given a
+// folder (rootfsArgs: --extra-rootfs) with that file pointing here. The key
+// is the device's (as an image ships it: trustSource on the built-in
+// source). install(context, origin, ipkFile, appId) uploads the package as
+// an admin (Phoenix's namespaces), approves it, and has the Marketplace's
+// service install it from that catalog, in a page of the Marketplace (the
+// service's caller); -> its last reply ({state: "installed"} or "failed").
+async function startPhoenixDevice() {
+    const catalog = await startCatalog();
+    const device = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-device-"));
+    const serversJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../../../services/account/etc/palm/phoenix/servers.json"), "utf8"));
+    serversJson.feeds = catalog.url + "/";
+    fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
+    return {
+        catalog, device, rootfsArgs: ["--extra-rootfs", device],
+        async install(context, origin, ipkFile, appId) {
+            const up = await catalog.api("POST", "/api/apps/packages", new Uint8Array(fs.readFileSync(ipkFile)), catalog.admin);
+            if (up.status !== 200 || !up.release) return { state: "failed", errorText: "the catalog refused it: " + (up.error || up.status) };
+            await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+            const page = await context.newPage();
+            try {
+                await page.goto(`${origin}/usr/palm/applications/org.webosphoenix.marketplace/index.html`, { waitUntil: "domcontentloaded" });
+                await page.waitForFunction(() => !!window.PalmServiceBridge);
+                return await page.evaluate(([url, key, id]) => {
+                    const call = (m, prm, done) => {
+                        const b = new PalmServiceBridge();
+                        b.onservicecallback = (x) => done(JSON.parse(x), b);
+                        b.call("luna://org.webosphoenix.service.packages/" + m, JSON.stringify(prm));
+                    };
+                    return new Promise((res) => call("trustSource", { url, key }, (t) => {
+                        if (t.returnValue === false) return res({ state: "failed", errorText: "trustSource: " + t.errorText });
+                        call("install", { sourceId: "phoenix", id, subscribe: true }, (r, b) => {
+                            if (r.returnValue === false || r.state === "failed") { b.cancel && b.cancel(); res(Object.assign({ state: "failed" }, r)); }
+                            else if (r.state === "installed") res(r);
+                        });
+                    }));
+                }, [catalog.catalogUrl, catalog.key, appId]);
+            } finally {
+                await page.close();
+            }
+        },
+        async stop() {
+            await catalog.stop();
+            fs.rmSync(device, { recursive: true, force: true });
+        }
+    };
+}
+
+module.exports = { phpAvailable, startCatalog, startSite, startMuseum, startFeed, startPhoenixDevice, webApp, png, freePort };
