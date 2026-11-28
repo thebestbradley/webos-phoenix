@@ -130,6 +130,11 @@ FocusScope {
     Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
+    // ... Text size, Bold text and High contrast: the shell's text and
+    // colours (Theme.textSize, boldText, highContrast), as the web apps'.
+    Binding { target: Theme; property: "textSize"; value: shell.system && typeof shell.system.textSize === "number" ? shell.system.textSize : 100 }
+    Binding { target: Theme; property: "boldText"; value: !!(shell.system && shell.system.boldText) }
+    Binding { target: Theme; property: "highContrast"; value: !!(shell.system && shell.system.highContrast) }
     // Settings > Advanced (docs/M6-PLAN.md F4; the system's tweaks, see
     // SimSystemStatus.tweaks): tweak(name) is the setting, or its default.
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
@@ -3434,7 +3439,7 @@ FocusScope {
                                 text: deleteDialog.titleText
                                 color: "#FFFFFF"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: Theme.px(18)
+                                font.pixelSize: Theme.fontPx(18)
                                 font.bold: true
                             }
                             Text {
@@ -3444,7 +3449,7 @@ FocusScope {
                                 text: deleteDialog.messageText
                                 color: "#FFFFFF"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: Theme.px(14)
+                                font.pixelSize: Theme.fontPx(14)
                                 font.bold: true
                             }
                             Column {
@@ -4199,7 +4204,8 @@ FocusScope {
             textFormat: Text.StyledText
             color: Theme.text
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(15)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(15)
             text: {
                 var locked = shell.keyboardAccess.lockedModifiers;
                 return stickyChip.names(stickyChip.mods).map(function (n, i) {

@@ -61,9 +61,10 @@ Item {
         text: qsTr("Just type...")
         elide: Text.ElideRight
         color: "white"
-        opacity: 0.8
+        opacity: Theme.highContrast ? 1 : 0.8
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(18)
+        font.weight: Theme.textWeight
+        font.pixelSize: Theme.fontPx(18)
         font.italic: true
     }
 
@@ -81,5 +82,9 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: pill.tapped()
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Just Type")
+        Accessible.description: qsTr("Search, or start an action")
+        Accessible.onPressAction: pill.tapped()
     }
 }

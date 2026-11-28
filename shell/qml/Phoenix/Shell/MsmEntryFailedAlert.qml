@@ -26,7 +26,7 @@ Item {
         x: dialog.margin
         y: dialog.margin + dialog.topOffset
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(18)
+        font.pixelSize: Theme.fontPx(18)
         font.bold: true
         wrapMode: Text.Wrap
         color: "#FFFFFF"
@@ -38,7 +38,7 @@ Item {
         x: dialog.margin
         y: titleText.y + titleText.height + dialog.margin
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(14)
+        font.pixelSize: Theme.fontPx(14)
         font.bold: true
         wrapMode: Text.Wrap
         color: "#FFFFFF"

@@ -46,13 +46,15 @@ export interface EmergencyInfo {
 export interface AccessibilityPrefs {
     /** No card and launcher animations: things appear and go at once. */
     reduceMotion?: boolean;
-    /** Stronger text and outline colors in the apps. */
+    /** Stronger text and outline colors in the apps and the system UI. */
     highContrast?: boolean;
+    /** Semibold text where it was regular, in the system UI and Phoenix's apps. */
+    boldText?: boolean;
     /** Both ears get the same sound. */
     monoAudio?: boolean;
     /** Show captions where videos have them. */
     captions?: boolean;
-    /** Text size in every app, a percentage (100, the default: 16px to the rem; the runtime sets each page's root font size). */
+    /** Text size in every app and the system UI, a percentage (100, the default: 16px to the rem; the runtime sets each page's root font size, the shell's Theme.textSize its text). */
     textSize?: number;
     /** Hardware keyboard: a modifier pressed on its own holds for the next key (twice: until pressed again). */
     stickyKeys?: boolean;

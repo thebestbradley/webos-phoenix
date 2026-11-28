@@ -42,6 +42,9 @@ Item {
         property bool available: true
         signal triggered
         objectName: "drawer_" + name
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+        Accessible.onPressAction: if (action.available) action.triggered()
         anchors.verticalCenter: parent.verticalCenter
         color: available ? Theme.text : Theme.textDim
         opacity: available ? (tap.pressed ? 0.6 : 1) : 0.5
@@ -70,6 +73,7 @@ Item {
                                : qsTr("Notifications")
         color: Theme.textDim
         font.family: Theme.fontFamily
+        font.weight: Theme.textWeight
         font.pixelSize: Theme.drawerHeaderFontSize
     }
 

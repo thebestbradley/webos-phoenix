@@ -17,6 +17,20 @@ function _num(v) {
     return typeof v === "number" && isFinite(v);
 }
 
+// ---- Settings > Accessibility (the shell's text, colours and motion) -----------------
+// The system preference accessibility (Settings' AccessibilityPage, saved
+// as it is by luna-sysservice, PrefsFactory.cpp:355-361), as the runtime's
+// systemStatus reports it to the simulator (runtime/phoenix-runtime.js:
+// reduceMotion, textSize (textSizePercent: 50-200, 100 the default),
+// boldText, highContrast). null when the reply has no accessibility.
+function accessibility(reply) {
+    var a = reply && reply.accessibility;
+    if (!a || typeof a !== "object")
+        return null;
+    var size = _num(a.textSize) ? Math.max(50, Math.min(200, Math.round(a.textSize))) : 100;
+    return { reduceMotion: !!a.reduceMotion, textSize: size, boldText: !!a.boldText, highContrast: !!a.highContrast };
+}
+
 // ---- Settings > Advanced and Text Assist (the shell's tweaks) -----------------------
 // The system preferences behind Shell.tweak(), and what they mean: the
 // runtime's tweaks(p), runtime/phoenix-runtime.js (TWEAK_KEYS), the one list.

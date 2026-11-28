@@ -63,7 +63,7 @@ Item {
         width: card.width - 2 * card.margin
         elide: Text.ElideRight
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(18)
+        font.pixelSize: Theme.fontPx(18)
         font.bold: true
         color: "#FFFFFF"
         text: card.title
@@ -109,7 +109,7 @@ Item {
                         width: Theme.px(52)
                         anchors.verticalCenter: parent.verticalCenter
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(16)
+                        font.pixelSize: Theme.fontPx(16)
                         font.bold: true
                         color: "#FFFFFF"
                         text: gauge.modelData.label
@@ -130,7 +130,7 @@ Item {
                         x: icon.x + icon.width + Theme.px(8)
                         anchors.verticalCenter: parent.verticalCenter
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(16)
+                        font.pixelSize: Theme.fontPx(16)
                         font.bold: true
                         color: gauge.level < 0 ? "#8a8a86" : gauge.charging ? "#8CE05A"
                              : gauge.level <= Theme.batteryChargeLevels[0] ? "#FF4D40"
@@ -166,7 +166,7 @@ Item {
             width: parent.width - x
             wrapMode: Text.Wrap
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(14)
+            font.pixelSize: Theme.fontPx(14)
             font.bold: true
             color: "#FFFFFF"
             text: card.message

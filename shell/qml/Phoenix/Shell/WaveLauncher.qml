@@ -198,7 +198,7 @@ Item {
             text: titlePill.it ? (titlePill.it.appId ? titlePill.it.title : qsTr("Launcher")) : ""
             color: "#FFFFFF"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(15)
+            font.pixelSize: Theme.fontPx(15)
             font.bold: true
         }
     }

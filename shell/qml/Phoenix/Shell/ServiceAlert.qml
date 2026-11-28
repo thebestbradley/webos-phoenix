@@ -43,7 +43,7 @@ Item {
         visible: dialog.title !== ""
         height: visible ? implicitHeight : 0
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(18)
+        font.pixelSize: Theme.fontPx(18)
         font.bold: true
         wrapMode: Text.Wrap
         textFormat: Text.PlainText
@@ -58,7 +58,7 @@ Item {
         x: dialog.margin
         y: titleText.y + titleText.height + (titleText.visible ? dialog.margin : 0)
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(14)
+        font.pixelSize: Theme.fontPx(14)
         font.bold: true
         wrapMode: Text.Wrap
         textFormat: Text.PlainText

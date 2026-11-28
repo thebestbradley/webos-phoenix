@@ -129,7 +129,7 @@ Item {
                 text: overlay.title
                 color: "#FFFFFF"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 22 : 19)
+                font.pixelSize: Theme.fontPx(Theme.tablet ? 22 : 19)
                 font.bold: true
             }
             MouseArea {
@@ -150,7 +150,7 @@ Item {
                 color: "#FFFFFF"
                 selectionColor: "#2C8CE0"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 22 : 19)
+                font.pixelSize: Theme.fontPx(Theme.tablet ? 22 : 19)
                 font.bold: true
                 maximumLength: 24
                 clip: true

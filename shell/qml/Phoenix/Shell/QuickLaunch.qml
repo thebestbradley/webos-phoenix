@@ -146,8 +146,8 @@ Item {
         width: ql.iconSize + Theme.px(12)
         height: ql.iconSize + Theme.px(12)
         radius: Theme.px(10)
-        color: "#302c8ce0"
-        border.color: "#2c8ce0"
+        color: Theme.focusFill
+        border.color: Theme.focusRing
         border.width: Theme.px(2)
     }
 
@@ -168,6 +168,12 @@ Item {
             glyph: modelData.glyph
             source: modelData.icon
             largeSource: modelData.largeIcon || ""
+            // For a screen reader each icon is a button (the dock's one
+            // MouseArea below handles the touches).
+            decorative: false
+            Accessible.description: qsTr("In the dock, %1 of %2").arg(index + 1).arg(ql.pinned.length)
+            onClicked: ql.activateSlot(index)
+            Accessible.focused: ql.keySlot === index
         }
     }
 
@@ -175,6 +181,11 @@ Item {
     // half active (quicklaunchbar.cpp:65-67).
     Item {
         id: launcherButton
+        Accessible.role: Accessible.Button
+        Accessible.name: ql.launcherOpen ? qsTr("Close the launcher") : qsTr("Launcher")
+        Accessible.description: ql.assistantEnabled ? qsTr("Hold for the assistant") : ""
+        Accessible.onPressAction: ql.activateSlot(ql.pinned.length)
+        Accessible.focused: ql.keySlot === ql.pinned.length
         x: ql.slotCentre(ql.pinned.length) - width / 2
         y: Theme.quickLaunchIconY
         width: ql.iconSize
@@ -202,6 +213,7 @@ Item {
         id: dockMouse
         objectName: "quickLaunchMouse"
         anchors.fill: parent
+        Accessible.ignored: true   // the icons and the launcher button speak
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         pressAndHoldInterval: Theme.iconMenuHoldInterval
         preventStealing: ql.draggedId !== "" || heldSlot >= 0

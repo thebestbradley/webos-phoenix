@@ -810,3 +810,7 @@ html.phoenix-high-contrast .pui-row { border-bottom-color: #555; }
 html.phoenix-high-contrast .pui-row-value { color: #0a4a86; font-weight: bold; }
 html.phoenix-high-contrast .pui-note, html.phoenix-high-contrast .pui-row-subtitle { color: #2e2e2c; }
 html.phoenix-high-contrast :focus-visible { outline: 3px solid #000; outline-offset: 1px; }
+/* Settings > Accessibility > Bold text (the runtime's phoenix-bold-text):
+   text that inherits the page's weight is semibold; what sets its own
+   (headings, bold values) keeps it. */
+html.phoenix-bold-text body { font-weight: 600; }

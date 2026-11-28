@@ -223,7 +223,7 @@ FocusScope {
     Text {
         id: titleText
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(18)
+        font.pixelSize: Theme.fontPx(18)
         font.bold: true
         color: "#FFFFFF"
         x: panel.sideBySide ? panel.edgeOffset + Theme.centred(panel.sideColumnWidth, width)
@@ -281,7 +281,7 @@ FocusScope {
             horizontalAlignment: panel.isPINEntry ? TextInput.AlignHCenter : TextInput.AlignLeft
             color: panel.isPINEntry ? "#FFFFFF" : "#000000"
             font.bold: true
-            font.pixelSize: Theme.px(18)
+            font.pixelSize: Theme.fontPx(18)
             font.letterSpacing: Theme.px(2)
             font.family: Theme.fontFamily
             // A screen reader hears what it is and, as the dots show, how
@@ -297,8 +297,9 @@ FocusScope {
         Text {
             visible: inputField.text.length === 0
             color: "#9C9C9C"
-            font.pixelSize: Theme.px(17)
+            font.pixelSize: Theme.fontPx(17)
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             width: parent.width - Theme.px(20)
             anchors.centerIn: parent
             horizontalAlignment: panel.isPINEntry ? Text.AlignHCenter : Text.AlignLeft
@@ -535,7 +536,7 @@ FocusScope {
             text: pinButton.caption
             color: "#FFFFFF"
             font.bold: true
-            font.pixelSize: Theme.px(30)
+            font.pixelSize: Theme.px(30)   // the keypad's digits keep their keys' size
             font.family: Theme.fontFamily
         }
         Image {
@@ -552,7 +553,7 @@ FocusScope {
             anchors.margins: Theme.px(3)
             radius: Theme.px(10)
             color: "transparent"
-            border.color: "#2c8ce0"
+            border.color: Theme.focusRing
             border.width: Theme.px(3)
         }
         // The blank cell left of 0 is no key.

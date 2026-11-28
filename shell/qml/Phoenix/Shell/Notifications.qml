@@ -515,6 +515,7 @@ Item {
     }
     // Clearing bannerActive from outside drops the banner and the queue.
     onBannerActiveChanged: {
+        _announce();
         if (!bannerActive && _bannerShowing !== null) {
             _bannerQueue = [];
             _bannerShowing = null;
@@ -528,6 +529,20 @@ Item {
     // BannerWindow::handleTap: while a banner shows, a tap activates it
     // (its app with its launch params; nothing without params); otherwise
     // it opens the dashboard.
+    // What the notification bar says to a screen reader (bannerTap), and
+    // each new banner announced as it comes (Qt 6.8's Accessible.announce,
+    // as VoiceOver reads iOS's banners).
+    readonly property string spokenBanner: activeCallShown && activeCall
+        ? qsTr("Call, %1").arg(activeCall.message || "")
+        : bannerActive ? bannerText
+        : model && model.count > 0 ? qsTr("%n notifications", "", model.count) : qsTr("Notifications")
+    onBannerTextChanged: _announce()
+    function _announce() {
+        if (!bannerActive || bannerText === "")
+            return;
+        if (typeof bannerTap.Accessible.announce === "function")
+            bannerTap.Accessible.announce(bannerText);
+    }
     function tapBanner() {
         // ActiveCallBanner::handleTap: back to the call.
         if (activeCallShown) {
@@ -606,6 +621,9 @@ Item {
             anchors.bottom: root.overlay ? parent.bottom : space.top
             visible: root.dashboardOpen
             onClicked: root.dashboardOpen = false
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Close the notifications")
+            Accessible.onPressAction: root.dashboardOpen = false
         }
 
         // ---- The notification area ----------------------------------------------------
@@ -622,6 +640,15 @@ Item {
             y: root.overlay ? -Theme.statusBarHeight : root.height - height
             height: root.overlay ? Theme.statusBarHeight : root.phoneSpaceHeight
             visible: root.overlay ? root.bannerActive : height > 0
+            // High contrast: the bar's top edge, a solid rule over the app.
+            Rectangle {
+                objectName: "notificationSpaceRule"
+                visible: Theme.highContrast && !root.overlay
+                width: parent.width
+                height: Theme.contrastBorderWidth
+                color: Theme.contrastBorder
+                z: 10
+            }
 
             // The banner, in the bar's top 28 px while the space opens under it.
             Item {
@@ -647,6 +674,7 @@ Item {
                     y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
                     spacing: Theme.px(5)
                     AppIcon {
+                        decorative: true
                         size: Theme.px(22)
                         showLabel: false
                         color: root.bannerColor
@@ -662,6 +690,7 @@ Item {
                         text: root.bannerText
                         color: Theme.text
                         font.family: Theme.fontFamily
+                        font.weight: Theme.textWeight
                         font.pixelSize: Theme.bannerFontSize
                     }
                 }
@@ -689,6 +718,7 @@ Item {
                 readonly property string elapsed: root.activeCall ? root.callTime(root.activeCall.startTime, now) : ""
                 AppIcon {
                     id: activeCallIcon
+                    decorative: true
                     x: Theme.px(2)
                     y: Theme.px(2)
                     size: parent.height - Theme.px(4)
@@ -707,7 +737,8 @@ Item {
                     color: Theme.text
                     elide: Text.ElideMiddle
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(16)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(16)
                 }
             }
 
@@ -726,6 +757,7 @@ Item {
                     model: root.overlay ? null : root.model
                     delegate: AppIcon {
                         required property var model
+                        decorative: true
                         size: Theme.bannerHeight
                         showLabel: false
                         color: model.color
@@ -736,6 +768,7 @@ Item {
             }
 
             MouseArea {
+                id: bannerTap
                 objectName: "bannerTap"
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -743,6 +776,13 @@ Item {
                 height: Theme.bannerHeight
                 visible: (root.hasNotifications || root.bannerActive || root.activeCallShown) && !root.dashboardOpen
                 onClicked: root.tapBanner()
+                // For a screen reader: the banner's words, the call, or how
+                // many notifications wait; a press does what a tap does.
+                Accessible.role: Accessible.Button
+                Accessible.name: root.spokenBanner
+                Accessible.description: root.activeCallShown ? qsTr("Back to the call")
+                                        : root.bannerActive ? qsTr("Notification") : qsTr("Opens the notifications")
+                Accessible.onPressAction: root.tapBanner()
             }
 
             // Phones: the dashboard fills the space as it grows (10 px top padding,
@@ -755,7 +795,7 @@ Item {
                 // Taps on the dashboard stay in it: between the header's
                 // buttons, or under the rows of a drawer pulled to the whole
                 // screen, they never reach the cards or Just Type beneath.
-                MouseArea { anchors.fill: parent }
+                MouseArea { anchors.fill: parent; Accessible.ignored: true }
                 // Pull up for the whole screen (Phoenix).
                 DrawerHandle {
                     id: phoneHandle
@@ -828,7 +868,7 @@ Item {
             color: Theme.black
             clip: true
             z: 2
-            MouseArea { anchors.fill: parent }
+            MouseArea { anchors.fill: parent; Accessible.ignored: true }
             Item {
                 id: phoneAlertHost
                 objectName: "phoneAlertHost"
@@ -852,7 +892,7 @@ Item {
             source: Theme.asset("popup-bg.png")
             border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
             z: 2
-            MouseArea { anchors.fill: parent }
+            MouseArea { anchors.fill: parent; Accessible.ignored: true }
             // The scene behind, blurred faintly within the panel's shape.
             BackdropBlur {
                 anchors.fill: parent
@@ -937,6 +977,7 @@ Item {
                     model: root.overlay ? root.model : null
                     delegate: AppIcon {
                         required property var model
+                        decorative: true
                         size: Theme.bannerHeight
                         showLabel: false
                         color: model.color
@@ -955,6 +996,10 @@ Item {
             width: tabletIcons.width + Theme.px(10)
             height: Theme.statusBarHeight
             onClicked: root.dashboardOpen = !root.dashboardOpen
+            Accessible.role: Accessible.ButtonMenu
+            Accessible.name: root.spokenBanner
+            Accessible.description: root.dashboardOpen ? qsTr("Closes the notifications") : qsTr("Opens the notifications")
+            Accessible.onPressAction: root.dashboardOpen = !root.dashboardOpen
         }
 
         // Tablets: the drop-down under the status bar, its right edge 11 px
@@ -1004,6 +1049,7 @@ Item {
             TrackpadSwipe {
                 parent: list
                 objectName: "phoneDashboardWheel"
+                Accessible.ignored: true
                 anchors.fill: parent
                 z: 5
                 verticalMomentum: true
@@ -1150,8 +1196,8 @@ Item {
                     anchors.fill: parent
                     anchors.margins: Theme.px(2)
                     radius: Theme.px(6)
-                    color: "#302c8ce0"
-                    border.color: "#2c8ce0"
+                    color: Theme.focusFill
+                    border.color: Theme.focusRing
                     border.width: Theme.px(2)
                     z: 3
                 }
@@ -1193,6 +1239,7 @@ Item {
                 }
                 DashboardItem {
                     id: content
+                    spokenByParent: true
                     width: parent.width
                     height: parent.height
                     opacity: 1 - Math.abs(x) / width
@@ -1333,6 +1380,9 @@ Item {
                         onClicked: (m) => {
                             if (content.x !== 0 || item.manualDrag && moved || layerMode !== 0 || content.layerX !== 0)
                                 return;
+                            tap(m.x, m.y);
+                        }
+                        function tap(x, y) {
                             if (root.selecting) {
                                 if (item.selectable)
                                     root.toggleSelected(item.key);
@@ -1340,14 +1390,27 @@ Item {
                             }
                             // A dashboard window: the tap is its page's.
                             if (item.windowKey !== "") {
-                                if (!item.manualDrag || m.x <= Theme.dashboardBadgeWidth)
-                                    content.pointer("tap", m.x, m.y);
+                                if (!item.manualDrag || x <= Theme.dashboardBadgeWidth)
+                                    content.pointer("tap", x, y);
                                 return;
                             }
                             root.activated(item.appId, item.params);
                             if (!item.ongoing && !item.persistent)
                                 root.dismissRequested(item.index);
                         }
+                        // For a screen reader: the row's words and where it
+                        // is; a press is a tap (on a dashboard window, on
+                        // its badge), scrolling left the swipe that clears it.
+                        Accessible.role: root.selecting ? Accessible.CheckBox : Accessible.Button
+                        Accessible.name: content.spoken
+                        Accessible.description: item.ongoing || item.persistent ? qsTr("Notification %1 of %2").arg(item.index + 1).arg(root.model ? root.model.count : 0)
+                            : qsTr("Notification %1 of %2. Scroll left to clear it").arg(item.index + 1).arg(root.model ? root.model.count : 0)
+                        Accessible.checkable: root.selecting && item.selectable
+                        Accessible.checked: !!root.selectedIds[item.key]
+                        Accessible.focusable: true
+                        Accessible.focused: root.keyRow === item.index
+                        Accessible.onPressAction: tap(Theme.dashboardBadgeWidth / 2, height / 2)
+                        Accessible.onScrollLeftAction: if (!item.ongoing && !item.persistent && !remove.running) remove.start()
                     }
                     SelectMark {
                         visible: item.selectable

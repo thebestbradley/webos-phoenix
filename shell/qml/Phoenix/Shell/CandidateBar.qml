@@ -198,6 +198,7 @@ Item {
         font.italic: said !== ""
         color: bar.textColor
         font.family: Theme.fontFamily
+        font.weight: Theme.textWeight
         font.pixelSize: bar.fontSize
     }
 

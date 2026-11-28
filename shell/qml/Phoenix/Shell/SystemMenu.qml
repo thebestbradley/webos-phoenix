@@ -256,6 +256,9 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: menu.closeRequested()
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Close the system menu")
+        Accessible.onPressAction: menu.closeRequested()
     }
 
     // ---- MenuDivider.qml ---------------------------------------------------------
@@ -286,6 +289,34 @@ Item {
         width: parent ? parent.width : 0
         height: Theme.systemMenuRowHeight
 
+        // For a screen reader: what the row shows, its texts (and a list
+        // entry's spoken words) in order; a toggle's state (spokenState,
+        // "On" / "Off") as its description and checked state. A row that
+        // does nothing (the date, the battery) is static text.
+        property string spokenState: ""
+        property string spokenName: {
+            var parts = [];
+            for (var i = 0; i < children.length; ++i) {
+                var c = children[i];
+                if (!c || !c.visible)
+                    continue;
+                var t = c.spoken !== undefined ? c.spoken : c.text !== undefined ? c.text : "";
+                if (t !== undefined && String(t).trim() !== "")
+                    parts.push(String(t).trim());
+            }
+            return parts.join(", ");
+        }
+        Accessible.role: selectable ? Accessible.Button : Accessible.StaticText
+        Accessible.name: spokenName
+        Accessible.description: spokenState
+        Accessible.checkable: spokenState !== ""
+        Accessible.checked: spokenState === qsTr("On")
+        Accessible.focusable: keyNavigable
+        // The keyboard's row (GAPS V8 (3)) is the screen reader's too.
+        Accessible.focused: keyFocused
+        Accessible.ignored: spokenName === "" && !adjustable
+        Accessible.onPressAction: if (selectable) entry.action()
+
         ArtBorderImage {
             visible: (entry.selectable && entry.pressed) || entry.forceSelected || entry.keyFocused
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
@@ -306,8 +337,17 @@ Item {
     component Label: Text {
         x: Theme.systemMenuIndent
         anchors.verticalCenter: parent.verticalCenter
+        // Larger text (Settings > Accessibility > Text size) shrinks to
+        // the row, down to the original's size, then is cut short: never
+        // past the menu's edge or under a row's icon. At the original's
+        // size every label fits, as before.
+        width: parent ? parent.width - x - Theme.px(44) : implicitWidth
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: Theme.px(16)
+        elide: Text.ElideRight
         color: Theme.systemMenuText
         font.family: Theme.fontFamily
+        font.weight: Theme.textWeight
         font.pixelSize: Theme.systemMenuFontSize
     }
 
@@ -348,6 +388,11 @@ Item {
         property bool connected: false
         property int bars: -1           // Wi-Fi: 0-3; -1 none
         property bool secured: false
+        // What a screen reader says for it (the Entry it is in reads it).
+        readonly property string spoken: [name, status, connected ? qsTr("connected") : "",
+                                          secured ? qsTr("secured") : "",
+                                          bars >= 0 ? qsTr("%1 of 3 bars").arg(bars) : ""]
+                                         .filter(function (s) { return s !== ""; }).join(", ")
         // Wi-Fi's icons sit 3 px from the edge, the others' 8 (WifiEntry.qml:12, BluetoothEntry.qml:10).
         readonly property int rightMargin: Theme.px(bars >= 0 ? 3 : 8)
         readonly property int iconSpacing: Theme.px(4)
@@ -365,6 +410,7 @@ Item {
             text: le.name
             color: Theme.systemMenuText
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Theme.systemMenuEntryFontSize
         }
         Text {
@@ -454,9 +500,14 @@ Item {
         Entry {
             selectable: drawer.active
             onAction: drawer.isOpen ? drawer.close() : drawer.open()
+            Accessible.role: Accessible.ButtonDropDown
+            Accessible.description: drawer.isOpen ? qsTr("Expanded") : qsTr("Collapsed")
 
             Label {
                 id: titleText
+                // Its own width (the spinner and the state follow it), at
+                // most what leaves the state room.
+                width: Math.min(implicitWidth, parent.width - x - Theme.px(drawer.stateGap + 40))
                 text: drawer.title
                 color: drawer.active ? Theme.systemMenuText : Theme.systemMenuTextDim
             }
@@ -474,6 +525,7 @@ Item {
                 text: drawer.stateText
                 color: Theme.systemMenuTextDim
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Theme.systemMenuStateFontSize
                 font.capitalization: Font.AllUppercase
             }
@@ -509,6 +561,7 @@ Item {
         id: sliderRow
         property real value: 0
         property string sliderName: ""
+        property string spokenSlider: ""
         property url lessSource: ""
         property url moreSource: ""
         // Icons drawn in place of art (the volume's speakers).
@@ -552,6 +605,14 @@ Item {
             Item {
                 id: slider
                 objectName: sliderRow.sliderName
+                // For a screen reader: a slider with its value; increase
+                // and decrease step it a tenth, as Left and Right do.
+                Accessible.role: Accessible.Slider
+                Accessible.name: sliderRow.spokenSlider
+                Accessible.description: qsTr("%1 percent").arg(Math.round(slider.value * 100))
+                Accessible.focusable: true
+                Accessible.onIncreaseAction: sliderRow.adjust(0.1)
+                Accessible.onDecreaseAction: sliderRow.adjust(-0.1)
                 readonly property real value: Math.max(0, Math.min(1, sliderRow.value))
                 readonly property int railEdgeOffset: Theme.px(8)
                 readonly property int railBorderWidth: Theme.px(11)
@@ -674,7 +735,7 @@ Item {
             source: Theme.asset("menu-dropdown-bg.png")
             border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
-            MouseArea { anchors.fill: parent }  // swallow taps
+            MouseArea { anchors.fill: parent; Accessible.ignored: true }  // swallow taps
 
             // The scene behind the menu, blurred faintly within its shape.
             BackdropBlur {
@@ -698,6 +759,15 @@ Item {
             width: parent.width - 2 * Theme.systemMenuSideMargin
             height: parent.height - Theme.systemMenuBottomMargin
             clip: true
+            // High contrast: the list's edge (under the status bar, and
+            // round the rows the art's shadow frames).
+            ContrastOutline {
+                anchors.fill: undefined
+                // Its right edge on screen (the art runs 11 px past it).
+                width: parent.width - Math.max(0, Theme.systemMenuEdgeOffset - Theme.systemMenuSideMargin)
+                height: Math.min(parent.height, mainMenu.height)
+                z: 5
+            }
 
             Flickable {
                 id: flick
@@ -749,6 +819,7 @@ Item {
                     SliderRow {
                         readonly property real floor: Theme.minimumBrightness
                         sliderName: "systemMenuBrightness"
+                        spokenSlider: qsTr("Brightness")
                         lessSource: Theme.asset("statusBar/brightness-less.png")
                         moreSource: Theme.asset("statusBar/brightness-more.png")
                         value: menu.sys ? (menu.sys.brightness - floor) / (1 - floor) : 0
@@ -759,6 +830,7 @@ Item {
                     // ---- Volume (Phoenix): the master volume, below brightness ----
                     SliderRow {
                         sliderName: "systemMenuVolume"
+                        spokenSlider: qsTr("Volume")
                         lessIcon: Component { SpeakerIcon { waves: 0 } }
                         moreIcon: Component { SpeakerIcon { waves: 2 } }
                         value: menu.sys && menu.sys.volume !== undefined ? menu.sys.volume / 100 : 0
@@ -1109,6 +1181,7 @@ Item {
                             menu.sys.airplaneMode = !menu.sys.airplaneMode;
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);
                         }
+                        spokenState: on ? qsTr("On") : qsTr("Off")
                         Label {
                             text: airplane.label
                             color: airplane.selectable ? Theme.systemMenuText : Theme.systemMenuTextDim
@@ -1139,6 +1212,7 @@ Item {
                             menu.sys.rotationLocked = !menu.sys.rotationLocked;
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);
                         }
+                        spokenState: locked ? qsTr("On") : qsTr("Off")
                         Label { text: rotation.label }
                         Icon {
                             source: Theme.asset(rotation.locked ? "statusBar/icon-rotation-lock-off.png" : "statusBar/icon-rotation-lock.png")
@@ -1164,6 +1238,7 @@ Item {
                             menu.sys.muted = !menu.sys.muted;
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);
                         }
+                        spokenState: muted ? qsTr("On") : qsTr("Off")
                         Label { text: mute.label }
                         Icon {
                             source: Theme.asset(mute.muted ? "statusBar/icon-mute-off.png" : "statusBar/icon-mute.png")
@@ -1192,6 +1267,7 @@ Item {
                             menu.toggleTorch();
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);
                         }
+                        spokenState: on ? qsTr("On") : qsTr("Off")
                         Label { text: torch.label }
                         Canvas {
                             objectName: "systemMenuFlashlightIcon"

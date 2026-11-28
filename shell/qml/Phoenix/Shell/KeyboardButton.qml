@@ -251,6 +251,7 @@ Item {
             text: row.text
             color: Theme.systemMenuText
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Theme.systemMenuFontSize
         }
         MouseArea {

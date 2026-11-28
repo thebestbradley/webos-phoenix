@@ -234,6 +234,12 @@ Item {
                 // animation (its style, its pace) starts with the first frame.
                 tweaks: root.savedTweaks()
                 reduceMotion: typeof simSettings !== "undefined" && !!simSettings && simSettings.value("accessibility/reduceMotion") === "1"
+                // ... and Text size, Bold text and High contrast, so the
+                // first frame's text is already the right size and colour.
+                textSize: typeof simSettings !== "undefined" && !!simSettings && Number(simSettings.value("accessibility/textSize")) > 0
+                          ? Number(simSettings.value("accessibility/textSize")) : 100
+                boldText: typeof simSettings !== "undefined" && !!simSettings && simSettings.value("accessibility/boldText") === "1"
+                highContrast: typeof simSettings !== "undefined" && !!simSettings && simSettings.value("accessibility/highContrast") === "1"
             }
         }
 
@@ -696,6 +702,12 @@ Item {
                 simSettings.setValue("system/tweaks", JSON.stringify(s.tweaks));
             if (s.reduceMotion !== undefined && typeof simSettings !== "undefined")
                 simSettings.setValue("accessibility/reduceMotion", s.reduceMotion ? "1" : "0");
+            if (typeof s.textSize === "number" && typeof simSettings !== "undefined")
+                simSettings.setValue("accessibility/textSize", String(Math.round(s.textSize)));
+            if (s.boldText !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("accessibility/boldText", s.boldText ? "1" : "0");
+            if (s.highContrast !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("accessibility/highContrast", s.highContrast ? "1" : "0");
         }
     }
     Connections {

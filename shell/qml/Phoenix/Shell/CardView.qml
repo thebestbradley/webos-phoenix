@@ -1169,6 +1169,17 @@ Item {
 
             uid: model.uid
             title: model.title
+            // For a screen reader: the app and where the card is ("Email,
+            // card 1 of 3"); a press opens it, scrolling up throws it away
+            // (the flick up), as VoiceOver's actions on iOS's app switcher.
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("%1, card %2 of %3").arg(title).arg(index + 1).arg(cards.count)
+            Accessible.description: view.maximized && place !== null && place.focused ? qsTr("Open")
+                                    : qsTr("Press to open it, scroll up to close it")
+            Accessible.focusable: true
+            Accessible.focused: place !== null && place.focused
+            Accessible.onPressAction: view.maximize(uid)
+            Accessible.onScrollUpAction: if (uid !== view.pinnedUid) view.close(uid)
             icon: {
                 var info = view.source && typeof view.source.appInfo === "function" ? view.source.appInfo(model.appId) : null;
                 return info && info.icon ? info.icon : "";
@@ -1429,6 +1440,7 @@ Item {
     MultiPointTouchArea {
         id: touch
         anchors.fill: parent
+        Accessible.ignored: true   // each card speaks for itself
         enabled: view.maximizeProgress === 0 && view.count > 0
         mouseEnabled: true
         maximumTouchPoints: 5
@@ -1761,6 +1773,7 @@ Item {
     TrackpadSwipe {
         id: wheel
         objectName: "cardWheel"
+        Accessible.ignored: true
         anchors.fill: parent
         enabled: touch.enabled
         blocked: function () { return touch.fingerCount() > 0 || view.preparing; }

@@ -109,6 +109,9 @@ Item {
         objectName: "iconMenuScrim"
         anchors.fill: parent
         enabled: menu.open
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Close the menu")
+        Accessible.onPressAction: menu.closeRequested()
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onPressed: menu.closeRequested()
     }
@@ -200,7 +203,8 @@ Item {
         Behavior on scale { NumberAnimation { duration: Theme.statusBarMenuFadeDuration; easing.type: Easing.OutCubic } }
         transformOrigin: menu.side === "right" ? Item.Left : menu.side === "left" ? Item.Right
                        : menu.side === "below" ? Item.Top : Item.Bottom
-        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }   // swallow taps
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton; Accessible.ignored: true }   // swallow taps
+        ContrastOutline { anchors.fill: column; anchors.margins: -Theme.px(4); radius: Theme.px(6) }
 
         Column {
             id: column
@@ -217,6 +221,12 @@ Item {
                     readonly property bool available: modelData.available !== false
                     readonly property real labelWidth: label.implicitWidth
                     objectName: "iconMenu_" + modelData.name
+                    Accessible.role: Accessible.MenuItem
+                    Accessible.name: modelData.text
+                    Accessible.description: available ? "" : qsTr("Not available")
+                    Accessible.focusable: available
+                    Accessible.focused: menu.keyIndex === index
+                    Accessible.onPressAction: if (available && menu.open) menu.choose(modelData.name)
                     width: column.width
                     height: Theme.systemMenuRowHeight
                     Image {
@@ -244,6 +254,7 @@ Item {
                         color: Theme.systemMenuText
                         opacity: row.available ? 1 : 0.4
                         font.family: Theme.fontFamily
+                        font.weight: Theme.textWeight
                         font.pixelSize: Theme.systemMenuFontSize
                     }
                     MouseArea {

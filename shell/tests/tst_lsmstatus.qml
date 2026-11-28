@@ -6,7 +6,8 @@
 // LsmStatus.js): Wi-Fi (webos-connman-adapter), Bluetooth (bluetooth2), VPN
 // (luneos-vpn-adapter), a modem's telephony and WAN (webOS 2's API, as
 // LunaSysMgr read it), audiod's volume, the system preferences (tones,
-// rotation lock, Settings > Advanced) and the start-up preferences file.
+// rotation lock, Settings > Advanced, Settings > Accessibility) and the
+// start-up preferences file.
 // LsmSystemStatus itself needs luna-surfacemanager's QML modules, which only
 // a device has.
 
@@ -16,6 +17,25 @@ import "../qml/Phoenix/Lsm/LsmStatus.js" as LsmStatus
 
 TestCase {
     name: "LsmStatus"
+
+    // Settings > Accessibility on a device: the preference as Settings
+    // saves it, read as the runtime gives it to the simulator's shell.
+    function test_accessibility() {
+        compare(LsmStatus.accessibility({ returnValue: true }), null);
+        var d = LsmStatus.accessibility({ accessibility: {} });
+        compare(d.reduceMotion, false);
+        compare(d.textSize, 100);
+        compare(d.boldText, false);
+        compare(d.highContrast, false);
+        var a = LsmStatus.accessibility({ accessibility: { reduceMotion: true, textSize: 150, boldText: true, highContrast: true, monoAudio: true } });
+        compare(a.reduceMotion, true);
+        compare(a.textSize, 150);
+        compare(a.boldText, true);
+        compare(a.highContrast, true);
+        compare(a.monoAudio, undefined);
+        compare(LsmStatus.accessibility({ accessibility: { textSize: 900 } }).textSize, 200);
+        compare(LsmStatus.accessibility({ accessibility: { textSize: "big" } }).textSize, 100);
+    }
 
     function test_tweaksAreTheRuntimes() {
         var d = LsmStatus.tweaks({});

@@ -174,6 +174,13 @@ QtObject {
     // Settings > Accessibility "Reduce motion" (system preference
     // accessibility.reduceMotion): the shell's animations (Theme.reduceMotion).
     property bool reduceMotion: false
+    // ... Text size (accessibility.textSize, a percentage), Bold text and
+    // High contrast: the shell's text and colours (Theme.textSize,
+    // boldText, highContrast), as the runtime's applyAccessibilityToPage
+    // gives them to the web apps.
+    property int textSize: 100
+    property bool boldText: false
+    property bool highContrast: false
     // Settings > Accessibility > Keyboard (the runtime's keyboardAccess):
     // {stickyKeys, slowKeys, bounceKeys (ms, 0 off), customRepeat,
     // repeatDelay, repeatInterval}.
@@ -447,7 +454,7 @@ QtObject {
     // screenTimeout, lockTimeout, advancedGestures, appRelaunch, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, keyboardSize, ringtone, alerttone,
-    // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
+    // notificationtone, callForwarding, reduceMotion, textSize, boldText, highContrast, keyboardAccess, tweaks, browser, proxy,
     // vpnProfiles, exhibitionApps, devMode, devModeUnlocked, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected, earbuds.
@@ -531,6 +538,12 @@ QtObject {
             notificationtone = s.notificationtone;
         if (s.reduceMotion !== undefined)
             reduceMotion = !!s.reduceMotion;
+        if (typeof s.textSize === "number" && isFinite(s.textSize))
+            textSize = Math.round(s.textSize);
+        if (s.boldText !== undefined)
+            boldText = !!s.boldText;
+        if (s.highContrast !== undefined)
+            highContrast = !!s.highContrast;
         if (s.keyboardAccess !== undefined)
             keyboardAccess = s.keyboardAccess || ({});
         if (s.tweaks !== undefined && s.tweaks !== null)

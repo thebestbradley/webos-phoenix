@@ -44,6 +44,11 @@ Item {
         id: area
         objectName: "drawerHandleArea"
         anchors.fill: parent
+        // For a screen reader: a button that grows or shrinks the drawer
+        // (a tap's toggle); scrolling the other way closes it.
+        Accessible.role: Accessible.Button
+        Accessible.name: handle.expanded ? qsTr("Show less") : qsTr("Show all notifications")
+        Accessible.onPressAction: handle.expanded ? handle.collapseRequested() : handle.expandRequested()
         // A finger-sized target: the strip and a little past the drawer's
         // edge, never over the header or the rows on the other side.
         anchors.topMargin: handle.expandsUp ? -Theme.px(8) : 0

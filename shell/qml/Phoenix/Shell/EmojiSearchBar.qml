@@ -45,6 +45,7 @@ Item {
                 text: "←"
                 color: "#e2e2e2"
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Math.round(bar.rowHeight * 0.5)
             }
             MouseArea {
@@ -69,6 +70,7 @@ Item {
                 text: bar.keyboard.emojiQuery
                 color: "#202020"
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Math.round(parent.height * 0.5)
             }
             Text {
@@ -132,6 +134,7 @@ Item {
             text: qsTr("No emoji found")
             color: "#a0a0a0"
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Math.round(bar.rowHeight * 0.38)
         }
     }
