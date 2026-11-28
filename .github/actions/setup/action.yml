@@ -44,7 +44,9 @@ runs:
         aqtversion: '==3.3.*'
 
     # Build tools and the libraries Qt loads; xvfb for the simulator without
-    # a screen; openssh-server for test-sftp.cjs's real sshd; xdotool and
+    # a screen; openssh-server for test-sftp.cjs's real sshd (with
+    # openssh-client's ssh-keygen, which it brings, for it and sftp.test.ts;
+    # both fail under CI without them); xdotool and
     # ImageMagick's import: tools/test-useragent-sim.cjs finds the
     # simulator's window, resizes it (the live phone-to-tablet switch) and
     # saves its screenshots with them.

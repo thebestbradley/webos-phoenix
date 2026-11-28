@@ -75,12 +75,12 @@ function settings(ctx) {
 // Sign In with Bluesky needs the client's address and the system's sheet for the browser step.
 function oauthAvailable(ctx) {
     return settings(ctx).then(function (c) {
-        if (!c.clientId || !c.redirectUri) return { available: false, reason: kit.notAvailable("Bluesky", "Sign In with Bluesky").message + ". An app password works instead." };
+        if (!c.clientId || !c.redirectUri) return { available: false, reason: kit.notAvailable("Bluesky", "Sign In with Bluesky").message };
         return Promise.resolve().then(function () { return ctx.luna.call(OAUTH_SVC + "sheet", { probe: true }); }).then(function (r) {
             if (r && r.returnValue !== false) return { available: true, client: c };
             throw new Error("no sheet");
         }).catch(function () {
-            return { available: false, reason: "Sign In with Bluesky is not available in this build: the device's sign-in sheet cannot be lent for the AT Protocol's sign-in yet. An app password works instead." };
+            return { available: false, reason: "Sign In with Bluesky is not available in this build: the device's sign-in sheet cannot be lent for the AT Protocol's sign-in yet" };
         });
     });
 }
@@ -486,7 +486,8 @@ module.exports = kit.defineConnector({
                     name: "Bluesky",
                     help: "The people you follow on contact cards, your direct messages in Messaging, and your notifications. " +
                           "Sign in with your handle and an app password from Bluesky's settings (Privacy and security, App passwords); allow it your direct messages for Messaging.",
-                    oauth: o.available ? { available: true, label: "Sign In with Bluesky" } : { available: false, reason: o.reason },
+                    // Without it the app password is the way in: no Sign In with Bluesky, no warning.
+                    oauth: kit.oauthOption(o.available ? { available: true, label: "Sign In with Bluesky" } : { available: false, reason: o.reason }, true),
                     fields: [{ name: "username", caption: "HANDLE", hint: "anna.bsky.social", type: "email", both: true },
                              { name: "password", caption: "APP PASSWORD", hint: "xxxx-xxxx-xxxx-xxxx", type: "password" }],
                     fieldsCaption: "Use an App Password Instead",

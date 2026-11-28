@@ -16,7 +16,7 @@
             "server": "discovered",
             "privacy": { "dataGoesTo": "your Bluesky server (PDS) and Bluesky's app and chat services", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
-            "status": "experimental"
+            "status": "beta"
         }
     ]
 }

@@ -292,7 +292,8 @@ module.exports = kit.defineConnector({
                 return {
                     name: "Microsoft",
                     help: "Your Outlook.com or Microsoft 365 contacts, calendars (Teams meetings with where to join) and Microsoft To Do lists, kept in step both ways. Sign in on Microsoft's own page.",
-                    oauth: c ? { available: true, label: "Sign In with Microsoft" } : { available: false, reason: kit.notAvailable("Microsoft").message },
+                    // Sign In is the only way in: without the registration, the page says why.
+                    oauth: kit.oauthOption(c ? { available: true, label: "Sign In with Microsoft" } : { available: false, reason: kit.notAvailable("Microsoft").message }, false),
                     privacy: "Your data goes between this device and Microsoft only; no Phoenix server is in between. A work or school account's administrator may have to allow Phoenix first."
                 };
             });

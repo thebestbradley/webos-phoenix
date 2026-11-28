@@ -253,8 +253,9 @@ module.exports = kit.defineConnector({
                     name: "Todoist",
                     help: "Your Todoist projects as lists in Tasks, and their tasks, kept in step both ways. " +
                           (c ? "Sign in on Todoist's page, or paste your API token." : "Paste your API token from Todoist's settings (Integrations, Developer)."),
-                    oauth: c ? { available: true, label: "Sign In with Todoist" }
-                             : { available: false, reason: kit.notAvailable("Todoist", "Sign In with Todoist").message + ". Your API token works instead." },
+                    // Without Phoenix's registration the API token is the way in: no Sign In with Todoist, no warning.
+                    oauth: kit.oauthOption(c ? { available: true, label: "Sign In with Todoist" }
+                                             : { available: false, reason: kit.notAvailable("Todoist", "Sign In with Todoist").message }, true),
                     fields: [{ name: "password", caption: "API TOKEN", type: "password" }],
                     fieldsCaption: "Use an API Token Instead",
                     link: { caption: "Get Your API Token", url: "https://app.todoist.com/app/settings/integrations/developer" },

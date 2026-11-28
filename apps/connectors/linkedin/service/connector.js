@@ -194,7 +194,8 @@ module.exports = kit.defineConnector({
                 return {
                     name: "LinkedIn",
                     help: "Sign In with LinkedIn shares from the share sheet as you. Your connections come to Contacts from your own data export (LinkedIn's Settings, Data privacy, Get a copy of your data: Connections), imported on the LinkedIn page.",
-                    oauth: c ? { available: true, label: "Sign In with LinkedIn" } : { available: false, reason: notAvailable().message },
+                    // Sign In is the only way in: without the registration, the page says why.
+                    oauth: kit.oauthOption(c ? { available: true, label: "Sign In with LinkedIn" } : { available: false, reason: notAvailable().message }, false),
                     privacy: "What you share goes between this device and LinkedIn." + (c && c.broker ? " LinkedIn's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing." : "") +
                              " Your Connections.csv stays on this device."
                 };
