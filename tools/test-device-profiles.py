@@ -203,6 +203,15 @@ check("vm.sh: options override the device's", code == 0 and has(cmd, "-smp", "2"
       and "hostfwd=tcp:127.0.0.1:2223-:22" in " ".join(cmd) and "-snapshot" in cmd, " ".join(cmd))
 code, cmd, _ = vm(["pinetab2", "--dry-run", "--audio", "none"])
 check("vm.sh: --audio none", code == 0 and "-audiodev" not in cmd)
+code, cmd, _ = vm(["pinetab2", "--dry-run"])
+check("vm.sh: the GPS port reads NMEA from 127.0.0.1:45570", code == 0
+      and has(cmd, "-device", "virtio-serial-pci,id=phoenixgps")
+      and has(cmd, "-chardev", "socket,id=phoenixgps0,host=127.0.0.1,port=45570,reconnect-ms=2000")
+      and has(cmd, "-device", "virtserialport,bus=phoenixgps.0,chardev=phoenixgps0,name=org.webosphoenix.gps.0"), " ".join(cmd))
+code, cmd, _ = vm(["pinetab2", "--dry-run", "--gps", "45571"])
+check("vm.sh: --gps PORT", code == 0 and "socket,id=phoenixgps0,host=127.0.0.1,port=45571,reconnect-ms=2000" in cmd, " ".join(cmd))
+code, cmd, _ = vm(["pinetab2", "--dry-run", "--gps", "off"])
+check("vm.sh: --gps off", code == 0 and "virtio-serial-pci,id=phoenixgps" not in cmd, " ".join(cmd))
 code, cmd, _ = vm(["pinetab2", "--dry-run", "--cap-cpu", "50"], host_os="Linux", host_arch="aarch64", kvm="1")
 check("vm.sh: --cap-cpu on Linux: a CPU quota of 50% a core", code == 0 and cmd[:3] == ["systemd-run", "--user", "--scope"]
       and "CPUQuota=200%" in cmd and cmd[cmd.index("--") + 1] == "qemu-system-aarch64", " ".join(cmd))

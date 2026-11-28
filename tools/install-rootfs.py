@@ -27,14 +27,35 @@ compat/rootfs overlays are applied on top, app pages get the runtime
 <script> tag (as tools/serve-rootfs.py and phoenix-sim add it), and
 development-only files (specs, tests, build tooling) are left out.
 
+The image's manifest (docs/DEV-PUSH.md 8), /usr/share/phoenix/manifest.json:
+the build, the product line and every file Phoenix ships that a dev bundle
+may change (the developer overlay's directories, without the refused
+paths: apps/shared/platform/src/devpush-paths.json), with its size, SHA-256
+and mode, the shell's QML and assets (phoenix-shell) included. The nova
+command compares the checkout's against it to put only what changed in a
+dev bundle.
+
     tools/install-rootfs.py DESTDIR [--list]
+    tools/install-rootfs.py DESTDIR --manifest [--build ID] [--compatible NAME]
+                                     also write DESTDIR/usr/share/phoenix/manifest.json
+    tools/install-rootfs.py --stamp ROOTFS [--build ID] [--compatible NAME]
+                                     at image time: the manifest's sizes and hashes
+                                     from the image's own copies, its build from
+                                     ROOTFS/etc/os-release BUILD_ID
+    tools/install-rootfs.py --print-manifest [--build ID]
+                                     the checkout's manifest, to standard output
+    tools/install-rootfs.py DESTDIR --only LIST
+                                     only the device paths in LIST (a file, - for
+                                     standard input), the shell's too (nova's staging)
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,6 +65,15 @@ RUNTIME_TAG = b'<script src="/usr/share/phoenix/runtime/phoenix-runtime.js"></sc
 SKIP_NAMES = {".git", ".gitignore", ".gitmodules", "node_modules", "spec", "specs", "tests", "test",
               "Gemfile", "Gemfile.lock", "Rakefile", "ci_build.sh", "ci_local.sh", "jslint-ignore",
               "eris_config.json", "runner.html", "jasminerunner.html", ".DS_Store"}
+
+
+def macos_file(name):
+    """A file macOS's Finder leaves in a folder a Mac has shown: .DS_Store
+    (the folder's view), AppleDouble ._* files (metadata, on a disk that is
+    not APFS or HFS+) and .localized. Never installed: a stray one stopped
+    phoenix-apps' do_package (installed-vs-shipped) twice on 28 November
+    2026 (meta-phoenix's phoenix-no-macos-files.bbclass deletes them too)."""
+    return name in (".DS_Store", ".localized") or name.startswith("._")
 
 
 def load_config():
@@ -180,7 +210,9 @@ def shared_packages():
 
 def npm_package_dir(name, start):
     """Where Node would find npm package `name` from folder `start` (its
-    node_modules, then each folder up), or None."""
+    node_modules, then each folder up), or None. The system's own services
+    (services/*) are outside the apps' npm workspace: their packages are
+    apps/node_modules', as their tests find them (NODE_PATH)."""
     d = os.path.realpath(start)
     while True:
         cand = os.path.join(d, "node_modules", name)
@@ -188,8 +220,10 @@ def npm_package_dir(name, start):
             return os.path.realpath(cand)
         up = os.path.dirname(d)
         if up == d:
-            return None
+            break
         d = up
+    cand = os.path.join(REPO, "apps", "node_modules", name)
+    return os.path.realpath(cand) if os.path.isfile(os.path.join(cand, "package.json")) else None
 
 
 def plan_npm_package(name, start, dest, plan, seen):
@@ -315,6 +349,15 @@ def plan_app_services(plan):
                 copy_tree(path, "/etc/palm/activities/services", plan)
                 continue
             copy_tree(path, dest + "/" + fn, plan)
+        # Phoenix's additions to the service's code (accounts'
+        # listMyAccounts: its services.json and sources.json, with the
+        # original's entries, and the new handler), beside the bus files in
+        # compat/app-services/<id>/: later entries win, as overlays do.
+        overlay = os.path.dirname(sysbus)
+        for fn in sorted(os.listdir(overlay)):
+            if fn in ("sysbus", "README.md") or fn in SKIP_NAMES:
+                continue
+            copy_tree(os.path.join(overlay, fn), dest + "/" + fn, plan, skip_tests=True)
         for fn in sorted(os.listdir(sysbus)):
             for suffix, sub in SYSBUS_DIRS:
                 if fn.endswith(suffix):
@@ -481,9 +524,11 @@ def build_plan():
                 s = os.path.join(root, fn)
                 plan.append((s, "/" + os.path.relpath(s, base)))
 
-    # Later entries (overlays) win.
+    # Later entries (overlays) win. No Finder files, from any tree.
     final = {}
     for src, dev in plan:
+        if macos_file(os.path.basename(dev)):
+            continue
         final[dev] = src
     # Files of the original apps we do not redistribute (docs/LEGAL.md).
     for dev in cfg.get("exclude", []):
@@ -566,17 +611,180 @@ def security_files(info):
     }
 
 
+def content(dev, src):
+    """The bytes the image gets at device path dev from src, as installed below."""
+    if dev in GENERATED:
+        return GENERATED[dev]
+    with open(src, "rb") as f:
+        data = f.read()
+    # App pages, and Enyo 1.0's framework pages an app opens as a
+    # window (dashboard-window), as in phoenix-sim and serve-rootfs.py.
+    if dev.startswith(("/usr/palm/applications/", "/media/cryptofs/apps/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) \
+            and dev.endswith(".html"):
+        return inject_runtime(data)
+    if APPINFO.match(dev):
+        return device_appinfo(data)
+    return data
+
+
+# ---- The image's manifest (docs/DEV-PUSH.md 8) ------------------------------------------
+
+DEVPUSH_PATHS = os.path.join("apps", "shared", "platform", "src", "devpush-paths.json")
+# The manifest's format and the image-time stamp: meta-phoenix's library,
+# which the image's class (phoenix-devpush.bbclass) uses too.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "meta-phoenix", "lib"))
+from phoenix.devpush import MANIFEST, dump_manifest, file_mode, stamp as _stamp  # noqa: E402
+
+
+def stamp(rootfs, build=None, compatible=None):
+    try:
+        return _stamp(rootfs, build, compatible)
+    except ValueError as e:
+        sys.exit("install-rootfs --stamp: %s (or give --build)" % e)
+
+
+def devpush_rules():
+    """The rules of this checkout's tools (not of the checkout installed from: --repo)."""
+    with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), DEVPUSH_PATHS), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def overlayable(path, rules):
+    """A device path a dev bundle may change (devpush.js pathProblem: in the
+    overlay's directories, not refused)."""
+    if not any(path.startswith(m + "/") for m in rules["mounts"]):
+        return False
+    for r in rules["refused"]:
+        if (path.startswith(r) if r.endswith("/") else path == r):
+            return False
+    return not any(re.search(p, path) for p in rules["refusedPatterns"])
+
+
+def shell_plan(repo=None):
+    """{device path: source} of what phoenix-shell installs that a dev bundle
+    may change: shell/qml and shell/assets at /usr/share/phoenix (without
+    the colour emoji font, which goes to the system's fonts and is linked
+    there), and its client permissions (shell/CMakeLists.txt, install())."""
+    shell = os.path.join(repo or REPO, "shell")
+    out = {}
+    for sub, skip in (("qml", ()), ("assets", ("noto-color-emoji",))):
+        base = os.path.join(shell, sub)
+        for root, dirs, files in os.walk(base):
+            dirs[:] = sorted(d for d in dirs if d not in skip)
+            for fn in sorted(files):
+                if fn in skip or macos_file(fn):
+                    continue
+                full = os.path.join(root, fn)
+                out["/usr/share/phoenix/%s/%s" % (sub, os.path.relpath(full, base).replace(os.sep, "/"))] = full
+    perm = os.path.join(shell, "sysbus", "com.webos.surfacemanager.phoenix.perm.json")
+    if os.path.isfile(perm):
+        out["/usr/share/luna-service2/client-permissions.d/com.webos.surfacemanager.phoenix.perm.json"] = perm
+    return out
+
+
+def product_info(repo=None):
+    """{name, version, line}: the product the checkout builds (product.json);
+    line is its major version as "1.0": 2.0 devices take no 1.0 bundles."""
+    try:
+        with open(os.path.join(repo or REPO, "product.json"), encoding="utf-8") as f:
+            p = json.load(f)
+    except (OSError, ValueError) as e:
+        sys.exit("install-rootfs: product.json: %s" % e)
+    m = re.match(r"^(\d+)\.", str(p.get("version", "")))
+    if not m:
+        sys.exit("install-rootfs: product.json has no version such as 1.0.0")
+    return {"name": p.get("name", ""), "version": p["version"], "line": "%s.0" % m.group(1)}
+
+
+def source_info(repo=None):
+    """The checkout's commit and whether it has changes, when it is a git checkout."""
+    repo = repo or REPO
+    try:
+        commit = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", repo, "status", "--porcelain", "--untracked-files=no"],
+                               capture_output=True, text=True, check=True).stdout.strip() != ""
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return {"repo": "webos-phoenix", "commit": commit, "dirty": dirty}
+
+
+def make_manifest(final, build="unstamped", compatible=None, repo=None):
+    """The manifest of the apps' plan (final) and the shell's: format 1,
+    {format, build, product, compatible, source, files: [{path, size,
+    sha256, mode}]}, the files sorted by path (docs/platform-api/
+    devpush.schema.json, imageManifest)."""
+    rules = devpush_rules()
+    everything = dict(shell_plan(repo))
+    everything.update(final)
+    files = []
+    for dev in sorted(everything):
+        if not overlayable(dev, rules):
+            continue
+        src = everything[dev]
+        data = content(dev, src)
+        mode = "0644" if dev in GENERATED else file_mode(os.stat(src).st_mode)
+        files.append({"path": dev, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "mode": mode})
+    out = {"format": 1, "build": build, "product": product_info(repo), "compatible": compatible}
+    src = source_info(repo)
+    if src:
+        out["source"] = src
+    out["files"] = files
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("destdir")
+    ap.add_argument("destdir", nargs="?")
     ap.add_argument("--list", action="store_true", help="print what would be installed and exit")
+    ap.add_argument("--manifest", action="store_true", help="also write DESTDIR" + MANIFEST + " (docs/DEV-PUSH.md 8)")
+    ap.add_argument("--print-manifest", action="store_true", help="print the checkout's manifest and exit")
+    ap.add_argument("--stamp", metavar="ROOTFS", help="at image time: hash the image's own files into its manifest, with its BUILD_ID")
+    ap.add_argument("--only", metavar="LIST", help="install only the device paths in LIST (- for standard input), the shell's too")
+    ap.add_argument("--build", help="the manifest's build id (default: unstamped; --stamp reads /etc/os-release)")
+    ap.add_argument("--compatible", help="the manifest's device type (RAUC's compatible), if it is for one")
+    ap.add_argument("--repo", help="the checkout to install from (default: this one)")
     args = ap.parse_args()
+    global REPO
+    if args.repo:
+        REPO = os.path.abspath(args.repo)
 
-    final, _ = plan()
+    if args.stamp:
+        m = stamp(args.stamp, args.build, args.compatible)
+        print("Stamped %s: build %s, %d files" % (MANIFEST, m["build"], len(m["files"])), file=sys.stderr)
+        return
+    if args.print_manifest:
+        # What is not built is named ("unbuilt"), not fatal: nova decides.
+        final, unbuilt = plan(strict=False)
+        m = make_manifest(final, args.build or "checkout", args.compatible)
+        if unbuilt:
+            m["unbuilt"] = unbuilt
+        sys.stdout.buffer.write(dump_manifest(m))
+        return
+    if not args.destdir:
+        ap.error("DESTDIR is needed")
+
+    final, _ = plan(strict=not args.only)
 
     if args.list:
         for dev in sorted(final):
             print(dev)
+        return
+
+    if args.only:
+        with (sys.stdin if args.only == "-" else open(args.only, encoding="utf-8")) as f:
+            wanted = [line.strip() for line in f if line.strip()]
+        everything = dict(shell_plan())
+        everything.update(final)
+        missing = [d for d in wanted if d not in everything]
+        if missing:
+            sys.exit("install-rootfs --only: not something the checkout installs: %s" % ", ".join(missing[:5]))
+        for dev in wanted:
+            dst = os.path.join(args.destdir, dev.lstrip("/"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with open(dst, "wb") as f:
+                f.write(content(dev, everything[dev]))
+            if dev not in GENERATED:
+                os.chmod(dst, 0o755 if file_mode(os.stat(everything[dev]).st_mode) == "0755" else 0o644)
         return
 
     for dev, src in sorted(final.items()):
@@ -586,20 +794,10 @@ def main():
             with open(dst, "wb") as f:
                 f.write(GENERATED[dev])
             continue
-        # App pages, and Enyo 1.0's framework pages an app opens as a
-        # window (dashboard-window), as in phoenix-sim and serve-rootfs.py.
         if dev.startswith(("/usr/palm/applications/", "/media/cryptofs/apps/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) \
-                and dev.endswith(".html"):
-            with open(src, "rb") as f:
-                data = inject_runtime(f.read())
+                and dev.endswith(".html") or APPINFO.match(dev):
             with open(dst, "wb") as f:
-                f.write(data)
-            shutil.copymode(src, dst)
-        elif APPINFO.match(dev):
-            with open(src, "rb") as f:
-                data = device_appinfo(f.read())
-            with open(dst, "wb") as f:
-                f.write(data)
+                f.write(content(dev, src))
             shutil.copymode(src, dst)
         else:
             shutil.copy2(src, dst)
@@ -608,6 +806,11 @@ def main():
     enyo = os.path.join(args.destdir, "usr/palm/frameworks/enyo")
     if os.path.isdir(os.path.join(enyo, "0.10")) and not os.path.lexists(os.path.join(enyo, "1.0")):
         os.symlink("0.10", os.path.join(enyo, "1.0"))
+    if args.manifest:
+        dst = os.path.join(args.destdir, MANIFEST.lstrip("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "wb") as f:
+            f.write(dump_manifest(make_manifest(final, args.build or "unstamped", args.compatible)))
     print("Installed %d files into %s" % (len(final), args.destdir), file=sys.stderr)
 
 

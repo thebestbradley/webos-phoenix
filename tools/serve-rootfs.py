@@ -42,6 +42,13 @@ host work (runtime.hostOp): {op: "addLaunchPoint", launchPoint} ->
 shell and are refused. /var/luna/ (the launch points apps add, as
 /var/luna/launchpoints/<id>) is the folder "data" in --installed-dir.
 
+The developer overlay (docs/DEV-PUSH.md: what `nova push -d sim` writes,
+through services/nova/sim.js run with --data on that "data" folder): while
+data/var/lib/phoenix/overlay/sim/active exists, the files of
+data/var/lib/phoenix/overlay/sim/upper/ win over everything, and a
+".wh.<name>" file there hides <name> (a file a bundle removed), as
+phoenix-sim does (Rootfs::developerOverlayFile).
+
 --terminal gives the Terminal app (apps/terminal) a real shell on this
 computer, as phoenix-sim does: a WebSocket per session at /__phoenix/pty
 speaking the org.webosphoenix.pty protocol (docs/TERMINAL.md) over Python's
@@ -350,6 +357,22 @@ def data_path(path):
     return os.path.join(INSTALLED_DIR, "data", path.lstrip("/"))
 
 
+def developer_overlay_file(path):
+    """The developer overlay's say on a device path: its file, "" when a
+    bundle removed the path (a ".wh." file beside it), None when it has
+    nothing to say (or is not active)."""
+    if not INSTALLED_DIR:
+        return None
+    base = os.path.join(INSTALLED_DIR, "data", "var/lib/phoenix/overlay/sim")
+    if not os.path.isfile(os.path.join(base, "active")):
+        return None
+    rel = path.lstrip("/")
+    f = os.path.join(base, "upper", rel)
+    if os.path.isfile(os.path.join(os.path.dirname(f), ".wh." + os.path.basename(f))):
+        return ""
+    return f if os.path.isfile(f) else None
+
+
 def launch_points_dir():
     return data_path("/var/luna/launchpoints/x")[:-2]
 
@@ -461,6 +484,9 @@ def resolve(path):
     path = re.sub(r"/{2,}", "/", path)
     if ".." in path.split("/") or path in EXCLUDE:
         return None
+    dev = developer_overlay_file(path)
+    if dev is not None:
+        return dev or None
     # An installed app is served from its own folder alone, as on a device: an
     # update of a built-in app gets neither an extra rootfs' files of its id
     # nor the overlay's fixes for the original (Rootfs::resolve).
@@ -1222,6 +1248,20 @@ def inject_runtime(data):
     return RUNTIME_TAG + data
 
 
+class Server(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    # The listen queue: connections the browser has made that this
+    # server's one accept loop has not taken in yet. Chromium keeps up to
+    # six to a host open, and with HTTP/1.0 every request is a new one, so
+    # a page that writes a dozen script tags at once (Enyo 1.0's loader)
+    # sends them faster than the loop, which shares the GIL with the
+    # handlers' threads, takes them in. socketserver's queue holds 5: on a
+    # Mac the connection after them is reset (net::ERR_CONNECTION_RESET,
+    # a script that never runs), on Linux it is dropped and tried again a
+    # second later. tools/test-serve-rootfs.py.
+    request_queue_size = socket.SOMAXCONN
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=8765)
@@ -1252,8 +1292,7 @@ def main():
     INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
     seed_preinstalled()
     rescan_installed()
-    srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
-    srv.daemon_threads = True
+    srv = Server((args.host, args.port), Handler)
     srv.verbose = args.verbose
     srv.terminal = args.terminal
     srv.terminal_shell = args.terminal_shell

@@ -1,0 +1,10 @@
+{
+    "settings.management": [
+        "com.webos.settingsservice/getSystemSettingsPriv",
+        "com.webos.settingsservice/setSystemSettingsPriv",
+        "com.webos.settingsservice/getSystemSettingValuesPriv",
+        "com.webos.service.settings/getSystemSettingsPriv",
+        "com.webos.service.settings/setSystemSettingsPriv",
+        "com.webos.service.settings/getSystemSettingValuesPriv"
+    ]
+}

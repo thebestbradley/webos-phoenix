@@ -225,6 +225,8 @@ function parseRelease(r) {
 //       other slot, which RAUC then makes primary)
 //   rauc.markActive(slot) -> Promise (the slot the next start uses)
 //   rauc.markGood() -> Promise (the running slot started well; optional)
+//   overlays.clearOthers() -> [names] (optional: dev push's overlays of
+//       other builds, removed once the running build is good)
 //   request({method, url}) -> Promise<{status, body}> (text)
 //   requestBytes({method, url}) -> Promise<{status, bytes}> (a feed and its
 //       signature are checked over the exact bytes; optional, without it
@@ -265,6 +267,20 @@ function createUpdatesService(deps) {
     }
     function channelsOf(c) { return c && c.channels && c.channels.length ? c.channels : ["stable"]; }
 
+    // RAUC's view of the slots changes only when this service changes it
+    // (install, mark-active, mark-good) or with a restart, so it is asked
+    // once and kept until then. Asked at every status, every progress tick
+    // asked it again, and while RAUC writes a slot it answers nothing:
+    // `rauc status` waited for D-Bus to time out (25 s), and one such
+    // timeout in prepare threw a finished download away (the rollback
+    // test, 28 November 2026).
+    var slotsKept = null;
+    function slots() {
+        if (!slotsKept) slotsKept = deps.rauc.status().then(null, function (e) { slotsKept = null; throw e; });
+        return slotsKept;
+    }
+    function slotsChanged() { slotsKept = null; }
+
     function load() {
         var s = deps.state.load() || {};
         if (typeof s.autoDownload !== "boolean") s.autoDownload = true;
@@ -280,7 +296,7 @@ function createUpdatesService(deps) {
         service: SERVICE, servers: deps.servers, getBytes: function (url) { return getBytes(url); }, luna: deps.luna,
         crypto: deps.crypto, state: deps.state, now: now, log: log,
         device: function () {
-            return Promise.all([deps.rauc.status(), config()]).then(function (r) {
+            return Promise.all([slots(), config()]).then(function (r) {
                 return { channel: load().channel, compatible: r[0].compatible, build: r[0].booted.build };
             });
         }
@@ -304,7 +320,7 @@ function createUpdatesService(deps) {
     function status() {
         return config().then(function () {
             var s = load();
-            return Promise.all([deps.rauc.status(), deps.power().then(null, function () { return null; })]).then(function (r) {
+            return Promise.all([slots(), deps.power().then(null, function () { return null; })]).then(function (r) {
                 var rs = r[0];
                 var current = { name: rs.name || "webOS Phoenix", version: rs.booted.version, build: rs.booted.build };
                 var notes = systemNotes().filter(function (n) { return n.version === current.version; })[0];
@@ -314,8 +330,8 @@ function createUpdatesService(deps) {
                 var feed = s.feeds[rs.compatible + "/" + s.channel] || {};
                 return {
                     returnValue: true, state: live.state || (ready ? "ready" : "idle"), current: current, available: available,
-                    progress: live.progress, lastChecked: s.lastChecked || null, error: live.error,
-                    autoDownload: s.autoDownload, channel: s.channel, channels: channelsOf(cfg), configured: !!(cfg && cfg.url),
+                    progress: live.progress, lastChecked: s.lastChecked || null, error: unavailable ? errorOf(unavailable) : live.error,
+                    autoDownload: s.autoDownload, channel: s.channel, channels: channelsOf(cfg), configured: !!(cfg && cfg.url) && !unavailable,
                     verified: !!feed.verified, rollout: s.waiting || null,
                     battery: r[1], minBattery: MIN_BATTERY, deferred: !!s.deferred
                 };
@@ -377,15 +393,41 @@ function createUpdatesService(deps) {
         return live.state ? Promise.reject(err("BUSY", "Updates are busy (" + live.state + ")")) : null;
     }
 
+    // A boot that did not start from one of the system's update slots (a VM
+    // started straight from the image's ext4; createRauc's noSlot): the
+    // status says so (the running version, error NOT_AVAILABLE), every
+    // other method fails at once with NOT_AVAILABLE, and nothing is
+    // scheduled (no daily check, no notices after boot), so nothing asks
+    // RAUC anything.
+    var unavailable = null;
+
     // After a restart: mark the running slot good, and say once that the
     // system was updated, or that the new system did not start and the
     // device went back.
     function startup() {
         if (started) return started;
-        started = deps.rauc.status().then(function (rs) {
-            var good = deps.rauc.markGood ? deps.rauc.markGood().then(null, function (e) { log("mark-good: " + e.message); }) : null;
-            return Promise.resolve(good).then(function () { return rs; });
+        started = slots().then(function (rs) {
+            if (rs.noSlot) {
+                unavailable = err("NOT_AVAILABLE", "System updates are not available on this boot: it did not start from one of the system's update slots");
+                return rs;
+            }
+            var good = deps.rauc.markGood
+                ? deps.rauc.markGood().then(function () { slotsChanged(); return true; }, function (e) { log("mark-good: " + e.message); return false; })
+                : true;
+            return Promise.resolve(good).then(function (ok) {
+                // Dev push's overlays of other builds (docs/DEV-PUSH.md 4.6):
+                // once this build is good (without RAUC there is no other
+                // slot to fall back to).
+                if (ok && deps.overlays) {
+                    try {
+                        var gone = deps.overlays.clearOthers();
+                        if (gone && gone.length) log("developer overlays of other builds removed: " + gone.join(", "));
+                    } catch (e) { log("developer overlays: " + e.message); }
+                }
+                return rs;
+            });
         }).then(function (rs) {
+            if (unavailable) return log(unavailable.message);
             var s = deps.state.load() || {};
             var note = null;
             if (s.restarting) {
@@ -405,7 +447,7 @@ function createUpdatesService(deps) {
                 message: note, onclick: { appId: "com.palm.app.updates", params: {} }
             }).then(null, function () {});
         }).then(null, function (e) { log("startup: " + e.message); }).then(function () {
-            if (deps.noticesAtBoot !== false) notices.atBoot();
+            if (!unavailable && deps.noticesAtBoot !== false) notices.atBoot();
         });
         return started;
     }
@@ -437,7 +479,7 @@ function createUpdatesService(deps) {
 
     function check() {
         return busy() || setLive("checking").then(function () {
-            return Promise.all([deps.rauc.status(), config()]);
+            return Promise.all([slots(), config()]);
         }).then(function (r) {
             var rs = r[0], c = r[1];
             var s = load();
@@ -580,10 +622,15 @@ function createUpdatesService(deps) {
     function prepare() {
         var s = load();
         var rel = s.available, file = s.downloaded.path;
-        return Promise.all([deps.rauc.status(), deps.rauc.info(file).then(null, function (e) {
+        return Promise.all([slots(), deps.rauc.info(file).then(null, function (e) {
+            // RAUC's daemon that did not answer is not a bad bundle.
+            if (/Timeout was reached|D-Bus|NoReply/i.test(e && e.message)) throw err("UPDATER_BUSY", "The system's updater did not answer: " + e.message);
             throw err("BAD_BUNDLE", "The update was refused: " + e.message);
         })]).then(null, function (e) {
-            discard(e);
+            // The bundle itself was refused: gone. RAUC that did not answer
+            // (busy, D-Bus): the download is kept, and the next download
+            // prepares it again without fetching it.
+            if (e && e.code === "BAD_BUNDLE") discard(e);
             throw e;
         }).then(function (r) {
             var rs = r[0], info = r[1];
@@ -597,9 +644,12 @@ function createUpdatesService(deps) {
                     live.progress = Math.max(0, Math.min(100, pct | 0));
                     notify();
                     ongoing("Preparing " + fullName(rel), live.progress);
-                }).then(null, function (e) { throw err("INSTALL_FAILED", "The update could not be written: " + e.message); });
+                }).then(slotsChanged, function (e) {
+                    slotsChanged();
+                    throw err("INSTALL_FAILED", "The update could not be written: " + e.message);
+                });
             }).then(function () {
-                return deps.rauc.markActive(rs.booted.slot);
+                return deps.rauc.markActive(rs.booted.slot).then(slotsChanged);
             }).then(function () {
                 var s2 = load();
                 s2.prepared = { build: info.build, version: info.version, slot: rs.other };
@@ -626,6 +676,7 @@ function createUpdatesService(deps) {
             }
             var s = load();
             return deps.rauc.markActive(s.prepared.slot).then(function () {
+                slotsChanged();
                 var s2 = load();
                 s2.restarting = { build: s2.prepared.build, version: s2.prepared.version };
                 save(s2);
@@ -693,9 +744,14 @@ function createUpdatesService(deps) {
         }).then(null, function () {});
     }
 
-    function wrap(fn) {
+    // always: the method answers on a boot without an update slot too (it
+    // asks RAUC nothing there).
+    function wrap(fn, always) {
         return function (p) {
-            return startup().then(function () { return fn(p || {}); }).then(null, function (e) {
+            return startup().then(function () {
+                if (unavailable && !always) throw unavailable;
+                return fn(p || {});
+            }).then(null, function (e) {
                 var o = errorOf(e);
                 return fail(o.errorCode, o.errorText);
             });
@@ -706,7 +762,7 @@ function createUpdatesService(deps) {
         // Palm's GetStatus: the first reply, then onReply(reply) for what
         // happens (watchPalm). An update that is ready is said again.
         GetStatus: wrap(function () {
-            ensureSchedule();
+            if (!unavailable) ensureSchedule();
             return status().then(function (st) {
                 var out = { returnValue: true };
                 if (st.state === "ready" && !st.deferred) {
@@ -717,7 +773,7 @@ function createUpdatesService(deps) {
                 }
                 return out;
             });
-        }),
+        }, true),
         watchPalm: function (onReply) {
             palmWatchers.push(onReply);
             return function () { palmWatchers = palmWatchers.filter(function (w) { return w !== onReply; }); };
@@ -726,7 +782,7 @@ function createUpdatesService(deps) {
         InstallNow: wrap(installNow),
         AlertDisplayed: wrap(function () { return { returnValue: true }; }),
 
-        getStatus: wrap(function () { ensureSchedule(); return status(); }),
+        getStatus: wrap(function () { if (!unavailable) ensureSchedule(); return status(); }, true),
         // onChange(status) after every change -> stop(). (getStatus {subscribe})
         watch: function (onChange) {
             watchers.push(onChange);
@@ -769,7 +825,7 @@ function createUpdatesService(deps) {
         }),
         scheduled: wrap(scheduled),
         charging: wrap(charging),
-        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; }),
+        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; }, true),
         checkNotices: wrap(notices.checkNotices),
         getNotices: wrap(notices.list),
         dismissNotice: wrap(function (p) { return notices.dismiss(p.id); })

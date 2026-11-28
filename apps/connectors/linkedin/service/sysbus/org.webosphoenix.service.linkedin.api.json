@@ -15,5 +15,10 @@
     ],
     "phoenix.connector.share": [
         "org.webosphoenix.service.linkedin/share"
+    ],
+    "phoenix.linkedin.signin": [
+        "org.webosphoenix.service.linkedin/providerInfo",
+        "org.webosphoenix.service.linkedin/checkCredentials",
+        "org.webosphoenix.service.linkedin/signIn"
     ]
 }

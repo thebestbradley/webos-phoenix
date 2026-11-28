@@ -56,6 +56,11 @@
                 "key": { "type": ["string", "null"], "description": "The API's Ed25519 key that signs entitlements (else GET <api>/v1/key.json)" }
             }
         },
+        "devpush": {
+            "type": ["object", "null"],
+            "description": "Dev push (docs/DEV-PUSH.md 9.1): the platform's dev-signing key, pinned; null or no key: only paired computers and granted keys",
+            "properties": { "key": { "type": ["string", "null"], "description": "base64 Ed25519 (or ed25519:base64)" } }
+        },
         "push": { "type": ["object", "null"], "properties": { "server": { "type": ["string", "null"], "description": "The ntfy server (UnifiedPush), push.<domain>/" } } },
         "assistant": { "type": ["object", "null"], "properties": { "url": { "type": ["string", "null"], "description": "v1/assistant/ (OpenAI-compatible)" } } },
         "connectivity": { "type": ["object", "null"], "properties": { "probe": { "type": ["string", "null"], "description": "https://connect.<domain>/generate_204" } } }

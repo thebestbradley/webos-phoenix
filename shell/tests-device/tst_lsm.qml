@@ -133,6 +133,90 @@ Item {
             compare(boot[0].params.preload, "partial");
         }
 
+        // The developer apps (appinfo.json "phoenix": {"developer": true}, from
+        // SAM's listApps) carry developer "devmode", so the shell leaves them
+        // out while Developer Mode is off; hidden and invisible apps are not
+        // in the launcher (tab -1). docs/APP-RUNTIME.md "Developer apps".
+        function test_developerAppsCarryTheirFlag() {
+            var model = findChild(windows, "fakeLaunchPoints");
+            verify(model !== null);
+            windows.refreshAppMetadata();
+            FakeBus.reply("com.webos.applicationManager", "/listApps", { returnValue: true, apps: [
+                { id: "org.webosphoenix.notificationlab", title: "Notification Lab", phoenix: { developer: true } },
+                { id: "com.webos.app.test.youtube", title: "YouTube", phoenix: { developer: true } },
+                { id: "com.palm.app.teams", title: "Teams", visible: false },
+                { id: "org.webosphoenix.drives", title: "Drives", phoenix: { hidden: true } },
+                { id: "org.webosphoenix.notes", title: "Notes" }
+            ] });
+            ["org.webosphoenix.notificationlab", "com.webos.app.test.youtube", "com.palm.app.teams",
+             "org.webosphoenix.drives", "org.webosphoenix.notes"].forEach(function(id) {
+                model.append({ id: id, title: id, icon: "/usr/palm/applications/" + id + "/icon.png" });
+            });
+            tryCompare(windows.apps, "count", 5);
+            var by = {};
+            for (var i = 0; i < windows.apps.count; ++i)
+                by[windows.apps.get(i).appId] = windows.apps.get(i);
+            compare(by["org.webosphoenix.notificationlab"].developer, "devmode");
+            compare(by["org.webosphoenix.notificationlab"].tab, 0);
+            compare(by["com.webos.app.test.youtube"].developer, "devmode");
+            compare(by["org.webosphoenix.notes"].developer, "");
+            compare(by["org.webosphoenix.notes"].tab, 0);
+            compare(by["com.palm.app.teams"].tab, -1);
+            compare(by["org.webosphoenix.drives"].tab, -1);
+            // A launch point added later (an install) asks listApps again.
+            FakeBus.clear();
+            model.append({ id: "org.example.new", title: "New", icon: "new.png" });
+            tryVerify(function() { return FakeBus.find("com.webos.applicationManager", "/listApps").length > 0; });
+            model.clear();
+            tryCompare(windows.apps, "count", 0);
+            windows._appMetadata = {};
+        }
+
+        // Developer Mode followed as it changes (getDevMode {subscribe}), in
+        // either reply's form: Phoenix's {status} and OSE's {enabled}.
+        function test_developerModeFollowed() {
+            var sub = FakeBus.last("com.webos.service.devmode", "/getDevMode");
+            verify(sub);
+            compare(sub.params.subscribe, true);
+            FakeBus.reply("com.webos.service.devmode", "/getDevMode", { returnValue: true, enabled: true });
+            compare(status.devMode, true);
+            FakeBus.reply("com.webos.service.devmode", "/getDevMode", { returnValue: true, status: "disabled", enabled: false });
+            compare(status.devMode, false);
+            FakeBus.reply("com.webos.service.devmode", "/getDevMode", { returnValue: true, subscribed: true, status: "enabled" });
+            compare(status.devMode, true);
+            FakeBus.reply("com.webos.service.devmode", "/getDevMode", { returnValue: true, status: "disabled" });
+            compare(status.devMode, false);
+        }
+
+        // Closed under memory pressure (memorymanager, Revision 34): started
+        // again, hidden, after a while, and not again at once.
+        function test_systemUiStartedAgainWhenClosed() {
+            windows._bootAppRestarted = {};
+            windows.bootAppRestartMs = 10;
+            FakeBus.clear();
+            windows.bootAppEvent({ returnValue: true, appId: "org.webosphoenix.notes", event: "close" });
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "foreground" });
+            wait(50);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 0, "only a boot app's stop or close");
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "close" });
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "stop" });
+            tryCompare(windows, "_bootAppsDue", []);
+            var again = FakeBus.find("com.webos.applicationManager", "/launch");
+            compare(again.length, 1);
+            compare(again[0].params.id, "com.palm.systemui");
+            compare(again[0].params.preload, "partial");
+            // Closed again at once (still short of memory): not again within
+            // the gap, but again once it has passed.
+            windows.bootAppRestartGapMs = 300;
+            windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "stop" });
+            wait(100);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 1, "not again within the gap");
+            tryCompare(windows, "_bootAppsDue", [], 2000);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 2, "again after the gap");
+            windows.bootAppRestartMs = 5000;
+            windows.bootAppRestartGapMs = 60000;
+        }
+
         function test_launchAndStatusGoToTheBus() {
             FakeBus.clear();
             windows.launch("org.webosphoenix.memos", "", null);

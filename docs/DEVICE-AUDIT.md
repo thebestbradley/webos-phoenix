@@ -133,7 +133,7 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | com.palm.certificatemanager | certificates | runtime | certmgrd (LuneOS), not packaged | ⬜ | runtime |
 | com.palm.storage | erase, mass storage | runtime + `SimStorage` | storaged (LuneOS), not packaged | ⬜ | runtime; `services/systemmanager` calls `erase/Wipe` |
 | com.palm.image, com.palm.image2 | image conversion | runtime | none on OSE | ⬜ | runtime |
-| com.palm.location, com.webos.service.location, org.webosphoenix.service.location | location | runtime | OSE has no location service | ⬜ | runtime |
+| com.palm.location, com.webos.service.location, org.webosphoenix.service.location | location | runtime | LuneOS's `com.webos.service.location`, patched in meta-phoenix: GPS through nyx's NMEA module (on a VM a virtio port fed by `tools/vm-location`), the network position and place names from the platform's `/v1/location/*` (beaconDB, an IP fallback), a position the user sets; the per-app permission is `org.webosphoenix.service.location` (2.0). The legacy `com.palm.location` API has no service ([MAPS.md](MAPS.md), "Where the position comes from") | 🟡 legacy API ⬜ | runtime; meta-phoenix `recipes-navigation` |
 | com.palm.imap, com.palm.pop, com.palm.smtp | mail | runtime | mojomail (C++), not built | ⬜ | runtime |
 | com.webos.service.vpn | VPN | runtime | LuneOS's VPN adapter, no recipe | ⬜ | runtime |
 | com.palm.browserServer | browser cookies and cache | runtime → host | none (Q38) | ⬜ | runtime |
@@ -144,6 +144,20 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | com.palm.stservice | Touch to Share | runtime | needs the radio | 🚫 | runtime |
 | com.palm.telephony, com.palm.wan, org.webosports.service.messaging | phone, data, SMS | runtime | needs a modem (oFono) | 🚫 (3) | runtime |
 | org.webosphoenix.service.reset, org.webosphoenix.simulator | the simulator's reset and controls | runtime | not on a device | ✅ | runtime |
+
+The activity manager's replies (decided by Bradley, 27 November 2026: "Allow
+replies"). OSE's and LuneOS's role for it
+(`com.webos.service.activitymanager.role.json`) let its main name reach only
+the power service and its `.client` name only the platform services it calls
+itself, so ls-hubd refused every connection back toward the apps and services
+that create activities (LSHUB_NO_OUT_PERMS: systemmanager, gamepads, the
+assistant, Hardware, the account service, Calendar, Clock, Contacts,
+Accounts, ...): their replies, subscriptions and callbacks never arrived.
+meta-phoenix's `activitymanager.bbappend` now gives every permission in the
+role the outbound list `["*"]` (`PHOENIX_ACTIVITYMANAGER_OUTBOUND`), as
+webOS normally has it and as the platform's other services that answer any
+caller do (power, battery, alarm, settings, the application manager). Each
+caller still needs the method's group.
 
 ## 3. The page features WAM lacks or drops
 
@@ -191,6 +205,119 @@ appmanager, dropshare, accessories, and the four Open webOS app services. All
 🟡 (written against OSE, tested here, not run). One open question for all
 of them: apps without `requiredPermissions` get trust `dev`, and some groups
 (the file manager's `filemanager.operation`) are oem-only (Q75).
+
+## 6. Names and groups on the hub
+
+What luna-service2's hub (ls-hubd) and OSE's installer (appinstalld2) do
+with a package's names and groups, read from their sources (upstream
+`webosose/luna-service2` 5bc38aa3, `webosose/appinstalld2` 938ffd7,
+`webosose/librolegen` b8fb817; not yet seen on a device), and what Phoenix
+does about it (28 November 2026). Paths are in those repositories.
+
+**Groups and trust.**
+- A group's methods are joined across every api-permissions file that
+  names it, from any package: `groups_map.cpp:197-210` pushes each
+  pattern's group. The method's service is the text before the first `/`
+  (`security.cpp:1481`), and nothing checks that the file is that
+  service's, so any manifest can add its group to another service's
+  methods, or another service's methods to a group it then claims.
+- Trust levels named for the same group in several groups files are
+  merged, not overridden: `AddProvidedTrustLevel` appends
+  (`groups_map.cpp:83-89`). Within one manifest the last file wins
+  (`manifest.cpp:192-196`). They are keyed by service name: a groups file
+  gives its trust map to each name in its `allowedNames`
+  (`file_parser.cpp:738-760`), which nothing compares with the package's
+  own names.
+- Names in the hub's tables are prefixes: a key ends at `*` or at the end
+  of the string, and a lookup collects every node on the way down
+  (`trie.hpp` `_IsCharTerminal`, `Search`; `groups_map.cpp:279-297`). So
+  `allowedNames: ["*"]` or `["com.palm"]` in a groups or client-permissions
+  file reaches every service under it.
+- The trust check happens in the called service's library: a method's
+  group passes when any of its trust levels passes the caller's
+  (`libluna-service2/base.c:403-494`, `:650-740`). The caller's trust is its
+  role's `trustLevel`, as the role says (`file_parser.cpp:189-209`); an
+  empty one is `dev` (`groups_map.cpp:319-341`).
+- **OSE's installer gives every installed app and service the `oem` trust
+  level** (`ServiceInstallerUtility.cpp:35-66`, `trustLevel="oem"`), in
+  developer installs too. It copies the app's `requiredPermissions` into
+  its client permissions unfiltered, and gives the `public` group when
+  there is no list (`ServiceInstallerUtility.cpp:371-396`). So for an
+  installed app, its `requiredPermissions` is its privilege on the bus:
+  trust levels do not stand in the way.
+
+**Names.**
+- The hub keeps no names for the system. No prefix is reserved, and a
+  role's names are not compared with its manifest's id or with where it
+  was installed (`conf.cpp` reads the system, volatile and developer
+  manifest directories the same way, `:453-466`, `:978-992`). A
+  `privileged` role may take any name (`security.cpp:504-508`), and the
+  role says its own type.
+- When two packages want the same thing, the first loaded wins: roles
+  (`role_map.cpp:30-56`, a warning only) and service files
+  (`service_map.cpp:39-67`). System directories load first. Removing the
+  second package's role or service file removes the entry by key, which
+  is the first package's (`role_map.cpp:58-62`, `service_map.cpp:77-105`).
+  A name that is free because its service has not started can be taken by
+  whoever registers it first (`hub.cpp:1110-1124`).
+- Manifests are ranked by id, and the highest version wins: a new manifest
+  with the id of a loaded one and a higher version unloads that one's
+  files (`security.cpp:1279-1297`).
+- The installer writes the manifest under the app's id (`<id>.json`,
+  `ServiceInstallerUtility.cpp:695-795`). A web app's role gets the names
+  `<id>-*` (`librolegen templates/WebApp.json`). A service's id must start
+  with `<package id>.` (`ServiceInstallerUtility.cpp:108-115`). Its only
+  check of system ids refuses `com.palm.`, `com.webos.` and `com.lge.`
+  package ids, and only for developer installs (`AppCloseStep.cpp:92-111`).
+  It does not check LuneOS's `org.webosports.` or Phoenix's ids at all.
+  The Marketplace's installs are verified installs.
+- The accounts service tells callers by their ids: a template's
+  `readPermissions` names apps and services (globs: `utils.js`
+  `hasPermission`). For example, `org.webosphoenix.messaging` reads the IM
+  accounts and their credentials. An app installed under that id, on a
+  device that lacks the app, would read them.
+
+**What Phoenix checks.**
+
+| Way in | Names | Groups |
+| --- | --- | --- |
+| A catalog's connector (connector kit `checks.ts`, `server/marketplace` `Connector.php`, Phoenix-Web-Services `packages/catalog-checks`; one set of cases) | C5: the ids are in the developer's namespace. C9: the role takes only its service's name. **C20**: the app id, service, templates and own kinds are outside `RESERVED_NAMESPACES` (`com.palm`, `com.webos`, `com.lge`, `org.webosports`, `org.webosphoenix`, `com.webosphoenix`), and the app id is in the namespace. Sysbus files are only the service's. The `.service` file has `Name=` the service and `Exec=` run-js-service from `/usr/palm/services/<service>`. The role is a regular one (no `exeName`, no `trustLevel` above `dev`). The manifest's `id` is the service, and it lists only the service's own files | C18: the service's groups. **C19**: the app's `requiredPermissions` is a list of its own groups and `THIRD_PARTY_APP_GROUPS` (`phoenix.accounts.mine`, `phoenix.appmanager.open`) |
+| The catalogs' developers | Phoenix-Web-Services and `Catalog::submitPackage` give `org.webosphoenix` only to an admin's upload | — |
+| The device (`packagesservice.js`, "Names and groups"), every catalog, feed and sideload | **RESERVED_NAME**: an app, package or service id in those namespaces installs only from a Phoenix catalog the device ships with (a catalog's web apps, `org.webosphoenix.pwa.<name>`, which the device packages itself from the site's manifest, excepted) | **CONNECTOR_GROUPS**: rule C19 for a third-party connector's app, in Developer Mode too |
+
+The accounts service's `listMyAccounts` (Phoenix's overlay,
+`compat/app-services/com.palm.service.accounts/handlers/list-my-accounts.js`,
+group `phoenix.accounts.mine`) answers an app's own accounts, with the check
+`getAccountInfo` makes. A connector's compose page uses it instead of
+`listAccounts`, which answers every account.
+
+**Still open (the owner's call):**
+- **Ordinary apps' `requiredPermissions` are not checked on the device.**
+  A Preware, App Museum, user-added catalog or sideloaded web app gets every
+  group it names, with `oem` trust. [APP-STORE.md](APP-STORE.md) 3.6 plans
+  an allowlist per tier ("the device service enforces an allowlist before
+  calling install"), but there is none in `packagesservice.js`.
+  Phoenix-Web-Services checks only the listing's declared permissions
+  (`SubmissionChecks.php`, `config/developer.php`), not the package's
+  `appinfo.json`.
+- Names outside the reserved namespaces that the image uses. Check this on
+  an image: list the ids in `/usr/share/luna-service2/manifests.d`, and the
+  wildcard keys in the groups and client-permissions files, that are not
+  under them. The repository's own files are all under them.
+- OSE's `dev/install` path (`appInstallService/dev/install`, verify=false)
+  and the hub's own `addOneManifest` (group `servicebus.configuration`,
+  trust `oem`, which every installed app has; `hub_service.cpp:148-176`
+  checks the group) are reached only by the packages service, `nova` and
+  novad (`tools/test-devicecheck.py`). But an ordinary app that names
+  `servicebus.configuration` would be given it (above) and could load a
+  manifest of its own. The RESERVED_NAME and group checks do not cover that.
+- A third-party connector installed by the Marketplace gets its service's
+  bus files from the installer, which writes them from a `services.json`.
+  It does not use the package's own `service/sysbus` files, and it wants
+  service ids under the app id, which the kit's
+  `<namespace>.service.<name>` are not. Until a device runs installed
+  connectors' services (SYNERGY-CONNECTORS.md C5), C18 and C20 check files
+  no one installs yet.
 
 ## What is left and why
 

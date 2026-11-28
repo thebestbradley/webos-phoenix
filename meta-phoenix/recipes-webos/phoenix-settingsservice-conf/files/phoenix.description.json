@@ -1,0 +1,13 @@
+[
+    {
+        "category": "picture",
+        "key": "backlight",
+        "dbtype": "G",
+        "dimension": [],
+        "ui": { "active": true, "displayName": "backlight", "visible": true, "widget": "None" },
+        "valueCheck": true,
+        "values": { "range": { "interval": 1, "max": 100, "min": 0 } },
+        "volatile": false,
+        "vtype": "Range"
+    }
+]

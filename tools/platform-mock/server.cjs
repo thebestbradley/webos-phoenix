@@ -20,7 +20,7 @@
 //                  real platform's staging must offer the same way
 //
 //   node tools/platform-mock/server.cjs [--port 8099] [--host 127.0.0.1]
-//        [--token TOKEN] [--write-servers FILE] [--seed]
+//        [--public-host HOST] [--token TOKEN] [--write-servers FILE] [--seed]
 //
 // --write-servers writes a servers.json (or a Developer Mode override) for
 // it, with its keys pinned; --seed publishes a sample catalog (a web app
@@ -28,7 +28,8 @@
 //
 // require("./server.cjs").start({port, token, interval}) -> Promise<mock>:
 // {url, feeds, api, servers(), keys, publishUpdate, publishCatalog,
-//  publishRevocations, approve, deny, rotate, state, close}.
+//  publishRevocations, approve, deny, rotate, state, close}; state.locations
+//  is the account's shared position (/v1/me/location, /v1/conformance/location).
 
 "use strict";
 
@@ -80,6 +81,8 @@ function start(opts) {
         assistantUsed: 0, assistantQuota: opts.assistantQuota || 1000,
         quotaBytes: opts.quotaBytes || 50 * 1024 * 1024,
         catalogBuild: 0, updateSequence: {}, revocationSequence: 0,
+        locations: {},              // user -> {enabled, position: {latitude, longitude, accuracy, ..., measured (ms), kind, name, deviceId}}
+        locationTtl: opts.locationTtl || 1800,
         log: []                      // every request: "METHOD path"
     };
 
@@ -216,6 +219,31 @@ function start(opts) {
             validUntil: iso(now() + 30 * DAY), graceDays: 7, issued: iso(now()) };
     }
 
+    // Location sharing between an account's own devices (the platform's
+    // LocationRelay): off until turned on, the latest position only, gone
+    // after locationTtl seconds.
+    function shareLocation(user, b, kind, name, deviceId) {
+        const share = st.locations[user] || (st.locations[user] = { enabled: false, position: null });
+        if (!share.enabled) return null;
+        const lat = Number(b.latitude), lng = Number(b.longitude);
+        if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180) || typeof b.latitude !== "number" || typeof b.longitude !== "number") return false;
+        const measured = b.timestamp === undefined || b.timestamp === null ? now() : typeof b.timestamp === "number" ? b.timestamp : Date.parse(b.timestamp);
+        if (!isFinite(measured) || measured > now() + 120000 || measured <= now() - st.locationTtl * 1000) return false;
+        const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
+        share.position = { latitude: lat, longitude: lng, accuracy: num(b.accuracy) || 100, altitude: num(b.altitude), altitudeAccuracy: num(b.altitudeAccuracy),
+                           heading: num(b.heading), speed: num(b.speed), measured: Math.min(measured, now()), kind, name: name || null, deviceId: deviceId || null };
+        return share;
+    }
+    function locationView(user) {
+        const share = st.locations[user] || { enabled: false, position: null };
+        const pos = share.position;
+        const live = share.enabled && pos && pos.measured + st.locationTtl * 1000 > now();
+        return { sharing: !!share.enabled, ttlSeconds: st.locationTtl, position: live ? {
+            latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy, altitude: pos.altitude, altitudeAccuracy: pos.altitudeAccuracy,
+            heading: pos.heading, speed: pos.speed, timestamp: iso(pos.measured), age: Math.max(0, Math.floor((now() - pos.measured) / 1000)),
+            expiresAt: iso(pos.measured + st.locationTtl * 1000), source: { kind: pos.kind, name: pos.name, deviceId: pos.deviceId } } : null };
+    }
+
     // ---- HTTP ------------------------------------------------------------------------------
 
     function send(res, status, body, headers) {
@@ -280,6 +308,18 @@ function start(opts) {
                                                           updatesRoot: keys.updatesRoot.publicKey, updates: keys.updates.publicKey,
                                                           entitlements: keys.entitlements.publicKey });
             if (what === "servers") return send(res, 200, servers(b.pin || "root"));
+            // Stands in for the website's Location sharing page: {user?, enabled?, position?: {latitude, longitude,
+            // accuracy?, timestamp?, name?, kind?}} (the suite's location.relay flow).
+            if (what === "location") {
+                const u = b.user || "u_test";
+                if (!st.users[u]) return error(res, 404, "No such user", "NOT_FOUND");
+                const share = st.locations[u] || (st.locations[u] = { enabled: false, position: null });
+                if (typeof b.enabled === "boolean") { share.enabled = b.enabled; if (!b.enabled) share.position = null; }
+                if (b.position === null) share.position = null;
+                else if (b.position && shareLocation(u, b.position, b.position.kind || "browser", b.position.name || "Mock browser") === false)
+                    return error(res, 422, "Not a position", "VALIDATION");
+                return send(res, 200, locationView(u));
+            }
             return error(res, 404, "No such control", "NOT_FOUND");
         }
 
@@ -379,16 +419,36 @@ function start(opts) {
             return send(res, 200, bytes, { "X-Phoenix-Signature": keys.entitlements.sign(bytes) });
         }
         if (p === "v1/devices" && req.method === "POST") {
-            const miss = ["publicKey", "name", "compatible"].filter((k) => typeof b[k] !== "string" || !b[k]);
+            // The platform's AccountController::register rules. model, compatible, osVersion and build
+            // are optional, but one that is there must have a value: Laravel reads "" as missing, and
+            // the platform answered 422 to "" (26 November, a VM image). compatible: RAUC's
+            // characters; build: what its unsigned BIGINT column holds within JSON's whole numbers.
+            const miss = ["publicKey", "name"].filter((k) => typeof b[k] !== "string" || !b[k]);
             if (miss.length) return error(res, 422, "Missing " + miss.join(", "), "VALIDATION", Object.fromEntries(miss.map((k) => [k, "required"])));
+            const limits = { model: 100, compatible: 100, osVersion: 50 };
+            const bad = Object.keys(limits).filter((k) => k in b && b[k] !== null && (typeof b[k] !== "string" || !b[k] || b[k].length > limits[k]));
+            if (typeof b.compatible === "string" && b.compatible && !/^[A-Za-z0-9._-]+$/.test(b.compatible)) bad.push("compatible");
+            if ("build" in b && b.build !== null && !(Number.isSafeInteger(b.build) && b.build >= 0)) bad.push("build");
+            if (bad.length) return error(res, 422, "Invalid " + bad.join(", "), "VALIDATION", Object.fromEntries(bad.map((k) => [k, "invalid"])));
             const id = "d_" + rand(6);
-            const d = { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible, osVersion: b.osVersion || "", build: b.build | 0,
+            const d = { id, user: auth.user, name: b.name, model: b.model || "", compatible: b.compatible || "", osVersion: b.osVersion || "", build: b.build || 0,
                         publicKey: b.publicKey, created: iso(now()), lastSeen: iso(now()).slice(0, 10) };
             st.devices.set(id, d);
             auth.device = id;
             st.tokens.get(auth.token).device = id;
             for (const r of st.refresh.values()) if (r.user === auth.user && !r.device) r.device = id;
             return send(res, 201, { id, name: d.name, created: d.created });
+        }
+        if (p === "v1/me/location") {
+            if (req.method === "GET") return send(res, 200, locationView(auth.user), { "Cache-Control": "no-store" });
+            if (req.method === "DELETE") { if (st.locations[auth.user]) st.locations[auth.user].position = null; return send(res, 200, locationView(auth.user)); }
+            if (req.method === "PUT") {
+                if (!auth.device) return error(res, 409, "Register this device first (POST /v1/devices).", "CONFLICT");
+                const r = shareLocation(auth.user, b, "device", (st.devices.get(auth.device) || {}).name, auth.device);
+                if (r === null) return error(res, 409, "Location sharing is off for this account.", "SHARING_OFF");
+                if (r === false) return error(res, 422, "Not a position", "VALIDATION");
+                return send(res, 200, locationView(auth.user));
+            }
         }
         if (p === "v1/me/devices") {
             return send(res, 200, { items: Array.from(st.devices.values()).filter((d) => d.user === auth.user).map((d) => ({
@@ -534,7 +594,10 @@ function start(opts) {
 
     return new Promise((resolve) => {
         server.listen(opts.port || 0, opts.host || "127.0.0.1", () => {
-            base = "http://" + (opts.host || "127.0.0.1") + ":" + server.address().port;
+            // publicHost: the address clients use when it is not the one listened
+            // on (a VM reaches the Mac at QEMU's 10.0.2.2: --host 0.0.0.0
+            // --public-host 10.0.2.2, tools/image-regression's account flow).
+            base = "http://" + (opts.publicHost || opts.host || "127.0.0.1") + ":" + server.address().port;
             publishCatalog({ apps: [] });
             resolve({
                 get url() { return base; }, feeds: feedsUrl(), api: apiUrl(), issuer: issuer(), token, keys, state: st, files,
@@ -582,7 +645,7 @@ async function samplePackages(ipk, opts) {
     const connector = await ipk.write({
         control: { Package: conId, Version: "0.1.0", Architecture: "all", Description: "Mock Feeds" },
         files: [
-            { path: dir + "appinfo.json", data: JSON.stringify({ id: conId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: "Mock Feeds", icon: "icon.png", visible: false }) },
+            { path: dir + "appinfo.json", data: JSON.stringify({ id: conId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: "Mock Feeds", icon: "icon.png", visible: false, requiredPermissions: [] }) },
             { path: dir + "index.html", data: "<!doctype html><title>Mock Feeds</title>" },
             { path: dir + "icon.png", data: new Uint8Array(icon) },
             { path: dir + "service/package.json", data: JSON.stringify({ name: conId + ".service", version: "0.1.0", main: "service.js" }) },
@@ -598,7 +661,7 @@ module.exports = { start, seed, samplePackages };
 if (require.main === module) {
     const args = process.argv.slice(2);
     const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
-    start({ port: Number(arg("--port", 8099)), host: arg("--host", "127.0.0.1"), token: arg("--token", "conformance") }).then(async (mock) => {
+    start({ port: Number(arg("--port", 8099)), host: arg("--host", "127.0.0.1"), publicHost: arg("--public-host", null), token: arg("--token", "conformance") }).then(async (mock) => {
         if (args.includes("--seed")) await seed(mock);
         const out = arg("--write-servers", null);
         if (out) fs.writeFileSync(out, JSON.stringify(mock.servers(arg("--pin", "root")), null, 4) + "\n");

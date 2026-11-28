@@ -6,6 +6,33 @@ ones (September and early October 2026) are in
 [ROADMAP.md](ROADMAP.md#decisions-so-far), one line each; questions still
 open are in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md).
 
+## 27 November 2026: Phoenix first: LuneOS only fills gaps
+
+**Decided (the owner, a golden rule):** "if a phoenix service exists it is
+always chosen over a lune os service. lune os was only added to fill gaps
+for missing pieces. not to replace anything we have built." It holds for
+every repository (1.0, 2.0, the apps, the layers) and every agent.
+
+**What it settles:**
+- Where Phoenix has a service, app or component, Phoenix's is used: its bus
+  name, flag files, units and apps. LuneOS's version of it is never
+  installed, enabled, aliased or called by Phoenix's code.
+- When both arrive in an image, Phoenix's wins and LuneOS's is taken out
+  (as `webos-phoenix-image.bb` takes out `luneos-extended`, which brings
+  LuneOS's Developer Mode, update service, application manager, shell and
+  apps).
+- When Phoenix builds something LuneOS was filling, LuneOS's goes in the
+  same change.
+- What LuneOS fills, and what of LuneOS's is kept out because Phoenix has
+  its own, is listed in [LUNEOS.md](LUNEOS.md#phoenix-first); a change to
+  that list says which Phoenix piece covers it.
+
+**Why:** LuneOS (meta-webos-ports) was brought in for the device layers
+Phoenix lacked (docs/DECISIONS.md, 15 October 2026), not to replace what
+Phoenix built and tested.
+
+**The first review (27 November 2026)** is in LUNEOS.md "Phoenix first".
+
 ## 15 October 2026: the simulator: the current Chrome version, the newest engine
 
 **The owner**: the same request as the next entry's (the devices'), for

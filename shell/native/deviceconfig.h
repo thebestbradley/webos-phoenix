@@ -34,6 +34,12 @@
 //       enough to hold it and moves the clock beside it (Shell, StatusBar).
 //   ringerSwitch  (object) the ringer switch (phoenix-devices reads it;
 //       hasRingerSwitch here says there is one).
+//   backlight  (string) the backlight's name under /sys/class/backlight
+//       (phoenix-devices drives it). hasBacklight here says whether the
+//       machine has it (that one, or with no name any): read from sysfs, not
+//       the file, once. Without one (a VM: QEMU has none) the device's shell
+//       draws the brightness itself (PhoenixViewsRoot's brightness veil).
+//       PHOENIX_SYSFS_ROOT puts /sys under another root (tests).
 
 #pragma once
 
@@ -54,6 +60,7 @@ class DeviceConfig : public QObject
     Q_PROPERTY(qreal displayCornerRadius READ displayCornerRadius CONSTANT)
     Q_PROPERTY(QVariantList displayCutouts READ displayCutouts CONSTANT)
     Q_PROPERTY(bool hasRingerSwitch READ hasRingerSwitch CONSTANT)
+    Q_PROPERTY(bool hasBacklight READ hasBacklight CONSTANT)
     Q_PROPERTY(QString path READ path CONSTANT)
 
 public:
@@ -66,6 +73,7 @@ public:
     qreal displayCornerRadius() const;
     QVariantList displayCutouts() const;
     bool hasRingerSwitch() const;
+    bool hasBacklight() const;
     QString path() const { return m_path; }
 
 private:

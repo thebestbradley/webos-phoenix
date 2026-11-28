@@ -8,8 +8,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
-import { call } from "@phoenix/luna";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { call, LunaError, settings } from "@phoenix/luna";
 import { ScreenPage } from "./Screen";
 
 beforeAll(() => {
@@ -32,5 +32,25 @@ describe("Phoenix announcements", () => {
         expect(await announcements()).toBe(false);
         fireEvent.click(screen.getByTestId("announcements-toggle"));
         await waitFor(async () => expect(await announcements()).toBe(true));
+    });
+});
+
+describe("Brightness", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("moves and sets picture.backlight before the service has a value (a device's first boot)", async () => {
+        // OSE's settingsservice has no default for it: the get answers errorKey ["backlight"], no settings.
+        vi.spyOn(settings, "watch").mockImplementation((_c, _k, _cb, onError) => {
+            onError?.(new LunaError("luna://com.webos.settingsservice/getSystemSettings", { returnValue: false, errorKey: ["backlight"] }));
+            return { cancel: () => {}, cancelled: false };
+        });
+        const set = vi.spyOn(settings, "set").mockResolvedValue({} as Awaited<ReturnType<typeof settings.set>>);
+        render(<ScreenPage />);
+        const slider = await screen.findByTestId("brightness");
+        expect(slider.getAttribute("aria-disabled")).toBeNull();
+        fireEvent.keyDown(slider, { key: "ArrowLeft" });
+        await waitFor(() => expect(set).toHaveBeenLastCalledWith("picture", { backlight: 65 }));
+        // shown as set, though no answer comes
+        await waitFor(() => expect(screen.getByTestId("brightness").getAttribute("aria-valuenow")).toBe("65"));
     });
 });

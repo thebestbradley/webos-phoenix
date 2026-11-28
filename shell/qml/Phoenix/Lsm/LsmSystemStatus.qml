@@ -16,6 +16,7 @@
 //   com.palm.telephony, com.palm.wan  a modem's (OSE has none): TTY, HAC,
 //                                   roaming, call forwarding, mobile data
 //   com.webos.service.audio         master/getVolume, master/setVolume
+//   com.webos.settingsservice       picture.backlight: the user's brightness
 //   com.webos.service.systemservice the preferences: the tones, system and
 //                                   keyboard sounds, the time format, alerts
 //                                   when locked, airplane mode, the rotation
@@ -25,8 +26,8 @@
 //                                   switches and the light
 //
 // A service a device does not have never answers, and what it would give
-// keeps its default (no modem: no WAN, TTY, HAC or roaming icon). Brightness
-// and the exhibitions are still placeholders (M1).
+// keeps its default (no modem: no WAN, TTY, HAC or roaming icon). The
+// exhibitions are still placeholders (M1).
 //
 // STATUS: written against the services' sources and their replies
 // (tst_lsmstatus drives LsmStatus.js with them); not yet run on a device.
@@ -108,8 +109,63 @@ QtObject {
     // timeFormat "HH24" (luna-sysservice's TimePrefsHandler).
     property bool twentyFourHour: false
     property bool showAlertsWhenLocked: true
-    // STATUS: placeholder (the shell sets the backlight through phoenix-devices).
+    // The user's brightness, 0.10-1 (Theme.minimumBrightness up): the system
+    // menu's slider and the control center's set it, an app's com.palm.display
+    // setProperty {maximumBrightness} too (DeviceServices.setProperties), and
+    // the shell's Display takes it as maximumBrightness for the backlight
+    // (phoenix-devices) or, with none, its veil (PhoenixViewsRoot). Kept where
+    // Settings > Screen & Lock and the simulator keep it: settingsservice's
+    // picture.backlight, 1-100 (LsmStatus.backlight; _brightnessSubscribe
+    // below). 27 November 2026: a placeholder until then, never read or saved,
+    // so Settings' slider changed nothing on a device.
     property real brightness: 1.0
+    onBrightnessChanged: {
+        if (!_applying && _brightnessKnown)
+            _brightnessSave.restart();
+    }
+    // picture.backlight has answered (or been set by the shell): saves begin.
+    property bool _brightnessKnown: false
+    property bool _brightnessSeeded: false
+    // A drag's moves, saved at most every 150 ms; what the shell itself last
+    // sent, and when, so its own answers coming back do not pull the slider
+    // back under the finger.
+    property var _brightnessSent: []
+    property double _brightnessSentAt: 0
+    property Timer _brightnessSave: Timer {
+        interval: 150
+        onTriggered: {
+            var b = Math.max(1, Math.min(100, Math.round(status.brightness * 100)));
+            var now = Date.now();
+            status._brightnessSent = now - status._brightnessSentAt < 1000 ? status._brightnessSent.concat([b]) : [b];
+            status._brightnessSentAt = now;
+            status._call("luna://com.webos.settingsservice/setSystemSettings", { category: "picture", settings: { backlight: b } });
+        }
+    }
+    function _applyBacklight(b) {
+        status._brightnessKnown = true;
+        if (_brightnessSave.running)
+            return;
+        // One of the shell's own, back within the second: already shown.
+        if (Date.now() - _brightnessSentAt < 1000 && _brightnessSent.indexOf(b) >= 0)
+            return;
+        status.brightness = Math.max(0.10, Math.min(1, b / 100));
+    }
+    function _brightnessSubscribe() {
+        _call("luna://com.webos.settingsservice/getSystemSettings", { category: "picture", keys: ["backlight"] }, function(r) {
+            var b = LsmStatus.backlight(r);
+            if (b !== null) {
+                status._applyBacklight(b);
+            } else if (LsmStatus.backlightUnset(r) && !status._brightnessSeeded) {
+                // Not set yet (a new device): the shell's own, then ask again,
+                // which subscribes now that the key is there.
+                status._brightnessSeeded = true;
+                status._brightnessKnown = true;
+                var own = Math.max(1, Math.min(100, Math.round(status.brightness * 100)));
+                status._call("luna://com.webos.settingsservice/setSystemSettings", { category: "picture", settings: { backlight: own } },
+                             function(set) { if (set && set.returnValue !== false) status._brightnessSubscribe(); });
+            }
+        }, true);
+    }
     property var fixedTime: null
 
     // ---- The bus -------------------------------------------------------------------
@@ -260,12 +316,16 @@ QtObject {
     property string exhibitionNightEnd: "07:00"
     property url dockWallpaper: ""
 
-    // Developer Mode (OSE's com.webos.service.devmode getDevMode: its
-    // setDevMode restarts the device, so reading it at start is enough) and
-    // the devModeUnlocked system preference (Just Type's Konami code).
-    // STATUS: written against the services' APIs, not yet run on a device;
-    // LsmWindowSource's apps do not carry appinfo.json's phoenix.developer
-    // yet (SAM's launch points have no such field), so every app shows.
+    // Developer Mode (com.webos.service.devmode getDevMode {subscribe}: its
+    // setDevMode restarts the device, but the subscription lets the launcher
+    // follow the flag at once all the same) and the devModeUnlocked system
+    // preference (Just Type's Konami code). The developer apps (appinfo.json's
+    // phoenix.developer: Notification Lab, the framework demos, Terminal, and
+    // the image's other test apps, meta-phoenix/conf/developer-apps.json) are
+    // in the launcher, the dock and Just Type only while devMode is true
+    // (Shell.developerShown; LsmWindowSource's apps carry the flag from SAM's
+    // listApps). Phoenix's provider answers {status, enabled}; OSE's {enabled}.
+    // STATUS: written against the services' APIs, not yet run on a device.
     property bool devMode: false
     property bool devModeUnlocked: false
     property var _developer: Service {
@@ -275,13 +335,15 @@ QtObject {
             try { r = JSON.parse(payload); } catch (e) { return; }
             if (!r)
                 return;
-            if (r.status === "enabled" || r.status === "disabled")
+            if (typeof r.enabled === "boolean")
+                status.devMode = r.enabled;
+            else if (r.status === "enabled" || r.status === "disabled")
                 status.devMode = r.status === "enabled";
             if (r.devModeUnlocked !== undefined)
                 status.devModeUnlocked = r.devModeUnlocked === true;
         }
         Component.onCompleted: {
-            call("luna://com.webos.service.devmode", "/getDevMode", JSON.stringify({}));
+            call("luna://com.webos.service.devmode", "/getDevMode", JSON.stringify({ subscribe: true }));
             call("luna://com.webos.service.systemservice", "/getPreferences",
                  JSON.stringify({ keys: ["devModeUnlocked"], subscribe: true }));
         }
@@ -513,7 +575,9 @@ QtObject {
             if (typeof r.show3GForEvdo === "boolean")
                 status.show3GForEvdo = r.show3GForEvdo;
         }, true);
-        _call("luna://com.webos.service.audio/master/getVolume", { soundOutput: "alsa" }, function(r) {
+        _brightnessSubscribe();
+        // The active output's volume (LsmStatus.masterVolumeQuery: not "alsa").
+        _call("luna://com.webos.service.audio/master/getVolume", LsmStatus.masterVolumeQuery(), function(r) {
             var v = LsmStatus.masterVolume(r);
             if (v)
                 status.volume = v.volume;

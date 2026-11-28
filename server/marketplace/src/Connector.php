@@ -37,6 +37,35 @@
 //       the app's requiredPermissions name; the app's main page in the package
 //   C16 the template's sign-up link (signUp: {url?, servers?: [{name, url}]}):
 //       https addresses only
+//   C17 a sign-in page of its own (validator.customUI) only in Phoenix's own
+//       connectors (isFirstParty): Accounts shows the page in a frame of its
+//       card, with Accounts' groups, which hold every Phoenix connector's
+//       sign-in group (docs/DEVICE-AUDIT.md). Until each page runs as its own
+//       connector (docs/ROADMAP.md, per-connector sign-in isolation), a
+//       third-party connector uses the standard sign-in
+//   C18 a third-party connector's (not isFirstParty) bus groups, least
+//       privilege: its service's perm.json claims only groups of its own
+//       and THIRD_PARTY_GROUPS; a group of its own is one its api.json
+//       defines, named in its namespace, listing only its service's methods
+//       (luna-hub's groups are global and joined across packages); the perm
+//       file names only its service; its groups.json sets the trust of its
+//       own groups only and leaves SHARED_GROUPS at oem. Phoenix's own
+//       connectors are checked against what their calls need instead
+//       (tools/check-luna.py, tools/test-devicecheck.py)
+//   C19 a third-party connector's app's groups (appinfo.json
+//       requiredPermissions): a list (without one OSE's installer gives the
+//       app the public group) of its own groups (C18's) and
+//       THIRD_PARTY_APP_GROUPS, what the kit's compose page calls; OSE's
+//       installer copies the list into the app's client permissions as it is
+//   C20 a third-party connector's names: its ids (app, service, templates,
+//       own kinds) out of RESERVED_NAMESPACES and its app id in the
+//       developer's namespace; sysbus files only its service's; the
+//       .service file names its service and runs it with run-js-service
+//       from /usr/palm/services/<service>; a regular role for its service
+//       (no exeName, no trust above dev); a manifest with its service's id
+//       and only its own files (luna-hub keeps no names for the system and
+//       keeps one manifest per id, the highest version's: docs/DEVICE-AUDIT.md
+//       "Names and groups on the hub")
 //
 // Phase C4 (connector packages in the catalog) uses this: Catalog::submitPackage
 // takes a package with a service only when checkIpk finds no error (Ipk::check
@@ -67,6 +96,36 @@ final class Connector
                                      'org.webosphoenix.service.oauth', 'org.webosphoenix.service.keystore', 'org.webosphoenix.service.push',
                                      'com.webos.notification', 'org.webosports.service.messaging', 'org.webosphoenix.ongoing'];
 
+    /** Phoenix's namespace (isFirstParty). */
+    public const PHOENIX_NAMESPACE = 'org.webosphoenix';
+    /**
+     * C18: the groups a third-party connector's service may claim besides its own: each one
+     * the kit's calls need, confined by the service that provides it to the caller's own data
+     * (the reasons, group by group: connector-kit checks.ts THIRD_PARTY_GROUPS). Refused among
+     * others: phoenix.appservices.accounts, phoenix.accounts.list (every account),
+     * phoenix.ongoing, oauth.card/erase, every connector's own groups, and groups no service
+     * defines (accounts.operation, messaging.operation).
+     */
+    public const THIRD_PARTY_GROUPS = ['database.operation', 'tempdatabase.operation', 'activity.operation', 'accounts.transport',
+                                       'phoenix.accounts.info', 'phoenix.accounts.read-credentials', 'oauth.signin', 'notification.operation'];
+    /** The connector protocol's groups, which every connector's api.json adds to; their trust is the system's (oem). */
+    public const SHARED_GROUPS = ['accounts.transport', 'phoenix.connector.share'];
+    /**
+     * C19: the groups a third-party connector's app may name besides its own: what the kit's
+     * compose page calls, each confined to the caller's own (connector-kit checks.ts
+     * THIRD_PARTY_APP_GROUPS): listMyAccounts alone (the accounts the app may read) and the
+     * application manager's open alone. Refused among others: accounts.transport,
+     * phoenix.connector.share, phoenix.appmanager.launch, phoenix.accounts.list.
+     */
+    public const THIRD_PARTY_APP_GROUPS = ['phoenix.accounts.mine', 'phoenix.appmanager.open'];
+    /** C20: the namespaces of the system's names (webOS, OSE, LG, LuneOS, Phoenix's apps and templates). */
+    public const RESERVED_NAMESPACES = ['com.palm', 'com.webos', 'com.lge', 'org.webosports', 'org.webosphoenix', 'com.webosphoenix'];
+    private const SYSBUS_KINDS = ['.service', '.role.json', '.api.json', '.perm.json', '.groups.json', '.manifest.json'];
+    private const MANIFEST_DIRS = ['roleFiles' => ['roles.d', '.role.json'], 'serviceFiles' => ['services.d', '.service'],
+                                   'apiPermissionFiles' => ['api-permissions.d', '.api.json'],
+                                   'clientPermissionFiles' => ['client-permissions.d', '.perm.json'], 'groupsFiles' => ['groups.d', '.groups.json']];
+    /** C17's answer to a third-party connector's own sign-in page. */
+    public const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
     private const CALLBACKS = ['onCreate', 'onEnabled', 'onDelete', 'onCredentialsChanged', 'sync'];
     private const SYSBUS_REQUIRED = ['.service', '.role.json', '.api.json'];
 
@@ -75,6 +134,19 @@ final class Connector
      * @param string[] $namespaces the developer's (default: the app id's first two labels)
      * @return array{errors: string[], warnings: string[], appId: string, version: string, service: string, templates: string[], kinds: string[]}
      */
+    /**
+     * Phoenix's own connector: its app id is in Phoenix's namespace and it is checked with
+     * Phoenix's namespaces, which Catalog::submitPackage gives only to an admin's upload (a
+     * developer's org.webosphoenix.* id is refused there and in Phoenix-Web-Services); devices
+     * trust these from preinstalled.json (connector-kit checks.ts isFirstParty).
+     *
+     * @param string[] $namespaces
+     */
+    public static function isFirstParty(string $appId, array $namespaces): bool
+    {
+        return str_starts_with($appId, self::PHOENIX_NAMESPACE . '.') && in_array(self::PHOENIX_NAMESPACE, $namespaces, true);
+    }
+
     public static function check(array $files, array $namespaces = []): array
     {
         $errors = [];
@@ -121,6 +193,7 @@ final class Connector
             return false;
         };
         $nsText = implode(', ', $namespaces);
+        $firstParty = self::isFirstParty($appId, $namespaces);
 
         // C12
         foreach ($files as $path => $bytes) {
@@ -239,11 +312,37 @@ final class Connector
             }
             $list = is_array($t) && array_is_list($t) && $t !== [] ? $t : [$t];
             foreach ($list as $tpl) {
-                self::checkTemplate($tpl, "public/accounts/{$m[1]}/", $m[1], $files, $appId, $service, $kinds, $inNs, $nsText, $errors, $warnings, $out);
+                self::checkTemplate($tpl, "public/accounts/{$m[1]}/", $m[1], $files, $appId, $service, $kinds, $inNs, $nsText, $firstParty, $errors, $warnings, $out);
             }
         }
         if (!$own) {
             $errors[] = 'C2 no account template (public/accounts/<templateId>/<templateId>.json)';
+        }
+
+        // C18
+        $ownGroups = [];
+        if (!$firstParty && $service !== '' && preg_match(self::ID, $service)) {
+            $ownGroups = self::checkGroups($files, $service, $namespaces, $inNs, $json, $errors);
+        }
+
+        // C19
+        if (!$firstParty) {
+            $req = $info['requiredPermissions'] ?? null;
+            $appClaims = "a third-party connector's app names only its own groups (its api.json's, named in $nsText) and " . implode(', ', self::THIRD_PARTY_APP_GROUPS);
+            if (!is_array($req) || !array_is_list($req)) {
+                $errors[] = 'C19 appinfo.json requiredPermissions must be a list (an empty one is fine): without it the installer gives the app the public group';
+            } else {
+                foreach ($req as $g) {
+                    if (!is_string($g) || (!in_array($g, $ownGroups, true) && !in_array($g, self::THIRD_PARTY_APP_GROUPS, true))) {
+                        $errors[] = 'C19 appinfo.json requiredPermissions may not name ' . (is_string($g) ? $g : json_encode($g)) . ": $appClaims";
+                    }
+                }
+            }
+        }
+
+        // C20
+        if (!$firstParty) {
+            self::checkNames($files, $appId, $service, $out['templates'], $out['kinds'], $inNs, $nsText, $json, $errors);
         }
 
         // C14, C15
@@ -402,6 +501,216 @@ final class Connector
         return $out;
     }
 
+    /**
+     * C18 (THIRD_PARTY_GROUPS, SHARED_GROUPS): a third-party connector's api.json, perm.json
+     * and groups.json.
+     *
+     * @param array<string, string> $files
+     * @param string[] $namespaces
+     * @param string[] $errors
+     */
+    private static function checkGroups(array $files, string $service, array $namespaces, callable $inNs, callable $json, array &$errors): array
+    {
+        $ns = implode(', ', $namespaces);
+        $isObject = fn ($v): bool => is_array($v) && (!array_is_list($v) || $v === []);
+        $own = [];
+        $apiPath = "service/sysbus/$service.api.json";
+        [$aok, $api] = $json($apiPath);
+        if (isset($files[$apiPath]) && (!$aok || !$isObject($api))) {
+            $errors[] = "C18 $apiPath: not valid JSON (an object: each group and its methods)";
+        } elseif ($aok) {
+            foreach ($api as $g => $methods) {
+                $g = (string) $g;
+                $shared = in_array($g, self::SHARED_GROUPS, true);
+                if (!$shared && !$inNs($g)) {
+                    $errors[] = "C18 the api.json's group $g is not in the namespace $ns: name a group of your own in it (" . implode(' and ', self::SHARED_GROUPS) . " are the connector protocol's)";
+                }
+                $others = is_array($methods) && array_is_list($methods)
+                    ? array_values(array_filter($methods, fn ($m) => !is_string($m) || !str_starts_with($m, "$service/")))
+                    : [$methods];
+                foreach ($others as $m) {
+                    $errors[] = "C18 the api.json's group $g lists " . json_encode($m, JSON_UNESCAPED_SLASHES) . ": a connector's groups list only its service's methods ($service/<method>)";
+                }
+                if (!$shared && $inNs($g) && !$others) {
+                    $own[] = $g;
+                }
+            }
+        }
+        $claims = "a third-party connector claims only its own groups (its api.json's, named in $ns) and " . implode(', ', self::THIRD_PARTY_GROUPS);
+        $paths = array_map('strval', array_keys($files));
+        sort($paths);
+        foreach ($paths as $p) {
+            if (!preg_match('#^service/sysbus/[^/]+\.perm\.json$#', $p)) {
+                continue;
+            }
+            [$pok, $perm] = $json($p);
+            if (!$pok || !$isObject($perm)) {
+                $errors[] = "C18 $p: not valid JSON (an object: the service and the groups it claims)";
+                continue;
+            }
+            foreach ($perm as $name => $groups) {
+                $name = (string) $name;
+                if ($name !== $service) {
+                    $errors[] = "C18 $p: claims groups for $name; a connector's perm file names only its service, $service";
+                    continue;
+                }
+                if (!is_array($groups) || !array_is_list($groups)) {
+                    $errors[] = "C18 $p: $service's groups must be a list";
+                    continue;
+                }
+                foreach ($groups as $g) {
+                    if (!is_string($g) || (!in_array($g, $own, true) && !in_array($g, self::THIRD_PARTY_GROUPS, true))) {
+                        $errors[] = "C18 $service may not claim the group " . (is_string($g) ? $g : json_encode($g)) . ": $claims";
+                    }
+                }
+            }
+        }
+        foreach ($paths as $p) {
+            if (!preg_match('#^service/sysbus/[^/]+\.groups\.json$#', $p)) {
+                continue;
+            }
+            [$gok, $gr] = $json($p);
+            if (!$gok || !$isObject($gr)) {
+                $errors[] = "C18 $p: not valid JSON (an object: each group and its trust levels)";
+                continue;
+            }
+            foreach ($gr as $g => $v) {
+                $g = (string) $g;
+                if ($g === 'allowedNames') {
+                    if ($v !== [$service]) {
+                        $errors[] = "C18 $p: allowedNames must be [\"$service\"]";
+                    }
+                } elseif (in_array($g, self::SHARED_GROUPS, true)) {
+                    if ($v !== ['oem']) {
+                        $errors[] = "C18 $p: the trust of $g is the system's, [\"oem\"]; a connector may not change it";
+                    }
+                } elseif (!in_array($g, $own, true)) {
+                    $errors[] = "C18 $p: sets the trust of $g, not a group of the package's own (its api.json's, named in $ns)";
+                } elseif (!is_array($v) || !array_is_list($v) || $v === [] || array_filter($v, fn ($t) => !is_string($t))) {
+                    $errors[] = "C18 $p: the trust of $g must be a list of trust levels";
+                }
+            }
+        }
+        return $own;
+    }
+
+    /**
+     * C20 (RESERVED_NAMESPACES): a third-party connector's ids, sysbus file names, .service
+     * file, role and manifest.
+     *
+     * @param array<string, string> $files
+     * @param string[] $templates
+     * @param string[] $kinds
+     * @param string[] $errors
+     */
+    private static function checkNames(array $files, string $appId, string $service, array $templates, array $kinds, callable $inNs,
+                                       string $ns, callable $json, array &$errors): void
+    {
+        if (preg_match(self::ID, $appId) && !$inNs($appId)) {
+            $errors[] = "C20 the app id $appId is not in the namespace $ns";
+        }
+        $ids = [['the app id', $appId], ['the service', $service]];
+        foreach ($templates as $t) {
+            $ids[] = ['the template', $t];
+        }
+        foreach ($kinds as $k) {
+            if (self::genericPrefixOf($k) === null) {
+                $ids[] = ['the kind', (string) preg_replace('/:\d+$/', '', $k)];
+            }
+        }
+        foreach ($ids as [$what, $id]) {
+            foreach (self::RESERVED_NAMESPACES as $r) {
+                if ($id !== '' && ($id === $r || str_starts_with($id, "$r."))) {
+                    $errors[] = "C20 $what $id is in $r, a namespace of the system's names: use your own";
+                    break;
+                }
+            }
+        }
+        if ($service === '' || !preg_match(self::ID, $service)) {
+            return;
+        }
+        $paths = array_map('strval', array_keys($files));
+        sort($paths);
+        $allowed = array_map(fn ($k) => $service . $k, self::SYSBUS_KINDS);
+        foreach ($paths as $p) {
+            if (str_starts_with($p, 'service/sysbus/') && !in_array(substr($p, strlen('service/sysbus/')), $allowed, true)) {
+                $errors[] = "C20 $p: a connector's sysbus files are its service's, " . implode(', ', $allowed);
+            }
+        }
+        $svcPath = "service/sysbus/$service.service";
+        if (isset($files[$svcPath])) {
+            $exec = "/usr/bin/run-js-service -n /usr/palm/services/$service";
+            $keys = [];
+            foreach (preg_split('/\r?\n/', (string) preg_replace('/^\xEF\xBB\xBF/', '', $files[$svcPath])) as $line) {
+                $l = trim($line);
+                if ($l === '' || $l[0] === '#' || $l === '[D-BUS Service]') {
+                    continue;
+                }
+                if (!preg_match('/^([A-Za-z]+)=(.*)$/', $l, $m) || !in_array($m[1], ['Name', 'Exec', 'Type'], true) || isset($keys[$m[1]])) {
+                    $errors[] = "C20 $svcPath: " . json_encode($l, JSON_UNESCAPED_SLASHES) . ' is not one of Name=, Exec=, Type= (once each)';
+                } else {
+                    $keys[$m[1]] = trim($m[2]);
+                }
+            }
+            if (($keys['Name'] ?? null) !== $service) {
+                $errors[] = "C20 $svcPath: Name= must be $service alone";
+            }
+            if (($keys['Exec'] ?? null) !== $exec) {
+                $errors[] = "C20 $svcPath: Exec= must be $exec";
+            }
+            if (isset($keys['Type']) && $keys['Type'] !== 'dynamic') {
+                $errors[] = "C20 $svcPath: Type= must be dynamic";
+            }
+        }
+        [$rok, $role] = $json("service/sysbus/$service.role.json");
+        if ($rok && is_array($role) && !array_is_list($role)) {
+            $where = "C20 service/sysbus/$service.role.json: ";
+            foreach (array_keys($role) as $k) {
+                if (!in_array((string) $k, ['appId', 'type', 'allowedNames', 'permissions', 'trustLevel'], true)) {
+                    $errors[] = $where . "$k is not for a connector's role (appId, type, allowedNames, permissions)";
+                }
+            }
+            if (array_key_exists('appId', $role) && $role['appId'] !== $service) {
+                $errors[] = $where . "appId must be $service";
+            }
+            if (array_key_exists('type', $role) && $role['type'] !== 'regular') {
+                $errors[] = $where . 'type must be "regular" ("privileged" may take any name)';
+            }
+            if (array_key_exists('trustLevel', $role) && $role['trustLevel'] !== 'dev') {
+                $errors[] = $where . 'a connector may not raise its trust level (' . json_encode($role['trustLevel']) . '): the system sets it';
+            }
+            foreach (is_array($role['permissions'] ?? null) ? $role['permissions'] : [] as $perm) {
+                if (!is_array($perm) || ($perm['service'] ?? null) !== $service) {
+                    $errors[] = $where . "its permissions are for $service only";
+                }
+            }
+        }
+        $manPath = "service/sysbus/$service.manifest.json";
+        [$mok, $man] = $json($manPath);
+        if (isset($files[$manPath]) && (!$mok || !is_array($man) || (array_is_list($man) && $man !== []))) {
+            $errors[] = "C20 $manPath: not valid JSON";
+        } elseif ($mok) {
+            if (($man['id'] ?? null) !== $service) {
+                $errors[] = "C20 $manPath: id must be $service (the hub keeps one manifest per id, the highest version's)";
+            }
+            foreach ($man as $k => $list) {
+                $k = (string) $k;
+                if ($k === 'id' || $k === 'version') {
+                    continue;
+                }
+                if (!isset(self::MANIFEST_DIRS[$k])) {
+                    $errors[] = "C20 $manPath: $k is not a manifest's list of files";
+                    continue;
+                }
+                [$dir, $suffix] = self::MANIFEST_DIRS[$k];
+                $want = "/usr/share/luna-service2/$dir/$service$suffix";
+                if (!is_array($list) || !array_is_list($list) || array_filter($list, fn ($f) => $f !== $want)) {
+                    $errors[] = "C20 $manPath: $k may list only $want";
+                }
+            }
+        }
+    }
+
     private static function checkShareTargets(array $list, array $info, array $files, string $service, array $templates, callable $json,
                                               array &$errors): void
     {
@@ -466,7 +775,7 @@ final class Connector
     }
 
     private static function checkTemplate($tpl, string $dir, string $folder, array $files, string $appId, string $service, array $kinds,
-                                          callable $inNs, string $nsText, array &$errors, array &$warnings, array &$out): void
+                                          callable $inNs, string $nsText, bool $firstParty, array &$errors, array &$warnings, array &$out): void
     {
         if (!is_array($tpl) || (array_is_list($tpl) && $tpl !== [])) {
             $errors[] = "C3 $dir: a template is an object";
@@ -564,6 +873,11 @@ final class Connector
             } elseif (!isset($files[(string) ($v['customUI']['name'] ?? '')])) {
                 $errors[] = "C7 $id: the sign-in page " . ($v['customUI']['name'] ?? '') . ' is not in the app';
             }
+        }
+
+        // C17 a sign-in page of its own: Phoenix's own connectors only
+        if (is_array($v) && isset($v['customUI']) && !$firstParty) {
+            $errors[] = "C17 $id: " . self::THIRD_PARTY_SIGNIN;
         }
 
         // C8

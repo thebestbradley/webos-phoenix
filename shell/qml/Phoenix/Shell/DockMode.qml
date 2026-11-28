@@ -339,8 +339,15 @@ Item {
                     anchors.fill: parent
                 }
                 property Item window: null
-                onKeyChanged: Qt.callLater(attach)
-                Component.onCompleted: Qt.callLater(attach)
+                // At once, not with Qt.callLater: the window source makes the
+                // window before it gives out its key (openSystemWindow), so
+                // there is nothing to wait for. Every change to the
+                // exhibitions makes all the slots again; a slot let go loses
+                // its context (dock) at once but is deleted only later, so a
+                // delayed attach still waiting on it ran without dock and
+                // threw, and the window was off the stage until it ran.
+                onKeyChanged: attach()
+                Component.onCompleted: attach()
                 function attach() {
                     var w = key !== "" && dock.source ? dock.source.windowFor(key) : null;
                     if (w === window)

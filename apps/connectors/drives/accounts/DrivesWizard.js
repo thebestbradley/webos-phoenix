@@ -143,16 +143,19 @@ enyo.kind({
         {kind: "Toolbar", className: "enyo-toolbar-light", components: [
             {kind: "Button", name: "cancelButton", label: AccountsUtil.BUTTON_CANCEL, className: "accounts-toolbar-btn", onclick: "cancel"}
         ]},
-        {name: "info", kind: "PalmService", onResponse: "gotInfo"},
-        {name: "validate", kind: "PalmService", onResponse: "validated"},
-        {name: "oauth", kind: "PalmService", onResponse: "validated"},
-        {name: "flowStart", kind: "PalmService", onResponse: "flowStarted"},
-        {name: "flowPoll", kind: "PalmService", onResponse: "flowPolled"},
-        {name: "hostKey", kind: "PalmService", onResponse: "gotHostKey"},
-        {name: "makeKeySvc", kind: "PalmService", onResponse: "keyMade"},
-        {name: "importKeySvc", kind: "PalmService", onResponse: "keyImported"},
-        {name: "forgetKeySvc", kind: "PalmService"},
-        {name: "accountKeySvc", kind: "PalmService", onResponse: "gotAccountKey"},
+        // The drives service (SERVICE, set in create). This page runs in Accounts'
+        // frame, so these go out as Accounts': its group phoenix.drives.signin
+        // has these methods and no others of the service.
+        {name: "info", kind: "PalmService", method: "providerInfo", onResponse: "gotInfo"},
+        {name: "validate", kind: "PalmService", method: "checkCredentials", onResponse: "validated"},
+        {name: "oauth", kind: "PalmService", method: "signIn", onResponse: "validated"},
+        {name: "flowStart", kind: "PalmService", method: "loginFlowStart", onResponse: "flowStarted"},
+        {name: "flowPoll", kind: "PalmService", method: "loginFlowPoll", onResponse: "flowPolled"},
+        {name: "hostKey", kind: "PalmService", method: "sftpHostKey", onResponse: "gotHostKey"},
+        {name: "makeKeySvc", kind: "PalmService", method: "sftpMakeKey", onResponse: "keyMade"},
+        {name: "importKeySvc", kind: "PalmService", method: "sftpImportKey", onResponse: "keyImported"},
+        {name: "forgetKeySvc", kind: "PalmService", method: "sftpForgetKey"},
+        {name: "accountKeySvc", kind: "PalmService", method: "sftpPublicKey", onResponse: "gotAccountKey"},
         {name: "openBrowser", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "open"},
         {kind: "CrossAppResult", name: "crossAppResult"}
     ],
@@ -169,10 +172,8 @@ enyo.kind({
         // The template's own icon (this page is the app's accounts/wizard.html).
         this.$.titleIcon.setSrc("../public/accounts/" + this.templateId + "/images/drive-48x48.png");
         this.$.help.setContent(this.HELP[this.provider] || "");
-        [["info", "providerInfo"], ["validate", "checkCredentials"], ["oauth", "signIn"], ["flowStart", "loginFlowStart"], ["flowPoll", "loginFlowPoll"],
-         ["hostKey", "sftpHostKey"], ["makeKeySvc", "sftpMakeKey"], ["importKeySvc", "sftpImportKey"], ["forgetKeySvc", "sftpForgetKey"],
-         ["accountKeySvc", "sftpPublicKey"]]
-            .forEach(function (x) { this.$[x[0]].setService(this.SERVICE); this.$[x[0]].setMethod(x[1]); }, this);
+        ["info", "validate", "oauth", "flowStart", "flowPoll", "hostKey", "makeKeySvc", "importKeySvc", "forgetKeySvc", "accountKeySvc"]
+            .forEach(function (n) { this.$[n].setService(this.SERVICE); }, this);
         if (this.mode !== "modify") this.$.signUp.setTemplate(this.params.template || null);
         if (this.provider === "sftp") {
             this.$.auth.setItems(this.AUTH_ITEMS);

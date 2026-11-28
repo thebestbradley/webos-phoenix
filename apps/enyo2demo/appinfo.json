@@ -4,6 +4,7 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": ["time.query"],
     "title": "Enyo 2 Demo",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

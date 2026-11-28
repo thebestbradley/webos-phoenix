@@ -46,7 +46,7 @@ var methods = assistant.createAssistantService({
     voice: device.voiceStatus({ tts: tts, luna: { call: function (uri, params) {
         return new Promise(function (resolve) { service.call(uri, params, function (message) { resolve(message.payload); }); });
     } } }),
-    caller: function () { return current ? current.sender || current.applicationID || "" : ""; },
+    caller: function () { return current ? callerOf(current) : ""; },
     // A follow-up question later (lib/followups.js). OSE's notification
     // manager has no buttons: a toast that opens the Assistant on the
     // question (the shell's buttons are phoenix-sim's for now, docs/AI-AND-MCP.md).
@@ -66,8 +66,16 @@ var systemSettings = {};
 service.subscribe("luna://com.webos.settingsservice/getSystemSettings", { keys: ["localeInfo", "measurementUnits"], subscribe: true })
     .on("response", function (message) { if (message.payload && message.payload.settings) systemSettings = message.payload.settings; });
 
-// The caller of the request being answered (luna-service2 tells the app id).
+// The caller of the request being answered. webos-service's Message
+// (lib/message.js on the image) has only sender: the app id WebAppMgr puts
+// on a page's call, its " <pid>" split off, else the calling service's name
+// (the shell: com.webos.surfacemanager, not the simulator's
+// com.palm.systemui; assistant.js SYSTEM_UIS). It has no applicationID or
+// senderServiceName of its own; they are read only if a later one adds them.
 var current = null;
+function callerOf(m) {
+    return String(m.sender || m.applicationID || m.senderServiceName || "").split(" ")[0];
+}
 var WATCHABLE = ["threads", "thread", "getSettings", "providers", "models", "commands", "followUps"];
 function notify() {
     watchers = watchers.filter(function (w) { return !w.cancelled; });
@@ -81,7 +89,7 @@ assistant.METHODS.forEach(function (name) {
         var params = Object.assign({}, message.payload || {});
         var sub = !!params.subscribe && WATCHABLE.indexOf(name) >= 0;
         delete params.subscribe;
-        current = { sender: message.sender, applicationID: message.applicationID };
+        current = { sender: message.sender, applicationID: message.applicationID, senderServiceName: message.senderServiceName };
         methods[name](params).then(function (reply) {
             if (sub) {
                 reply.subscribed = true;

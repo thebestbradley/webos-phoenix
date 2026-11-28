@@ -42,7 +42,11 @@ const COMPATIBLE = "phoenix-pinephonepro";
 let dir: string;
 let server: http.Server;
 let base: string;
-let files: Record<string, { status?: number; body: Buffer | string; cutAt?: number }> = {};
+// cutAt: the first response stops after that many bytes; cutEvery: every
+// response does (a server ending long responses); drop: no answer at all,
+// dropAfter: none after that many requests.
+let files: Record<string, { status?: number; body: Buffer | string; cutAt?: number; cutEvery?: number; drop?: boolean;
+                            dropAfter?: number; served?: number }> = {};
 let ranges: string[] = [];
 
 function bundle(version: string, build: number, compatible = COMPATIBLE) {
@@ -68,6 +72,8 @@ function device(booted = { version: "1.0.0", build: 100 }) {
         slots: { "rootfs.0": booted, "rootfs.1": null },
     }));
     fs.rmSync(path.join(dir, "rauc.json.calls"), { force: true });
+    // The A/B disk's GRUB names the slot it started (phoenix-ab-grub.cfg).
+    fs.writeFileSync(path.join(dir, "cmdline"), "BOOT_IMAGE=(hd0,gpt2)/boot/Image root=PARTLABEL=phoenix-root-a rw panic=10 rauc.slot=A\n");
     osRelease(booted);
     battery(80, false);
 }
@@ -110,15 +116,19 @@ let systemNotes: Any = null;
 function service() {
     const downloads = path.join(dir, "downloads");
     return updates.createUpdatesService({
-        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), product: path.join(dir, "product.json") }),
+        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), product: path.join(dir, "product.json"),
+                               cmdline: path.join(dir, "cmdline") }),
         request: node.request,
-        download: node.download,
+        // Its pauses between tries, short.
+        download: (url: string, file: string, onProgress: Any, opts: Any) =>
+            node.download(url, file, onProgress, Object.assign({ retryDelay: 5 }, opts)),
         files: {
             path: (name: string) => path.join(downloads, name),
             exists: (f: string) => fs.existsSync(f),
             remove: (f: string) => fs.rmSync(f, { force: true }),
         },
         power: () => node.power(path.join(dir, "power_supply")),
+        overlays: { clearOthers: () => node.clearOtherOverlays({ dir: path.join(dir, "overlay"), osRelease: path.join(dir, "os-release") }) },
         luna: {
             call: (uri: string, params: Any) => {
                 calls.push({ uri, params });
@@ -153,19 +163,25 @@ beforeAll(async () => {
         const f = files[req.url ?? ""];
         ranges.push(String(req.headers.range ?? ""));
         if (!f) { res.writeHead(404); return res.end("not found"); }
+        f.served = (f.served ?? 0) + 1;
+        if (f.drop || (f.dropAfter !== undefined && f.served > f.dropAfter)) return req.socket.destroy();
         const body = Buffer.from(f.body);
+        // The connection drops after that many bytes (a download that stops).
+        const send = (part: Buffer, cut?: number) => {
+            if (cut === undefined || part.length <= cut) return res.end(part);
+            res.write(part.subarray(0, cut));
+            setTimeout(() => res.destroy(), 20);
+        };
         const m = /^bytes=(\d+)-$/.exec(String(req.headers.range ?? ""));
         if (m && !f.status) {
             const from = Number(m[1]);
             if (from >= body.length) { res.writeHead(416); return res.end(); }
             res.writeHead(206, { "Content-Type": "application/octet-stream", "Content-Range": `bytes ${from}-${body.length - 1}/${body.length}`,
                                  "Content-Length": String(body.length - from) });
-            return res.end(body.subarray(from));
+            return send(body.subarray(from), f.cutEvery);
         }
         res.writeHead(f.status ?? 200, { "Content-Type": "application/octet-stream", "Content-Length": String(body.length) });
-        // cutAt: the connection drops after that many bytes (a download that stops).
-        if (f.cutAt !== undefined) { res.write(body.subarray(0, f.cutAt)); return setTimeout(() => res.destroy(), 20); }
-        res.end(body);
+        send(body, f.cutAt ?? f.cutEvery);
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
     base = `http://127.0.0.1:${(server.address() as Any).port}/`;
@@ -285,6 +301,31 @@ describe("downloading and preparing", () => {
         expect(await service().GetStatus({ subscribe: true })).toMatchObject({ status: "Available", version: "webOS Phoenix 1.1.0" });
     });
 
+    it("asks RAUC for the slots once, not at every progress tick or while it writes a slot", async () => {
+        publish("1.1.0", 110);
+        const svc = service();
+        await svc.check({});
+        const before = raucState().calls.filter((c: string) => c === "status --output-format=json").length;
+        expect((await svc.download({})).state).toBe("ready");
+        // One after the install and mark-active changed the slots; none before.
+        const during = raucState().calls.slice(raucState().calls.indexOf("info --output-format=json " + path.join(dir, "downloads", "phoenix-110.raucb")));
+        expect(raucState().calls.filter((c: string) => c === "status --output-format=json").length - before).toBe(1);
+        expect(during.indexOf("status --output-format=json")).toBeGreaterThan(during.findIndex((c: string) => c.startsWith("install ")));
+    });
+
+    it("keeps a download when RAUC does not answer, and prepares it next time without fetching it again", async () => {
+        publish("1.1.0", 110);
+        const st0 = raucState(); delete st0.calls;
+        fs.writeFileSync(path.join(dir, "rauc.json"), JSON.stringify({ ...st0, infoTimeouts: 1 }));
+        const svc = service();
+        await svc.check({});
+        expect(await svc.download({})).toMatchObject({ returnValue: false, errorCode: "UPDATER_BUSY" });
+        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual(["phoenix-110.raucb"]);
+        expect((await svc.download({})).state).toBe("ready");
+        expect(files[`/${COMPATIBLE}/phoenix-1.1.0.raucb`].served).toBe(1);
+        expect(raucState().slots["rootfs.1"]).toEqual({ version: "1.1.0", build: 110 });
+    });
+
     it("refuses a download that is not what the feed said", async () => {
         publish("1.1.0", 110, { sha256: "0".repeat(64) });
         const svc = service();
@@ -352,6 +393,28 @@ describe("installing", () => {
         const st = await after.getStatus({});
         expect(st).toMatchObject({ state: "idle", available: null, current: { version: "1.1.0", build: 110 } });
         expect(called("/createToast").at(-1)?.params.message).toBe("Updated to webOS Phoenix 1.1.0");
+    });
+
+    // Dev push's overlays (docs/DEV-PUSH.md 4.6): kept through the switch (a
+    // fall back before mark-good finds its own), the old build's removed
+    // once the new one is marked good.
+    it("removes dev push's overlays of other builds once the new build is marked good", async () => {
+        const ov = path.join(dir, "overlay");
+        fs.mkdirSync(path.join(ov, "100/upper/usr/share/phoenix"), { recursive: true });
+        fs.writeFileSync(path.join(ov, "state.json"), JSON.stringify({ build: "100", files: {} }));
+        const svc = await ready();
+        await svc.installNow({});
+        expect(fs.existsSync(path.join(ov, "100"))).toBe(true);
+        restart();
+        await service().getStatus({});
+        expect(raucState().calls.some((c: string) => /mark-good/.test(c))).toBe(true);
+        expect(fs.existsSync(path.join(ov, "100"))).toBe(false);
+        expect(fs.existsSync(path.join(ov, "state.json"))).toBe(false);
+        // The running build's own stays.
+        fs.mkdirSync(path.join(ov, "110/upper"), { recursive: true });
+        fs.writeFileSync(path.join(ov, "state.json"), JSON.stringify({ build: "110", files: {} }));
+        expect(node.clearOtherOverlays({ dir: ov, osRelease: path.join(dir, "os-release") })).toEqual([]);
+        expect(fs.readdirSync(ov).sort()).toEqual(["110", "state.json"]);
     });
 
     it("says so when the new system did not start and the device went back", async () => {
@@ -485,21 +548,59 @@ describe("signed feeds, rollout, resume and the boot check", () => {
         expect(state.rolloutId).toMatch(/^[0-9a-f]{32}$/);
     });
 
-    it("a download that stops continues where it was (HTTP range), and the whole is checked", async () => {
+    it("a download cut off goes on by itself from where it stopped (HTTP range), and the whole is checked", async () => {
         const big = bundle("1.1.0", 110) + "#".repeat(200000) + "\n";
         publish("1.1.0", 110, { bundleText: big });
         const file = `/${COMPATIBLE}/phoenix-1.1.0.raucb`;
         files[file].cutAt = 50000;
         const svc = service();
         await svc.check({});
-        expect(await svc.download({})).toMatchObject({ returnValue: false, errorCode: "DOWNLOAD_FAILED" });
-        const kept = fs.statSync(path.join(dir, "downloads", "phoenix-110.raucb")).size;
-        expect(kept).toBeGreaterThan(0);
-        expect(kept).toBeLessThan(Buffer.byteLength(big));
-        delete files[file].cutAt;
         ranges = [];
         expect((await svc.download({})).state).toBe("ready");
-        expect(ranges).toContain(`bytes=${kept}-`);
+        expect(ranges).toEqual(["", "bytes=50000-"]);
+    });
+
+    it("a server that ends every long response: the download takes as many tries as it needs", async () => {
+        const big = bundle("1.1.0", 110) + "#".repeat(200000) + "\n";
+        publish("1.1.0", 110, { bundleText: big });
+        files[`/${COMPATIBLE}/phoenix-1.1.0.raucb`].cutEvery = 30000;
+        const svc = service();
+        await svc.check({});
+        ranges = [];
+        expect((await svc.download({})).state).toBe("ready");
+        const from = ranges.map((r) => Number(/^bytes=(\d+)-$/.exec(r)?.[1] ?? 0));
+        expect(from.length).toBe(Math.ceil(Buffer.byteLength(big) / 30000));
+        expect(from).toEqual(from.map((_, i) => i * 30000));
+    });
+
+    it("no answer five tries in a row: it stops and keeps what came; the next download goes on from there", async () => {
+        const big = bundle("1.1.0", 110) + "#".repeat(200000) + "\n";
+        publish("1.1.0", 110, { bundleText: big });
+        const file = `/${COMPATIBLE}/phoenix-1.1.0.raucb`;
+        const svc = service();
+        await svc.check({});
+        // The first response brings 50000 bytes; then the server is gone.
+        Object.assign(files[file], { cutEvery: 50000, dropAfter: 1, served: 0 });
+        ranges = [];
+        expect(await svc.download({})).toMatchObject({ returnValue: false, errorCode: "DOWNLOAD_FAILED" });
+        expect(ranges).toEqual(["", "bytes=50000-", "bytes=50000-", "bytes=50000-", "bytes=50000-", "bytes=50000-"]);
+        expect(fs.statSync(path.join(dir, "downloads", "phoenix-110.raucb")).size).toBe(50000);
+        delete files[file].cutEvery;
+        delete files[file].dropAfter;
+        ranges = [];
+        expect((await svc.download({})).state).toBe("ready");
+        expect(ranges).toEqual(["bytes=50000-"]);
+    });
+
+    it("a download cancelled between tries stops at once, keeping what came", async () => {
+        files["/slow.raucb"] = { body: "x".repeat(100), drop: true };
+        const file = path.join(dir, "downloads", "slow.raucb");
+        const job = node.download(base + "slow.raucb", file, () => {}, { resume: true, retryDelay: 60000 });
+        await new Promise((r) => setTimeout(r, 300));
+        const t0 = Date.now();
+        job.cancel();
+        await expect(job.promise).rejects.toMatchObject({ code: "CANCELLED" });
+        expect(Date.now() - t0).toBeLessThan(1000);
     });
 
     it("marks the running slot good when it starts, and offers the dev channel", async () => {
@@ -512,9 +613,34 @@ describe("signed feeds, rollout, resume and the boot check", () => {
         expect((await svc.check({})).available).toMatchObject({ build: 121 });
     });
 
+    it("on a boot without an update slot says so at once, and asks RAUC nothing", async () => {
+        // A VM started straight from the image's ext4 (-kernel): no rauc.slot=.
+        fs.writeFileSync(path.join(dir, "cmdline"), "root=/dev/vda rw rootwait console=ttyAMA0\n");
+        const svc = service();
+        const t0 = Date.now();
+        // The status: the running version, and why there are no updates.
+        expect(await svc.getStatus({})).toMatchObject({
+            returnValue: true, state: "idle", current: { version: "1.0.0", build: 100 }, available: null, configured: false,
+            error: { errorCode: "NOT_AVAILABLE", errorText: expect.stringContaining("not available on this boot") } });
+        expect(await svc.GetStatus({})).toEqual({ returnValue: true });
+        for (const m of ["check", "download", "installNow", "InstallNow", "setPreferences", "scheduled", "charging", "checkNotices"]) {
+            expect(await svc[m]({}), m).toMatchObject({ returnValue: false, errorCode: "NOT_AVAILABLE",
+                                                        errorText: expect.stringContaining("not available on this boot") });
+        }
+        expect(Date.now() - t0).toBeLessThan(2000);
+        expect(raucState().calls).toEqual([]);
+        // Nothing scheduled: no daily check, no notices after boot.
+        expect(called("/create")).toEqual([]);
+        // The slot comes from the kernel's command line.
+        expect(node.bootSlot(path.join(dir, "cmdline"))).toBe(null);
+        fs.writeFileSync(path.join(dir, "cmdline"), "root=PARTLABEL=phoenix-root-b rauc.slot=B panic=10\n");
+        expect(node.bootSlot(path.join(dir, "cmdline"))).toBe("B");
+        expect(node.bootSlot(path.join(dir, "no-such-cmdline"))).toBe(null);
+    });
+
     it("says when no update server is set up", async () => {
         const svc = updates.createUpdatesService(Object.assign({}, {
-            rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release") }),
+            rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), cmdline: path.join(dir, "cmdline") }),
             power: async () => null, luna: { call: async () => ({ returnValue: true }) },
             state: { load: () => null, save: () => {} },
             servers: async () => platform.servers.resolve({ feeds: null }, null, false),

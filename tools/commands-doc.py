@@ -175,7 +175,7 @@ it("Without a GPU", "The shell tells by the renderer whether a GPU draws, and pr
 
 sec("Test: as CI runs them", "CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ tests below. `./phoenix test` builds and installs nothing first.")
 it("The quick checks", "What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.", B, WP,
-   "webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-156",
+   "webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-159",
    [("./phoenix test --quick", "every check (tools/ci-checks.sh)"), ("./phoenix test --quick --list", "their IDs"),
     ("./phoenix test --quick typecheck unit-tests", "only these"), ("./phoenix test --quick --fail-fast", "stop at the first failure")])
 it("Every web app test, or CI's shard of them", "The tests in `tools/web-tests.txt`, one after another, each one's time in a summary; CI runs them in four shards balanced by the times in the list. Build the apps first (`./phoenix`, or `npm run build` in `apps/` and the demos as their READMEs say) and install Playwright (`./phoenix --tests`).", B, WP,
@@ -207,9 +207,11 @@ it("Run the C++ tests", "There's nothing for `ctest` to find: run each test prog
 it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,89-92 · tools/check-device.sh:8-15",
    ["./phoenix check-device", "./phoenix check-device --all", "./phoenix check-device --strict",
     ("./phoenix check-device --parse fairphone-fp6", "also BitBake's parse check of the named machines (Linux, not as root)", {"os": L})])
-it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
+it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-155 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11",
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
-    "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
+    ("python3 tools/test-serve-rootfs.py", "a browser's burst of connections while tools/serve-rootfs.py is busy"),
+    "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", ("python3 tools/test-packageconfig-check.py", "the PACKAGECONFIG options meta-phoenix asks for"), "python3 tools/test-sounds-pcm.py",
+    ("node tools/test-nova-bundle.cjs", "dev bundles: the image's manifest, the bundle maker, the device's checks"),
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
 it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144",
    [("python3 tools/hidpi-art.py --check", "whenever art or stylesheets change"), "python3 tools/keyboard-charcoal.py --check", "node tools/render-app-icons.cjs --check",
@@ -263,6 +265,43 @@ it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix
     "npx phoenix-connector validate <folder or .ipk>", ("npx phoenix-connector pack <folder>", "--out DIR"), "npx phoenix-connector publish <folder or .ipk> --local", "npx phoenix-connector test <folder>"])
 it("Pack the built apps for an image", "Then set `PHOENIX_APPS_DIST = \"/path/to/apps-dist.tar.gz\"` in local.conf.", B, WP, "webos-phoenix/tools/pack-apps-dist.sh:7-17 · tools/install-rootfs.py:28",
    ["tools/pack-apps-dist.sh apps-dist.tar.gz", ("python3 tools/install-rootfs.py out/rootfs --list", "show the image's layout")])
+
+sec("Developer tools for a device (nova)", "`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode (docs/DEV-PUSH.md): it pairs with a device, pushes changed system files into its developer overlay and restarts only what changed, and makes dev bundles. Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use; the devices it is paired with are in `~/.config/nova/devices.json`. Every device command takes `-d NAME|usb|sim[:INSTANCE]|ADDRESS` (without it: the only device paired, else the last used).")
+it("Run nova", "From a checkout, or put it on the PATH.", B, WP, "webos-phoenix/phoenix:39-42,98-101 · tools/nova/nova.cjs:8-9",
+   [("./phoenix nova --help", ""), ("ln -s \"$PWD/tools/nova/nova.cjs\" /usr/local/bin/nova", "then `nova` anywhere"),
+    ("./phoenix nova key", "this computer's public key and fingerprint")])
+it("Pair with a device", "On the device: Settings > Developer Mode > Pair a Computer shows a six-digit code and its key; type the code here, and check the key nova prints is the one shown. Five wrong codes end the pairing; start it again on the device.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:64-68 · tools/nova/lib/remote.cjs · docs/DEV-PUSH.md 6.4",
+   [("./phoenix nova pair 192.168.1.23", "a device on the network (Developer Mode > Push over network on)"),
+    ("./phoenix nova pair -d usb", "over the USB cable (USB debugging on)"),
+    ("./phoenix nova pair -d sim --code 123456", "the simulator (`./phoenix run`; its Settings shows the code)"),
+    ("./phoenix nova devices", "the paired devices, and whether they answer"), "./phoenix nova unpair sim"])
+it("Push changes to a device", "A dev bundle of what this checkout changes against the device's image (its manifest), applied at once; the device restarts only what changed (the shell, WebAppMgr, one app or service). Replaces what an earlier push put there; --add adds to it. Build the apps first.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:69-79 · docs/DEV-PUSH.md 4.4-4.6, 6.1",
+   [("./phoenix nova push", "everything that differs"), ("./phoenix nova push shell/qml apps/settings", "only those (repository or device paths)"),
+    ("./phoenix nova push --dry-run", "say what it would send"), ("./phoenix nova push -d sim", "to the running simulator"),
+    ("./phoenix nova put /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml CardView.qml", "one file (Palm's novacom put)"),
+    ("./phoenix nova get /usr/palm/applications/org.webosphoenix.settings/appinfo.json", "one file from the device"),
+    ("./phoenix nova status", "what the overlay holds, from whom"), ("./phoenix nova revert /usr/share/phoenix/qml/Phoenix/Shell/CardView.qml", "one file back to the image's"),
+    ("./phoenix nova revert", "Revert to Image: the device restarts without any pushed change")])
+it("Restart, log and look inside a device", "", B, WP, "webos-phoenix/tools/nova/nova.cjs:77-85 · docs/DEV-HELPER.md 9.1",
+   [("./phoenix nova restart shell", "or wam, app ID, service ID"), ("./phoenix nova rescan", "Palm's rescan: new or changed apps"),
+    ("./phoenix nova log -f org.webosphoenix.settings", "the journal, followed"),
+    ("./phoenix nova luna-send luna://com.webos.service.systemservice/getSystemTime '{}'", "one Luna call"),
+    ("./phoenix nova forward 9998", "the Web Inspector at 127.0.0.1:9998 (also 3768, the QML debugger; 22, SSH)"),
+    ("./phoenix nova term", "SSH as `user` with the paired key (Developer Mode's SSH)")])
+it("Make a dev bundle", "The files of this checkout that differ from an image, signed: `BUNDLE.ipk` and `BUNDLE.ipk.sig`, for the server channel. The image's manifest is `/usr/share/phoenix/manifest.json` on the device. Build the apps first.", B, WP,
+   "webos-phoenix/tools/nova/nova.cjs:39-53 · docs/DEV-PUSH.md section 8",
+   [("./phoenix nova package --system --manifest manifest.json", "devpush-<build>-<id>.ipk"),
+    ("./phoenix nova package --system --manifest manifest.json --only /usr/share/phoenix/qml --note \"Card view fix\" -o fix.ipk", "only the shell's QML"),
+    ("./phoenix nova package --system --manifest manifest.json --dry-run", "say what it would hold"),
+    ("./phoenix nova verify fix.ipk --build 20261124093012 --product 1.0", "the device's checks, here")])
+it("Package an app", "Palm's palm-package: `<id>_<version>_all.ipk`.", B, WP, "webos-phoenix/tools/nova/nova.cjs:36-37",
+   ["./phoenix nova package apps/settings/dist -o out"])
+it("The image's manifest", "What a dev bundle is compared against: every file Phoenix ships that a bundle may change.", B, WP, "webos-phoenix/tools/install-rootfs.py:39-48",
+   [("python3 tools/install-rootfs.py --print-manifest > manifest.json", "this checkout's"),
+    ("python3 tools/install-rootfs.py out/rootfs --manifest", "install, and write out/rootfs/usr/share/phoenix/manifest.json"),
+    ("python3 tools/install-rootfs.py --stamp out/rootfs", "at image time: the image's own hashes and BUILD_ID")])
 
 sec("Default apps (phoenix-default-apps)")
 it("Install and build", "", B, PDA, "phoenix-default-apps/README.md:38-41 · tools/fetch-phoenix.mjs:11",

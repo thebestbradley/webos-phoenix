@@ -1,0 +1,27 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# com.palm.update's first call once the System UI is up, which marks the
+# running slot good (phoenix-update-wake). Not ordered on any Phoenix unit:
+# it waits by asking SAM, so a shell that never comes up never confirms the
+# slot.
+#
+# Only on a boot from an update slot (rauc.slot=, phoenix-ab-grub.cfg).
+# Type=exec, not oneshot: the start is done once it runs, so its wait never
+# holds up multi-user.target ("Startup finished"); RemainAfterExit keeps
+# "active (exited)" after it confirmed the slot, "failed" when it gave up.
+# The script bounds itself: at most about two hours (360 asks of SAM, 10 s
+# apart, each up to 10 s; then three calls of up to 2 minutes).
+
+[Unit]
+Description=webOS Phoenix: confirm the running system once the System UI is up
+ConditionKernelCommandLine=rauc.slot
+After=ls-hubd.service
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/phoenix-slots/phoenix-update-wake
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

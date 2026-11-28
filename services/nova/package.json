@@ -1,0 +1,12 @@
+{
+  "name": "org.webosphoenix.nova",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix novad (Luna org.webosphoenix.nova): dev push's device end, the developer overlay, pairing with nova (docs/DEV-PUSH.md)",
+  "license": "Apache-2.0",
+  "main": "service.js",
+  "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@phoenix/platform": "*"
+  }
+}

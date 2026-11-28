@@ -8,6 +8,9 @@
     "phoenix.appmanager.launch": [
         "dev"
     ],
+    "phoenix.appmanager.open": [
+        "dev"
+    ],
     "phoenix.appmanager.manage": [
         "oem"
     ]

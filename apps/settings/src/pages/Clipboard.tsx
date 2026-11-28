@@ -17,7 +17,7 @@
 //   Clear         the history, or everything
 
 import { useEffect, useState } from "react";
-import { apps, clipboard, type ClipboardSettings, type KeepFor } from "@phoenix/luna";
+import { apps, appPicker, clipboard, type ClipboardSettings, type KeepFor } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, ToggleButton } from "@phoenix/ui";
 
@@ -33,11 +33,15 @@ const SIZES = [25, 50, 100, 200, 500];
 export function ClipboardPage() {
     const s = useLuna<ClipboardSettings>((cb, err) => clipboard.watchSettings(cb, err), []).value;
     const [installed, setInstalled] = useState<{ id: string; title: string }[]>([]);
+    // The apps to offer: the launcher's (appPicker.list: no hidden ones, no
+    // developer apps while Developer Mode is off).
+    const [offered, setOffered] = useState<{ id: string; title: string }[]>([]);
     const [adding, setAdding] = useState<HTMLElement | null>(null);
     const [clearing, setClearing] = useState<"history" | "all" | null>(null);
     const [done, setDone] = useState("");
     useEffect(() => {
         apps.list().then((l) => setInstalled(l.sort((a, b) => a.title.localeCompare(b.title)))).catch(() => setInstalled([]));
+        appPicker.list().then((l) => setOffered(l.sort((a, b) => a.title.localeCompare(b.title)))).catch(() => setOffered([]));
     }, []);
     if (!s) return <Page><PageHeader title="Clipboard" icon="icons/clipboard.png" /></Page>;
 
@@ -48,7 +52,7 @@ export function ClipboardPage() {
         </Row>
     );
     const titleOf = (id: string) => installed.find((a) => a.id === id)?.title ?? id;
-    const addable = installed.filter((a) => !s.excludedApps.includes(a.id));
+    const addable = offered.filter((a) => !s.excludedApps.includes(a.id));
     const off = !s.enabled;
 
     return (

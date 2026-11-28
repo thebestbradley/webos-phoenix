@@ -1,0 +1,77 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://webosphoenix.org/platform-api/devpush.schema.json",
+    "title": "Dev push: dev bundles and image manifests (docs/DEV-PUSH.md 5, 8)",
+    "description": "A dev bundle is an .ipk (ar: debian-binary, control.tar.gz with ./control and ./devpush.json, data.tar.gz with the files at their device paths, regular files of mode 0644 or 0755) and beside it <bundle>.ipk.sig: base64 of the Ed25519 signature of the .ipk's exact bytes, then a newline (the detached form of feeds.schema.json), by the key devpush.json names in \"by\". The paths a bundle may change and the size caps: apps/shared/platform/src/devpush-paths.json. The reader every side follows: apps/shared/platform/src/devpush.js (checkManifest, verify); the maker: tools/nova. An image's manifest is /usr/share/phoenix/manifest.json, written by tools/install-rootfs.py --manifest and stamped at image time (--stamp). New optional fields may be added inside a format; none may be removed or changed.",
+    "$defs": {
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "path": { "type": "string", "minLength": 2, "maxLength": 1024, "pattern": "^(/[A-Za-z0-9._@+,=~ -]+)+$", "description": "An absolute device path inside one of the overlay's directories (/usr/share/phoenix, /usr/palm, /usr/lib/luna, /usr/share/luna-service2, /etc/palm), no \".\" or \"..\" segment, not one of the refused paths (devpush-paths.json)" },
+        "mode": { "enum": ["0644", "0755"] },
+        "productLine": { "type": "string", "pattern": "^\\d+\\.\\d+$", "description": "The product line, product.json's major version: \"1.0\" (webos-phoenix) or \"2.0\" (phoenix-ember-glass-ui). 2.0 devices take no 1.0 bundles" },
+        "buildId": { "type": "string", "pattern": "^[A-Za-z0-9._:+-]{1,128}$", "description": "The image's /etc/os-release BUILD_ID" },
+        "file": {
+            "type": "object",
+            "required": ["path", "sha256", "size", "mode"],
+            "properties": {
+                "path": { "$ref": "#/$defs/path" },
+                "sha256": { "$ref": "#/$defs/sha256" },
+                "size": { "type": "integer", "minimum": 0 },
+                "mode": { "$ref": "#/$defs/mode" }
+            }
+        },
+        "source": {
+            "type": "object",
+            "description": "The checkout it was made from, when it is a git checkout",
+            "required": ["repo", "commit", "dirty"],
+            "properties": {
+                "repo": { "type": "string", "maxLength": 100 },
+                "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+                "dirty": { "type": "boolean" }
+            }
+        },
+        "bundleManifest": {
+            "type": "object",
+            "description": "A dev bundle's devpush.json (format 1)",
+            "required": ["format", "id", "made", "build", "product", "compatible", "device", "counter", "mode", "parts", "files", "removed", "restart", "by"],
+            "properties": {
+                "format": { "const": 1 },
+                "id": { "type": "string", "pattern": "^[0-9a-f]{32}$", "description": "The first 32 hex digits of the SHA-256 of the rest of devpush.json (keys sorted)" },
+                "made": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+                "build": { "$ref": "#/$defs/buildId" },
+                "product": { "$ref": "#/$defs/productLine" },
+                "compatible": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._:+-]{1,128}$", "description": "RAUC's compatible of the device type it is for; null: any device of that build" },
+                "device": { "type": "string", "pattern": "^[A-Za-z0-9._:+-]{1,128}$", "description": "The device's id, or \"any\" (never for a granted developer key)" },
+                "counter": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Above the last one the device applied for the same grant (or key): no replay (DEV-PUSH.md 9.1). nova uses the time it was made, in milliseconds" },
+                "mode": { "enum": ["replace", "add"], "description": "replace: the overlay ends up holding exactly these files; add: they are added to what it holds" },
+                "parts": { "type": "array", "items": { "enum": ["apps", "roles", "services", "shell"] }, "description": "The parts its paths are in, sorted (devpush-paths.json \"parts\"); a grant names the parts it allows" },
+                "files": { "type": "array", "maxItems": 100000, "items": { "$ref": "#/$defs/file" } },
+                "removed": { "type": "array", "items": { "$ref": "#/$defs/path" } },
+                "restart": { "type": "array", "items": { "type": "string", "pattern": "^(hub|configurator|rescan|wam|shell|reboot|app:[^/\\s]+|service:[^/\\s]+)$" }, "description": "What its maker expects restarted (DEV-PUSH.md 4.5); the device works it out itself" },
+                "source": { "$ref": "#/$defs/source" },
+                "note": { "type": "string", "maxLength": 500 },
+                "by": { "type": "string", "pattern": "^ed25519:[A-Za-z0-9+/]{43}=$", "description": "The key that signed the .ipk" }
+            }
+        },
+        "imageManifest": {
+            "type": "object",
+            "description": "An image's /usr/share/phoenix/manifest.json (format 1): every file Phoenix ships that a dev bundle may change, sorted by path. GET v1/builds/{buildId}/manifest.json serves the same (DEV-PUSH.md 7.2, P4)",
+            "required": ["format", "build", "product", "compatible", "files"],
+            "properties": {
+                "format": { "const": 1 },
+                "build": { "$ref": "#/$defs/buildId" },
+                "product": {
+                    "type": "object",
+                    "required": ["name", "version", "line"],
+                    "properties": {
+                        "name": { "type": "string" },
+                        "version": { "type": "string" },
+                        "line": { "$ref": "#/$defs/productLine" }
+                    }
+                },
+                "compatible": { "type": ["string", "null"] },
+                "source": { "$ref": "#/$defs/source" },
+                "files": { "type": "array", "items": { "$ref": "#/$defs/file" } }
+            }
+        }
+    }
+}

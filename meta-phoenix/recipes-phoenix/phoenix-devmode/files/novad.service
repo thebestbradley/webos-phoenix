@@ -1,0 +1,28 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# novad (org.webosphoenix.nova, docs/DEV-PUSH.md): long-running, as root.
+# It always answers Settings' Developer Mode panes on the bus, and listens
+# for nova on port 6965 only while Developer Mode is on (and its switches
+# say so). The hub knows it as a static service
+# (services/nova/sysbus/org.webosphoenix.nova.service).
+
+[Unit]
+Description=webOS Phoenix: novad, dev push's device service
+Requires=ls-hubd.service
+After=ls-hubd.service phoenix-overlay.service
+
+[Service]
+Type=simple
+# The module path run-js-service gives the services it starts (mojoservicelauncher
+# run-js-service: NODE_ADDONS=/usr/lib/nodejs:/usr/lib/node_modules): webos-service is in
+# /usr/lib/node_modules and needs the native bindings in /usr/lib/nodejs (pmloglib.node,
+# webos-sysbus.node, palmbus.js). Node searches neither. Revision 7: "Cannot find module
+# 'webos-service'"; Revision 10, with only node_modules: "Cannot find module 'pmloglib'".
+Environment=NODE_PATH=/usr/lib/nodejs:/usr/lib/node_modules
+ExecStart=/usr/bin/node /usr/palm/services/org.webosphoenix.nova/service.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

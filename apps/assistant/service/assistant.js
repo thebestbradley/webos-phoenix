@@ -95,6 +95,13 @@ var phoneSearch = require("./lib/commands-search");
 var SERVICE = "org.webosphoenix.assistant";
 var SETTINGS_APP = "org.webosphoenix.settings";
 var SYSTEM_UI = "com.palm.systemui";
+// The system UI by the name luna-service2 gives its calls: the simulator's
+// page (com.palm.systemui), and on a device luna-surfacemanager, which runs
+// Phoenix's shell (AssistantOverlay.qml, NotificationFeed.qml, the widgets)
+// as com.webos.surfacemanager (SAM logs it as "Sender(com.webos.surfacemanager)");
+// services/mcp/hub.js SYSTEM_UIS is the same pair.
+var DEVICE_SHELL = "com.webos.surfacemanager";
+var SYSTEM_UIS = [SYSTEM_UI, DEVICE_SHELL];
 var ASSISTANT_APP = "org.webosphoenix.assistant";
 
 var ERRORS = { BAD_PARAMS: -1, NOT_FOUND: -2, NOT_ALLOWED: -3, OFF: -4, FAILED: -5 };
@@ -1876,7 +1883,7 @@ function createAssistantService(deps) {
     }
     function privileged() {
         var c = caller();
-        return c === SYSTEM_UI || c === ASSISTANT_APP || c === SETTINGS_APP || (deps.trusted && deps.trusted(c));
+        return SYSTEM_UIS.indexOf(c) >= 0 || c === ASSISTANT_APP || c === SETTINGS_APP || (deps.trusted && deps.trusted(c));
     }
     function threadFor(p) {
         if (p.newThread) return createThread();

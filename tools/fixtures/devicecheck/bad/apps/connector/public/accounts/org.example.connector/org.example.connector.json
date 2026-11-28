@@ -1,0 +1,8 @@
+{
+    "templateId": "org.example.connector",
+    "loc_name": "Connector",
+    "validator": {
+        "customUI": {"appId": "org.example.connector", "name": "accounts/signin.html"},
+        "address": "palm://org.example.svc/signIn"
+    }
+}

@@ -14,6 +14,7 @@ not this script's, so they are named in one place.
         [--channel stable|beta|dev] [--channels stable,beta,dev]
         [--catalog-key B64] [--catalog-root B64] [--updates-key B64] [--updates-root B64]
         [--drivers-key B64] [--account-key B64] [--notices-key B64[,B64]] [--site URL]
+        [--devpush-key B64]
         [--issuer URL] [--push URL]
         [--catalog-path catalog/v1/] [--updates-path updates/] [--revocations-path ...]
         [--notices-path notices/v1/notices.json]
@@ -82,6 +83,7 @@ def build(a):
         "drivers": {"url": a.drivers_path, "key": key(a.drivers_key, "--drivers-key"), "reportUrl": a.report_path if api else None},
         "account": {"issuer": url(issuer, "--issuer") if issuer else None, "clientId": "phoenix-device",
                     "scope": "openid account backup push reviews assistant", "key": key(a.account_key, "--account-key")},
+        "devpush": {"key": key(a.devpush_key, "--devpush-key")},
         "push": {"server": url(a.push, "--push", True)},
         "assistant": {"url": a.assistant_path if api else None},
         "connectivity": {"probe": url(a.probe, "--probe") if a.probe else None},
@@ -99,7 +101,7 @@ def check(path):
         v = c.get(k)
         if v and not (v.startswith("https://") or re.match(r"^http://(127\.|localhost)", v)):
             problems.append("%s is not https: %s" % (k, v))
-    for sec in ("catalog", "updates", "drivers", "account"):
+    for sec in ("catalog", "updates", "drivers", "account", "devpush"):
         for f in ("key", "root"):
             v = (c.get(sec) or {}).get(f)
             if v:
@@ -125,7 +127,7 @@ def check(path):
         problems.append("updates.channel %s" % u["channel"])
     for p in problems:
         print("servers.json: " + p)
-    pinned = [s for s in ("catalog", "updates") if (c.get(s) or {}).get("key") or (c.get(s) or {}).get("root")] + (["notices"] if nk else [])
+    pinned = [s for s in ("catalog", "updates") if (c.get(s) or {}).get("key") or (c.get(s) or {}).get("root")] + (["notices"] if nk else []) + (["devpush"] if (c.get("devpush") or {}).get("key") else [])
     print("servers.json: feeds %s, api %s; keys pinned for: %s" % (c.get("feeds"), c.get("api"), ", ".join(pinned) or "none"))
     return 1 if problems else 0
 
@@ -143,7 +145,7 @@ def main(argv=None):
     p.add_argument("--channel", default="stable")
     p.add_argument("--channels", default="")
     p.add_argument("--site", default="")
-    for k in ("catalog-key", "catalog-root", "updates-key", "updates-root", "drivers-key", "account-key", "notices-key"):
+    for k in ("catalog-key", "catalog-root", "updates-key", "updates-root", "drivers-key", "account-key", "notices-key", "devpush-key"):
         p.add_argument("--" + k, default="")
     p.add_argument("--catalog-path", default="catalog/v1/")
     p.add_argument("--updates-path", default="updates/")

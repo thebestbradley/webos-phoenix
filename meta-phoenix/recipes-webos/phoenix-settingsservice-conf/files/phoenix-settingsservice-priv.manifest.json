@@ -1,0 +1,7 @@
+{
+    "id": "phoenix-settingsservice-priv",
+    "version": "1.0.0",
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/phoenix-settingsservice-priv.api.json"
+    ]
+}

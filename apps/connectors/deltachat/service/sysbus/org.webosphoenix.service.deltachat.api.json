@@ -14,5 +14,13 @@
         "org.webosphoenix.service.deltachat/available",
         "org.webosphoenix.service.deltachat/markRead",
         "org.webosphoenix.service.deltachat/setPresence"
+    ],
+    "phoenix.deltachat.signin": [
+        "org.webosphoenix.service.deltachat/available",
+        "org.webosphoenix.service.deltachat/checkCredentials"
+    ],
+    "phoenix.deltachat.messaging": [
+        "org.webosphoenix.service.deltachat/setPresence",
+        "org.webosphoenix.service.deltachat/markRead"
     ]
 }

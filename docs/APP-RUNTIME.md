@@ -1236,7 +1236,7 @@ same request and reply shapes:
 | Emergency Info | system service `get/setPreferences` `emergencyInfo` (Phoenix key); contacts from db8 `com.palm.person:1` | see [Emergency information](#emergency-information) |
 | Phone Preferences | `com.palm.telephony` `forwardQuery {condition: "unconditional", bearer, subscribe}` / `forwardRegister {number, condition, bearer, time}` (call forwarding; `""` stops it), `clirQuery` / `clirSet {restrict}` (Show My Caller ID), `callWaitingQuery` / `callWaitingSet {bearer, enable}`, `voicemailNumberQuery {subscribe}` / `voicemailNumberSet {number}`, `roamModeQuery` / `roamModeSet {mode: "automatic" \| "carrieronly"}` (Voice Network), `ratQuery` / `ratSet {mode: "automatic" \| "umts" \| "gsm"}` (Network Type); the supplementary services answer errorCode 102 without the network (airplane mode). `com.palm.wan` `getstatus {subscribe}` (`disablewan` `"on"`: Data Usage off; `roamguard` `"enable"`: Data Roaming off) and `set {disablewan, roamguard}`. In the simulator unconditional forwarding sends an incoming call on (it does not ring), and the runtime's `systemStatus` `callForwarding` shows the status bar's call-forward icon. The Phone app's menu has Preferences. webOS had no Power preferences app (the battery is in Device Info) | `com.palm.app.phone` `shared/phoneprefs/controls/CallsPref.js`, `NetworkPref.js`, `VoicemailNumberPref.js` (the original app, as LuneOS's CE build ships it); `luna-sysmgr` `StatusBarServicesConnector.cpp:1956-2046` |
 | Certificate Manager | `com.palm.certificatemanager` `listcertificates` (`userCertificateStore`: the user's, as Wi-Fi setup reads them; Phoenix adds `certificates`, all of them, and `subscribe`), `getcertificatedetails {certificateFilename \| certificateId}` (subject and issuer `commonname`, `organization`, `organizationalunit`, `location`, `state`, `country`, `altname`; `startdate`, `expiredate`, `serialNumber`, `version`, `signature.algorithm`, `publicKey.algorithm`; Phoenix adds `publicKey.bits` / `curve`, `fingerprints {sha256, sha1}`, `isCA`, `trusted`, `system`, `pem`); Phoenix: `addcertificate {certificateFilename}` (PEM, one or more, or DER, read with `org.webosphoenix.filemanager`), `setcertificatetrust {certificateId, trusted}`, `removecertificate {certificateId}`, `restorecertificates`; errors -1 to -5 (`CERTIFICATE_ERRORS`). The simulator parses X.509 itself (no signature checks) and keeps the store in the runtime's store; the system's CAs are `runtime/certs` (`/usr/share/phoenix/runtime/certs`). `com.palm.app.certificate` opens the pane, as Device Info's app menu and Email's "Open Certificate Manager" did; certificates are added from the files on `/media/internal` (`.crt`, `.pem`, `.cer`, `.der`; the demo media has `samples/documents/phoenix-lab-root-ca.crt`) | Enyo 1.0 `lib/wifi/wifi.js` (`listcertificates`), `isis-browser` `source/CertificateDetail.js` (`getcertificatedetails`); `luna-sysmgr` `ApplicationManagerService.cpp:3822` |
-| Developer Mode | `com.webos.service.devmode` `getDevMode {subscribe}`, `setDevMode {status: "enabled" \| "disabled"}`; `com.palm.systemmanager` `getDeviceLockMode`, `matchDevicePasscode` | OSE's Developer Mode service (`com.webos.service.devmode`); see [Developer Mode](#developer-mode) |
+| Developer Mode | `com.webos.service.devmode` `getDevMode {subscribe}`, `setDevMode {status: "enabled" \| "disabled"}`; `com.palm.systemmanager` `getDeviceLockMode`, `matchDevicePasscode` | Phoenix's `services/devmode` over OSE's flag (OSE's own service is `com.palm.service.devmode`); see [Developer Mode](#developer-mode) |
 | VPN | `com.webos.service.vpn` (LuneOS): `getStatus` (connection states and credential prompts, subscribed), `getProfileList`, `getProfileDetails`, `getConnectionDetails`, `getAgents`, `getAgentFormFields`, `addProfile`, `updateProfile`, `deleteProfile`, `connect`, `disconnect`, `uiPromptResponse`, `cancelUiPrompt`; errors -1 to -10 as legacy `com.palm.vpn`. A `.ovpn` is written with `org.webosphoenix.filemanager` to `/media/internal/vpn` and used as `OpenVPN.ConfigFile`; a WireGuard `.conf` is split into its fields (`@phoenix/luna` `parseWireGuardConf`). The shell's VPN drawer gets the profiles from `systemStatus` `vpnProfiles` and sends `{vpnConnect}` / `{vpnDisconnect}` | `luneos-vpn-adapter` `src/vpn_service.c`, `vpn_errors.h`, `vpn_providers.c`, `files/formfields/*.json` (commit 40bdda2) |
 
 The simulated services keep their state in the runtime's store (shared by
@@ -3033,11 +3033,48 @@ background services or put files outside their app, and later the
 Terminal's sudo and SSH ([TERMINAL.md](TERMINAL.md) T4). Turning it on
 shows what it allows and asks for the device PIN or password
 (`matchDevicePasscode`); with no secure unlock set it asks for one first
-and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
-`com.webos.service.devmode` (`getDevMode`, `setDevMode`); erasing the
-device turns it off. While it is on, its Debugging switches show the
+and offers Screen & Lock. Turning it off asks nothing. The state is
+`com.webos.service.devmode` (`getDevMode {subscribe}`, `setDevMode
+{status}`): on a device Phoenix's own provider (`services/devmode`) over
+OSE's flag file, `/var/luna/preferences/devmode_enabled`, which OSE's
+`com.palm.service.devmode` keeps too; a change restarts the device, and
+images are built with it off ([DEV-PUSH.md](DEV-PUSH.md), "P3 as built").
+Erasing the device turns it off. While it is on, its Debugging switches show the
 shell's frame rate counter and touch plot (`enableFpsCounter`,
 `enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
+
+#### Dev push: Pushed Changes and pairing
+
+With Developer Mode on, a test device takes changed system files without a
+new image ([DEV-PUSH.md](DEV-PUSH.md)): the shell's QML, the runtime, web
+apps, JavaScript services, Luna role files and `/etc/palm` configuration,
+in a writable overlay over the image's folders, restarting only what
+changed. The device's end is `novad` (Luna `org.webosphoenix.nova`,
+`services/nova`); the computer's is `nova` (`tools/nova`, `./phoenix
+nova`). Settings > Developer Mode shows, while Developer Mode is on
+(`DevPush.tsx`):
+
+- **Pushed Changes**: bundles waiting for the owner (from the platform's
+  dev-signing key or a granted developer: **Apply** asks the device
+  passcode every time, **Decline** drops one; a bundle that changes Luna
+  role files says "Changes what services may do"); what the overlay holds
+  on this device (the build, each file, from whom and when, the bundles);
+  **Restart Now** when a change needs a restart; **Revert to Image**, after
+  a confirmation, which restarts the device without any pushed change.
+- **Pair a Computer**: a six-digit code and the device's key fingerprint
+  for two minutes, which `nova pair` asks for (a PAKE, so the code cannot
+  be guessed offline; five wrong codes end it). **Paired Computers** and
+  **Trusted Developers** (developers the owner granted access with a grant
+  the platform signed: which parts, until when) list the keys, with Remove.
+- **Developer Connections**: USB debugging (on) and Push over network
+  (off; private networks only).
+
+Turning Developer Mode off stops `novad` listening and leaves the overlay
+unmounted from the next start, on disk until Revert to Image or the next
+system update. In the simulator `phoenix-sim` runs the same `novad`
+(`services/nova/sim.js`) over its data, so `nova pair -d sim` and `nova
+push -d sim` work as with a device: it serves the pushed files first and
+restarts itself for the restarts a push needs.
 
 #### Developer apps
 
@@ -3058,6 +3095,41 @@ added and removed in every page, the shell hears `devMode` and
 developer apps' cards close as it turns off. On a device OSE's
 `setDevMode` restarts it, so the same follows from the restart.
 `tools/test-apps.cjs` runs the developer apps with Developer Mode on.
+
+The rule is the owner's (27 November 2026: demo and test apps "Hide unless
+Developer Mode"), and a release image follows it too:
+
+- **One flag.** Whether an app is a developer app is its `appinfo.json`
+  saying `"phoenix": {"developer": true}`, nothing else: no list of ids in
+  the launcher. Phoenix's own developer apps say so in their own file.
+- **Apps Phoenix does not own.** The test, demo and example apps the
+  platform's layers put on an image (OSE's YouTube test page,
+  `com.webos.app.test.youtube`, and its QML examples) are listed in one
+  file, `meta-phoenix/conf/developer-apps.json`, each with why.
+  `phoenix-developer-apps.bbclass` writes the same flag into their
+  `appinfo.json` as the image's rootfs is finished
+  (`meta-phoenix/lib/phoenix/developerapps.py`; an id the image does not
+  have is skipped, an `appinfo.json` it cannot rewrite fails the image).
+  An account's sign-in page is not a test app: LuneOS's IM connectors'
+  (`com.palm.app.teams` and the rest) say `"visible": false`, which keeps
+  them out of the launcher and Just Type while Accounts can still open
+  them, so they are not listed.
+- **On a device** the shell's launcher (`LsmWindowSource`) reads each app's
+  `appinfo.json` from SAM's `listApps` and gives its entry the developer
+  requirement, as the simulator does, and `LsmSystemStatus` follows
+  `getDevMode {subscribe}`, so the launcher, the dock and Just Type change
+  as Developer Mode does. The application manager's `searchApps` (Just
+  Type, the Assistant) and `listLaunchPoints` (the Assistant's apps) leave
+  the developer apps out while it is off (`services/appmanager`), and an
+  app's list to pick an app from (Settings > Clipboard's apps) uses
+  `appPicker.list()` (`@phoenix/luna`), which leaves out the hidden apps
+  and, while Developer Mode is off, the developer apps. `apps.list()` still
+  names them all (an app's title by its id). `appPicker` is an export of its
+  own, not part of `apps`, so only the apps that import it bundle the
+  Developer Mode read and need its group.
+- **Opening one by id** still works on a device (SAM's `launch`; the image
+  regression suite opens Notification Lab that way); only the simulator's
+  window source refuses it.
 
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;

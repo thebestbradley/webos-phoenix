@@ -1,0 +1,31 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Legacy novacom (docs/DEV-PUSH.md 9.6; the owner, 26-27 November 2026):
+# Palm's novacomd, for vintage tools (webos-sdk-redux's novacom, novaterm,
+# palm-install), installed but off. It starts only where the image has it
+# (LuneOS-based images: meta-luneos packagegroup-webos-extended), with
+# Developer Mode on and the flag /var/lib/phoenix/legacy-novacom there
+# (made by hand, as root: `touch /var/lib/phoenix/legacy-novacom`).
+# Without -b it listens on the device's loopback only (novacomd
+# transport_inet.c, port 6969), never on Wi-Fi; a computer reaches it
+# through nova's paired connection: `nova forward 6969`, then
+# `novacomd -c 127.0.0.1` on the computer. Its USB side (gadgetfs,
+# /dev/gadget/musb_hdrc, Palm's own phones) does not work on Phoenix's
+# hardware.
+
+[Unit]
+Description=webOS Phoenix: Legacy novacom (vintage tools)
+After=ls-hubd.service
+ConditionPathExists=/usr/sbin/novacomd
+ConditionPathExists=/var/luna/preferences/devmode_enabled
+ConditionPathExists=/var/lib/phoenix/legacy-novacom
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/novacomd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

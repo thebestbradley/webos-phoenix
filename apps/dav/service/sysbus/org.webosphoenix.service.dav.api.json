@@ -7,5 +7,9 @@
         "org.webosphoenix.service.dav/onDelete",
         "org.webosphoenix.service.dav/sync",
         "org.webosphoenix.service.dav/accountSettings"
+    ],
+    "phoenix.dav.validate": [
+        "org.webosphoenix.service.dav/checkCredentials",
+        "org.webosphoenix.service.dav/accountSettings"
     ]
 }

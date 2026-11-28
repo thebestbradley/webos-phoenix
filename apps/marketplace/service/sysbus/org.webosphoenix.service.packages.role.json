@@ -8,7 +8,7 @@
             "service": "org.webosphoenix.service.packages",
             "outbound": ["com.webos.appInstallService", "com.webos.applicationManager", "com.palm.activitymanager", "com.webos.notification",
                          "org.webosphoenix.ongoing", "com.webos.service.devmode",
-                         "com.palm.systemmanager"]
+                         "com.palm.systemmanager", "org.webosphoenix.nova"]
         }
     ]
 }

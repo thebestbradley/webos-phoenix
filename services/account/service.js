@@ -9,7 +9,9 @@
 // servers: /etc/palm/phoenix/servers.json, with Developer Mode's override
 // (/var/lib/phoenix/servers.override.json), which this service writes. The
 // device's own Ed25519 key (POST /v1/devices "publicKey") is made once and
-// kept beside the tokens. The caller is the sender luna-service2 names.
+// kept beside the tokens; the rest of what it registers (model, compatible,
+// version, build) is deviceinfo.js's. The caller is the sender luna-service2
+// names.
 
 "use strict";
 
@@ -18,6 +20,7 @@ var fs = require("fs");
 var path = require("path");
 var Service = require("webos-service");
 var account = require("./accountservice");
+var deviceInfo = require("./deviceinfo").deviceInfo;
 var platformDevice = require("@phoenix/platform/src/device");
 
 var DIR = "/var/lib/phoenix/account";
@@ -31,16 +34,6 @@ function writeJson(file, obj) {
     fs.mkdirSync(DIR, { recursive: true, mode: 448 });
     fs.writeFileSync(file + ".new", JSON.stringify(obj), { mode: 384 });
     fs.renameSync(file + ".new", file);
-}
-function osRelease() {
-    var out = {};
-    try {
-        fs.readFileSync("/etc/os-release", "utf8").split("\n").forEach(function (line) {
-            var m = /^([A-Z_]+)=(.*)$/.exec(line.trim());
-            if (m) out[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
-        });
-    } catch (e) { /* none */ }
-    return out;
 }
 function digest(alg) {
     return function (b) { return Promise.resolve(new Uint8Array(crypto.createHash(alg).update(Buffer.from(b)).digest())); };
@@ -80,13 +73,12 @@ var methods = account.createAccountService({
             });
         }
     },
+    // POST /v1/devices's details (deviceinfo.js): RAUC's compatible or the
+    // image's machine, the model, the system's version and build.
     device: function () {
-        var os = osRelease();
-        var machine = (function () { try { return fs.readFileSync("/proc/device-tree/model", "utf8").replace(/\0/g, "").trim(); } catch (e) { return ""; } })();
-        var compatible = "";
-        try { compatible = (fs.readFileSync("/etc/rauc/system.conf", "utf8").match(/^compatible\s*=\s*(.+)$/m) || [])[1] || ""; } catch (e) { /* no RAUC */ }
-        return Promise.resolve({ name: machine || "Phoenix device", model: machine, compatible: compatible.trim(),
-                                 osVersion: os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 });
+        return Promise.resolve(deviceInfo(function (file) {
+            try { return fs.readFileSync(file, "utf8"); } catch (e) { return null; }
+        }));
     },
     log: function (m) { console.log("[account] " + m); }
 });
