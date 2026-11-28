@@ -1548,6 +1548,37 @@ need the same. Phoenix's Home app (phoenix-default-apps
 `apps/homeassistant`) uses it. Tests: `shell/tests/tst_pagebridge.qml`,
 `apps/shared/luna/src/pagebridge.test.ts`.
 
+**New windows.** A link with a target (`target=_blank`) or a page's
+`window.open` opens a new card with the page, as BrowserAdapter asked the
+app for one (`createPage(identifier)`, enyo `BasicWebView.js:459`) and the
+browser opened it (`Browser.js:331` `openNewCardWithIdentifier`, the new
+card's view connecting with that identifier: `Browser.js:121`,
+`BasicWebView.js:158`). In phoenix-sim the page opens at once in a view of
+its own, parked in the opener's window (`PageViews.js`), and moves to the
+new card when its view connects; `window.opener` is kept for
+`window.open`, and a `_blank` link has none (Chromium's `noopener`).
+Block Popups (`BasicWebView.blockPopups`, on by default) is Qt WebEngine's
+`javascriptCanOpenWindows` off: a script opens a window only from a tap.
+The iframe engine does the same for a same-origin page's links with a
+target. Tests: `tools/test-browser-sim.cjs` (windows), `tools/test-browser.cjs`.
+
+**Certificates.** A certificate Chromium refuses (self-signed, expired,
+another host's) is asked about with the browser's own SSL dialog: the page
+view defers the error and sends BrowserServer's `dialogSSLConfirm(host,
+code, certFile)` (`BasicWebView.js:421`), the code OpenSSL's that the
+dialog words (`Browser.js:252-268`; `PageViews.sslCode`), the file the
+certificate manager reads for View Certificate. The answer
+(`sendDialogResponse`): Trust Once lets it through, Trust Always also
+keeps the certificate in the certificate store for that host (`sites`),
+so it is let through again without asking until Settings > Certificate
+Manager distrusts or deletes it, and Don't Trust stops the load with no
+error dialog over it. The padlock (`AddressInput.js:84` showed it for any
+https address) shows only over a page the view says is secure: loaded,
+https, its certificate not one let through (compat `phoenix-browser.js`,
+`runtime.webViewSecure`). Tests: `tools/test-browser-sim.cjs`
+(certificate), `shell/tests/tst_pageviews.qml`,
+`apps/settings/src/pages/Certificates.test.tsx`.
+
 **Downloads.** A file the page view does not show (a PDF, a link with
 `download`) is not downloaded by Chromium: phoenix-sim's view hands it
 back to the page as BrowserAdapter did, with the plugin's

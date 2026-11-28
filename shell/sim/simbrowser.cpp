@@ -3,7 +3,9 @@
 
 #include "simbrowser.h"
 
+#include <QCryptographicHash>
 #include <QNetworkProxy>
+#include <QSslCertificate>
 #include <QQuickWebEngineProfile>
 #include <QTimer>
 #include <QWebEngineClientHints>
@@ -261,6 +263,25 @@ QVariantMap SimBrowser::proxy() const
 void SimBrowser::clearCookies()
 {
     m_profile->cookieStore()->deleteAllCookies();
+}
+
+QVariantMap SimBrowser::certificate(const QWebEngineCertificateError &error) const
+{
+    QVariantMap out;
+    const QList<QSslCertificate> chain = error.certificateChain();
+    if (chain.isEmpty())
+        return out;
+    QVariantList pems;
+    for (const QSslCertificate &c : chain)
+        pems.append(QString::fromLatin1(c.toPem()));
+    const QByteArray digest = chain.first().digest(QCryptographicHash::Sha256).toHex().toUpper();
+    QStringList pairs;
+    for (int i = 0; i + 1 < digest.size(); i += 2)
+        pairs.append(QString::fromLatin1(digest.mid(i, 2)));
+    out.insert(QStringLiteral("pem"), pems.first());
+    out.insert(QStringLiteral("chain"), pems);
+    out.insert(QStringLiteral("sha256"), pairs.join(QLatin1Char(':')));
+    return out;
 }
 
 void SimBrowser::clearCache()

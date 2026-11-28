@@ -30,6 +30,9 @@ export function certStatus(c: CertificateSummary, now = Date.now()): string {
     if (!c.trusted) return "Not trusted";
     if (c.expiredate && c.expiredate < now) return `Expired ${dateText(c.expiredate)}`;
     if (c.startdate && c.startdate > now) return `Not valid until ${dateText(c.startdate)}`;
+    // A site's own certificate the browser was told to trust always
+    // (its SSL dialog): turned off or deleted here, the browser asks again.
+    if (c.sites?.length) return `Trusted for ${c.sites.join(", ")} by the browser`;
     return `Issued by ${c.issuer || "unknown"}`;
 }
 
@@ -120,11 +123,15 @@ function Details({ id, onGone }: { id: string; onGone: () => void }) {
         <Page>
             <PageHeader title={certName(c.subject)} icon="icons/certificates.png" />
             <Group>
-                <Row title="Trust this certificate" subtitle={c.system ? "Comes with the system" : "Added by you"}>
+                <Row title="Trust this certificate" subtitle={c.system ? "Comes with the system" : c.sites?.length ? "Added by the browser (Trust Always)" : "Added by you"}>
                     <ToggleButton value={isTrusted} label="Trust this certificate" testId="cert-trusted"
                                   onChange={(v) => { setTrusted(v); void certificates.setTrusted(c.certificateId, v); }} />
                 </Row>
             </Group>
+            {!!c.sites?.length && (
+                <Note testId="cert-sites">The browser trusts it for {c.sites.join(", ")}. Turn it off or delete it, and the browser asks again
+                    when you open the site.</Note>
+            )}
             <Group label="Issued to"><NameRows n={c.subject} /></Group>
             <Group label="Issued by"><NameRows n={c.issuer} /></Group>
             <Group label="Validity">

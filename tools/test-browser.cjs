@@ -189,7 +189,8 @@ async function main() {
         const LINKS = "/__links/page.html";
         await page.route("**/__links/page.html", (route) => route.fulfill({ contentType: "text/html", body:
             "<!doctype html><title>Links</title><body><p><a id='mail' href='mailto:ada@example.com?subject=Hi'>Write to Ada</a></p>" +
-            "<p><a id='here' href='" + CALCULATOR + "'>Calculator</a></p></body>" }));
+            "<p><a id='here' href='" + CALCULATOR + "'>Calculator</a></p>" +
+            "<p><a id='blank' target='_blank' href='" + CALCULATOR + "'>Calculator in a new card</a></p></body>" }));
         await page.goto(browserUrl({ target: origin + LINKS }));
         check(await waitForFrame(LINKS), "handlers: a page with links loads");
         await page.waitForTimeout(500);
@@ -199,6 +200,24 @@ async function main() {
         const mail = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
         check(!!mail && mail.payload.params.target === "mailto:ada@example.com?subject=Hi", "handlers: a tapped mailto: link opens Email with it");
         check(await waitForFrame(LINKS), "handlers: the page stays where it was");
+        // A link with a target: a new card with its page (BrowserAdapter's
+        // createPage -> isis-browser Browser.js:331), this one staying.
+        const opened = page.context().waitForEvent("page", { timeout: 10000 }).catch(() => null);
+        await page.frameLocator("object[type='application/x-palm-browser'] iframe").locator("#blank").click();
+        const card = await opened;
+        const cardParams = card && await card.waitForFunction(() => window.enyo && enyo.windowParams && JSON.stringify(enyo.windowParams), null, { timeout: 15000 })
+            .then((h) => h.jsonValue(), () => "");
+        check(!!card && /com\.palm\.app\.browser\/index\.html/.test(card.url()) && /"webviewId":"phoenix-frame-/.test(cardParams || ""),
+              `windows: a target=_blank link opens a new browser card, for the page's identifier (${cardParams})`);
+        const cardPath = () => card.evaluate(() => {
+            const f = document.querySelector("object[type='application/x-palm-browser'] iframe");
+            try { return f && f.contentDocument ? f.contentDocument.location.pathname : ""; } catch (e) { return ""; }
+        });
+        let cardPage = "";
+        for (let t = 0; card && t < 15000 && cardPage !== CALCULATOR; t += 250) { cardPage = await cardPath(); await page.waitForTimeout(250); }
+        check(cardPage === CALCULATOR, `windows: ... which shows the link's page (${cardPage})`);
+        check(await waitForFrame(LINKS), "windows: the page with the link stays in its card");
+        if (card) await card.close();
         await page.frameLocator("object[type='application/x-palm-browser'] iframe").locator("#here").click();
         check(await waitForFrame(CALCULATOR), "handlers: a web link loads in the page view");
 

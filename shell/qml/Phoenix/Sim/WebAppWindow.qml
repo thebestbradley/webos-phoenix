@@ -15,6 +15,7 @@ import Phoenix.Shell
 import Phoenix.Native
 import "Links.js" as Links
 import "PageBridge.js" as PageBridge
+import "PageViews.js" as PageViews
 
 Item {
     id: win
@@ -446,6 +447,55 @@ Item {
         return out.join("");
     }
 
+    // ---- Certificates the page views' pages send ---------------------------------------
+    // Chromium refuses a certificate it does not trust; on webOS
+    // BrowserServer asked the browser (dialogSSLConfirm(host, code,
+    // certFile), BasicWebView.js:421), whose dialog offers View
+    // Certificate, Trust Always, Trust Once and Don't Trust
+    // (isis-browser Browser.js:95-104, 248-280) and answers with
+    // sendDialogResponse. Trust Always is kept by host and certificate
+    // (the runtime's certificate store, which Settings > Certificate
+    // Manager shows and forgets); a page let through has no padlock
+    // (PageViews.secure).
+    function _certificateError(v, error) {
+        const host = PageViews.hostOf(error.url);
+        if (!error.overridable || !error.isMainFrame || !host || !_hasSimBrowser) {
+            error.rejectCertificate();
+            return;
+        }
+        const cert = simBrowser.certificate(error);
+        if (!cert.pem) {
+            error.rejectCertificate();
+            return;
+        }
+        error.defer();
+        view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.certificates && __phoenixRuntime.certificates.siteTrusted("
+                           + JSON.stringify(host) + "," + JSON.stringify(cert.sha256) + "))", (trusted) => {
+            if (trusted === true) {
+                PageViews.allow(v.privateMode, host);
+                error.acceptCertificate();
+                return;
+            }
+            if (v.pendingCert)
+                v.pendingCert.error.rejectCertificate();
+            v.pendingCert = { error: error, host: host };
+            win._webViewEvent(v.viewId, "phoenixCertificateError", [host, PageViews.sslCode(error.type), cert.pem, cert.sha256]);
+        });
+    }
+    function _certificateAnswer(v, response) {
+        const c = v.pendingCert;
+        if (!c)
+            return;
+        v.pendingCert = null;
+        if (response === "1" || response === "2") {
+            PageViews.allow(v.privateMode, c.host);
+            c.error.acceptCertificate();
+        } else {
+            v.certRefused = true;
+            c.error.rejectCertificate();
+        }
+    }
+
     function _webViewEvent(id, name, args) {
         view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.webViewEvent && __phoenixRuntime.webViewEvent("
                            + JSON.stringify(id) + "," + JSON.stringify(name) + "," + JSON.stringify(args || []) + ")");
@@ -473,8 +523,24 @@ Item {
     function _webView(p) {
         var v = _webViews[p.id];
         if (p.op === "create") {
-            if (!v)
-                _webViews[p.id] = _makeView(p.id, p.private, {});
+            if (v)
+                return;
+            // A page another page opened (createPage), waiting for this
+            // card's view: it moves here and reports what it shows.
+            const opened = p.identifier ? PageViews.take(p.identifier) : null;
+            if (opened) {
+                opened.parent = win;
+                opened.owner = win;
+                opened.viewId = p.id;
+                _webViews[p.id] = opened;
+                opened.report();
+                if (!opened.loading) {
+                    _webViewEvent(p.id, "loadStopped", []);
+                    _webViewEvent(p.id, "documentLoadFinished", []);
+                }
+                return;
+            }
+            _webViews[p.id] = _makeView(p.id, p.private, {});
             return;
         }
         if (!v)
@@ -527,6 +593,11 @@ Item {
                 _webViews[p.id].url = p.url;
             v.destroy();
             break;
+        case "blockPopups": v.blockPopups = p.on !== false; break;
+        // The browser's SSL dialog answered (sendDialogResponse): "1" Trust
+        // Always (the runtime keeps the certificate for the host), "2"
+        // Trust Once, "0" Don't Trust.
+        case "dialogResponse": _certificateAnswer(v, String(p.response)); break;
         case "bridge": _setBridge(v, p); break;
         case "bridgePost": _bridgePost(v, p.message); break;
         case "edit": edit(p.action, v); break;
@@ -543,6 +614,23 @@ Item {
         WebEngineView {
             id: page
             property string viewId
+            // The window the view is in: the one that made it, or the card a
+            // page it opened (window.open, a link with a target) went to
+            // (_webView "create" with its identifier).
+            property Item owner: win
+            // A certificate error the user is asked about (the browser's
+            // SSL dialog), and whether they said Don't Trust.
+            property var pendingCert: null
+            property bool certRefused: false
+            // The page shown has loaded (since the last load started): only
+            // then does the view know whether it is secure.
+            property bool pageLoaded: false
+            // The browser's Block Popups (BasicWebView.blockPopups, on by
+            // default: BasicWebView.js:41): a script opens a window only
+            // from a tap, as WebKit's JavaScriptCanOpenWindowsAutomatically
+            // off did. Qt WebEngine's javascriptCanOpenWindows is exactly
+            // that setting ("without user interaction").
+            property bool blockPopups: true
             property bool privateMode: false
             // Hiding once its picture is taken (geometry above).
             property bool phoenixHide: false
@@ -556,45 +644,53 @@ Item {
                 const cookie = Links.redirectFor(url, redirects);
                 if (cookie === null)
                     return false;
-                win._webViewEvent(viewId, "urlRedirected", [String(url), cookie]);
+                page.owner._webViewEvent(viewId, "urlRedirected", [String(url), cookie]);
                 return true;
             }
             z: 1
-            zoomFactor: win.zoom
-            settings.javascriptCanOpenWindows: true
+            zoomFactor: page.owner.zoom
+            settings.javascriptCanOpenWindows: !page.blockPopups
             settings.javascriptCanAccessClipboard: true
             settings.javascriptCanPaste: true
             settings.playbackRequiresUserGesture: false
             // Links to other schemes never reach the computer's own apps.
             settings.unknownUrlSchemePolicy: WebEngineSettings.DisallowUnknownUrlSchemes
             Component.onCompleted: {
-                win._addLinkScript(page);
+                page.owner._addLinkScript(page);
                 if (page.bridge)
-                    win._installBridge(page);
+                    page.owner._installBridge(page);
             }
             touchHandleDelegate: selectionHandle
-            onContextMenuRequested: (request) => win._contextMenu(page, request)
-            onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
+            onContextMenuRequested: (request) => page.owner._contextMenu(page, request)
+            onTouchSelectionMenuRequested: (request) => page.owner._touchMenu(page, request)
             // Never this computer's disk (Files, above).
-            onFileDialogRequested: (request) => win._fileDialog(page, request)
-            onFileSystemAccessRequested: (request) => win._fileSystemAccess(request)
+            onFileDialogRequested: (request) => page.owner._fileDialog(page, request)
+            onFileSystemAccessRequested: (request) => page.owner._fileSystemAccess(request)
 
             function report() {
-                win._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
+                // Whether the page is secure, before the address the
+                // browser's padlock shows for (phoenix-browser.js): null
+                // until it has loaded (a page still loading, or one whose
+                // certificate the browser is asking about, is not yet).
+                page.owner._webViewEvent(viewId, "phoenixSecurity", [page.url.toString(), page.pageLoaded ? PageViews.secure(page.url, page.privateMode) : null]);
+                page.owner._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
             }
             onUrlChanged: report()
             onTitleChanged: report()
-            onLoadProgressChanged: win._webViewEvent(viewId, "loadProgressChanged", [loadProgress])
-            onFindTextFinished: (result) => win._webViewEvent(viewId, "phoenixFindResult", [result.activeMatch, result.numberOfMatches])
+            onLoadProgressChanged: page.owner._webViewEvent(viewId, "loadProgressChanged", [loadProgress])
+            onFindTextFinished: (result) => page.owner._webViewEvent(viewId, "phoenixFindResult", [result.activeMatch, result.numberOfMatches])
             onLoadingChanged: (info) => {
                 switch (info.status) {
                 case WebEngineView.LoadStartedStatus:
-                    win._webViewEvent(viewId, "loadStarted", []);
+                    page.pageLoaded = false;
+                    report();
+                    page.owner._webViewEvent(viewId, "loadStarted", []);
                     break;
                 case WebEngineView.LoadSucceededStatus:
+                    page.pageLoaded = true;
                     report();
-                    win._webViewEvent(viewId, "loadStopped", []);
-                    win._webViewEvent(viewId, "documentLoadFinished", []);
+                    page.owner._webViewEvent(viewId, "loadStopped", []);
+                    page.owner._webViewEvent(viewId, "documentLoadFinished", []);
                     break;
                 case WebEngineView.LoadFailedStatus:
                     // An error status with the server's own page (404 Not
@@ -604,22 +700,39 @@ Item {
                     // was showing. Qt WebEngine calls it a failure in the
                     // domain of HTTP status codes (tools/test-browser-sim.cjs).
                     if (info.errorDomain === WebEngineLoadingInfo.HttpStatusCodeDomain) {
+                        page.pageLoaded = true;
                         report();
-                        win._webViewEvent(viewId, "loadStopped", []);
-                        win._webViewEvent(viewId, "documentLoadFinished", []);
+                        page.owner._webViewEvent(viewId, "loadStopped", []);
+                        page.owner._webViewEvent(viewId, "documentLoadFinished", []);
                         break;
                     }
-                    win._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
-                    win._webViewEvent(viewId, "loadStopped", []);
+                    // The user said Don't Trust: the load stops, and the
+                    // browser has said why already (its SSL dialog).
+                    // Chromium's error page in its place goes too: the view
+                    // goes back to the page it showed, or to none, as
+                    // BrowserServer's load was cancelled.
+                    if (info.errorDomain === WebEngineLoadingInfo.CertificateErrorDomain && page.certRefused) {
+                        page.certRefused = false;
+                        page.owner._webViewEvent(viewId, "loadStopped", []);
+                        Qt.callLater(() => {
+                            if (page.canGoBack)
+                                page.goBack();
+                            else
+                                page.loadHtml("<!doctype html><html></html>");
+                        });
+                        break;
+                    }
+                    page.owner._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
+                    page.owner._webViewEvent(viewId, "loadStopped", []);
                     break;
                 default:
-                    win._webViewEvent(viewId, "loadStopped", []);
+                    page.owner._webViewEvent(viewId, "loadStopped", []);
                 }
             }
             // What the page follows (not what the app loads in it,
             // openURL / setHTML, or history) is checked against the redirects.
             onNavigationRequested: (request) => {
-                const kind = win._kind(request.navigationType);
+                const kind = page.owner._kind(request.navigationType);
                 if (request.isMainFrame && kind !== "typed" && kind !== "backforward" && kind !== "reload"
                         && !Links.isLocal(request.url) && page.redirected(request.url))
                     request.reject();
@@ -628,14 +741,30 @@ Item {
                 if (message.indexOf(Links.LINK_PREFIX) === 0)
                     page.redirected(message.substring(Links.LINK_PREFIX.length));
                 else if (PageBridge.isBridgeMessage(message))
-                    win._bridgeMessage(page, message);
+                    page.owner._bridgeMessage(page, message);
             }
-            // Links that open a new window stay in this view, unless the
-            // app takes them.
+            // A link with a target or window.open: a new card, as
+            // BrowserAdapter asked the app for one (createPage, which the
+            // browser opens with the page's identifier: Browser.js:331),
+            // unless the app takes the link (its redirects). The page opens
+            // at once in a view of its own, parked here (its opener and
+            // window.opener intact) until the new card's page view connects
+            // with the identifier and takes it (_webView "create"). A
+            // script's window.open without a tap never gets here while
+            // popups are blocked (blockPopups).
             onNewWindowRequested: (request) => {
-                if (!page.redirected(request.requestedUrl))
-                    page.url = request.requestedUrl;
+                if (page.redirected(request.requestedUrl))
+                    return;
+                const parked = page.owner._makeView("", page.privateMode, { redirects: page.redirects });
+                request.openIn(parked);
+                parked.viewId = PageViews.park(parked);
+                page.owner._webViewEvent(viewId, "createPage", [parked.viewId]);
             }
+            // A certificate Chromium does not accept (a self-signed or
+            // expired one, another host's): the browser asks (its SSL
+            // dialog, Browser.js:248-280) unless the user trusts it always
+            // for this host (the runtime's certificate store).
+            onCertificateError: (error) => page.owner._certificateError(page, error)
 
             // A file the view does not show (a PDF, a zip, a link with
             // "download"): Chromium would download it itself. BrowserAdapter
@@ -651,7 +780,7 @@ Item {
                     const mime = download.mimeType || "application/octet-stream";
                     const url = download.url.toString();
                     download.cancel();
-                    win._webViewEvent(page.viewId, "mimeNotSupported", [mime, url]);
+                    page.owner._webViewEvent(page.viewId, "mimeNotSupported", [mime, url]);
                 }
             }
         }

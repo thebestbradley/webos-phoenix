@@ -134,4 +134,36 @@ describe("Settings > Certificate Manager", () => {
         await screen.findByTestId("cert-add");
         await waitFor(() => expect(screen.queryByText("Phoenix Lab Root CA")).toBeNull());
     });
+    it("keeps a site's certificate the browser trusts always, for that host only, until it is distrusted or deleted here", async () => {
+        type Rt = { certificates: { siteFile(pem: string): string; siteTrusted(host: string, sha256: string): boolean; trustSite(host: string, pem: string): boolean } };
+        const rt = (window as unknown as { __phoenixRuntime: Rt }).__phoenixRuntime.certificates;
+        const SHA = "06:1E:77:61:18:F8:E6:8D:DC:5B:A0:B8:34:CA:9F:D0:E8:DF:C7:01:8E:49:D1:9B:03:D8:DD:64:7E:56:D8:FD";
+        // The browser's View Certificate: the refused certificate, by its file.
+        const file = rt.siteFile(LAB_CA);
+        expect(file).toBe("/var/luna/data/browser/certificates/" + SHA.replace(/:/g, "").toLowerCase() + ".pem");
+        const shown = await call("luna://com.palm.certificatemanager/getcertificatedetails", { certificateFilename: file }) as unknown as { subject: { commonname: string } };
+        expect(shown.subject.commonname).toBe("Phoenix Lab Root CA");
+        expect(rt.siteTrusted("lab.example:8443", SHA)).toBe(false);
+        // Trust Always: kept for the host and that certificate.
+        expect(rt.trustSite("Lab.Example:8443", LAB_CA)).toBe(true);
+        expect(rt.siteTrusted("lab.example:8443", SHA)).toBe(true);
+        expect(rt.siteTrusted("other.example", SHA)).toBe(false);
+        expect(rt.siteTrusted("lab.example:8443", SHA.replace(/^06/, "07"))).toBe(false);
+        const c = (await list()).find((x) => x.commonname === "Phoenix Lab Root CA")!;
+        expect(c.sites).toEqual(["lab.example:8443"]);
+        expect(certStatus(c)).toBe("Trusted for lab.example:8443 by the browser");
+        // Forgotten in Settings: distrusted, then deleted.
+        render(<CertificatesPage />);
+        fireEvent.click(await screen.findByText("Phoenix Lab Root CA"));
+        expect((await screen.findByTestId("cert-sites")).textContent).toContain("lab.example:8443");
+        fireEvent.click(screen.getByTestId("cert-trusted"));
+        await waitFor(() => expect(rt.siteTrusted("lab.example:8443", SHA)).toBe(false));
+        fireEvent.click(screen.getByTestId("cert-delete"));
+        fireEvent.click(await screen.findByTestId("cert-delete-confirm"));
+        await waitFor(async () => expect((await list()).some((x) => x.commonname === "Phoenix Lab Root CA")).toBe(false));
+        rt.trustSite("lab.example:8443", LAB_CA);
+        expect(rt.siteTrusted("lab.example:8443", SHA)).toBe(true);
+        await certificates.remove((await list()).find((x) => x.commonname === "Phoenix Lab Root CA")!.certificateId);
+        expect(rt.siteTrusted("lab.example:8443", SHA)).toBe(false);
+    });
 });

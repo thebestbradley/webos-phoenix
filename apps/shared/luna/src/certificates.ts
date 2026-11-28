@@ -50,6 +50,8 @@ export interface CertificateSummary {
     /** Shipped with the system (a root CA). */
     system: boolean;
     isCA: boolean;
+    /** The hosts the browser trusts it for (its SSL dialog's Trust Always). */
+    sites?: string[];
 }
 
 export interface CertificateDetails {
@@ -68,6 +70,8 @@ export interface CertificateDetails {
     system: boolean;
     fingerprints: { sha256: string; sha1: string };
     pem: string;
+    /** The hosts the browser trusts it for (its SSL dialog's Trust Always). */
+    sites?: string[];
 }
 
 type OnError = (e: LunaError) => void;

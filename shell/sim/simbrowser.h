@@ -42,6 +42,7 @@
 
 #include <QHash>
 #include <QQuickWebEngineProfile>
+#include <QWebEngineCertificateError>
 #include <QWebEngineScript>
 class QWebEngineUrlRequestInterceptor;
 class Rootfs;
@@ -95,6 +96,13 @@ public:
     Q_INVOKABLE void clearCookies();
     Q_INVOKABLE void clearCache();
 
+    // A page's certificate that Chromium did not accept (a page view's
+    // certificateError, WebAppWindow.qml): {pem: the server's own
+    // certificate, sha256: its fingerprint, "AB:CD:...", chain: [pem...]},
+    // which the browser shows (View Certificate) and Trust Always keeps
+    // (the runtime's certificate store). QML sees no certificate in the
+    // error; Qt gives it to C++ only (certificateChain()).
+    Q_INVOKABLE QVariantMap certificate(const QWebEngineCertificateError &error) const;
     // For the interceptor: should this request fail?
     bool shouldBlock(const QString &host, const QString &firstPartyHost, bool mainFrame);
     void countBlocked();

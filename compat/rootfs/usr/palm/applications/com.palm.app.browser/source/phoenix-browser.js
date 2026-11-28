@@ -24,12 +24,16 @@
 //                     the original's own dialog (ShareLinkDialog.js: Email,
 //                     Messaging, Facebook); the app menu's Share shares
 //                     the page shown.
+//   New cards       a page a page opened (a link with a target,
+//                     window.open) opens private from a private card.
+//   Padlock           only over a page the page view says is secure, not
+//                     over every https address.
 // Default Web Search Engine: the original's list, then Phoenix's other
 // engines (DuckDuckGo, Bing, Startpage and a custom one from Settings >
 // Just Type: com.palm.universalsearch's OptionalSearchList in the
 // runtime). The browser and Just Type share the default, as on webOS.
 
-/*global enyo, $L, Preferences, BrowserApp, Browser, FindBar, ActionBar */
+/*global enyo, $L, Preferences, BrowserApp, Browser, FindBar, ActionBar, AddressInput */
 (function () {
 	"use strict";
 
@@ -284,6 +288,29 @@
 	Browser.prototype.shareLink = function (inUrl, inTitle) {
 		if (!rt || !rt.share || !inUrl) return shareLink.apply(this, arguments);
 		rt.share({ title: inTitle && inTitle !== inUrl ? inTitle : "", url: inUrl });
+	};
+	// A page a page opened (a link with a target, window.open): its card
+	// (Browser.js:331, with the page's identifier), private from a private
+	// card as Open New Card is.
+	B.openNewCardWithIdentifier = function (inSender, inIdentifier) {
+		var p = {webviewId: inIdentifier};
+		if (this.phoenixPrivate) p.phoenixPrivate = true;
+		enyo.windows.openWindow("index.html", null, p);
+	};
+	// The padlock: only over a page the page view says is secure (https,
+	// with a certificate Chromium trusts). The original showed it for any
+	// https address (AddressInput.js:84): also while the page was not
+	// there yet, after Don't Trust, and over a page whose certificate the
+	// user let through (Trust Once, Trust Always). Without phoenix-sim's
+	// page view (webViewSecure undefined) the address decides, as before.
+	var AI = AddressInput.prototype;
+	var changeButtons = AI.changeButtons;
+	AI.changeButtons = function () {
+		changeButtons.apply(this, arguments);
+		var secure = rt && rt.webViewSecure ? rt.webViewSecure(this.url) : undefined;
+		if (this._leftButton === "secureLock" && secure !== undefined && secure !== true) {
+			this.showLeftButton("");
+		}
 	};
 	var appCreate = enyo.BrowserApp.prototype.create;
 	enyo.BrowserApp.prototype.create = function () {
