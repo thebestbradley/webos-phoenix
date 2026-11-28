@@ -773,7 +773,8 @@ the runtime's "Synergy connectors on the kit" block. Any other: pack it and
 install the `.ipk` with Developer Mode on (Settings > Developer Mode), through
 `com.webos.appInstallService/install` with `developerMode: true` (as the
 Marketplace installs in Developer Mode); without it the install is refused,
-as on a device. Its service then runs in the page, its
+as on a device. On a device, `nova install` does it (the Marketplace's
+service: a new app, or an update of one the same computer installed). Its service then runs in the page, its
 template is in Accounts, and its kinds are put from its
 `configuration/db/kinds`. The simulator plays the device's parts: HTTP
 through the host's proxy (bytes too), avatars kept in the Files store under
