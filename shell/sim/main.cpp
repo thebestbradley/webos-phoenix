@@ -30,6 +30,7 @@
 
 #include <QCommandLineParser>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QProcess>
 #include <QFile>
 #include <QFileInfo>
@@ -150,6 +151,25 @@ static void keepHiddenPagesRunning()
 }
 #endif
 
+// --screenshot: animations run on the clock, not a frame at a time.
+// Qt Quick's threaded render loop moves them on by one vsync interval
+// (16.7 ms) a frame, so on a slow renderer (llvmpipe on a busy machine,
+// a few frames a second) the lock screen's 200 ms fade took seconds and
+// the picture --delay waited for caught it half done. The simple driver
+// moves them on by the time that has passed, so --delay means what it
+// says. Only for screenshots: a person watching sees every frame.
+static void animateOnTheClockForScreenshots(int argc, char *argv[])
+{
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray arg(argv[i]);
+        if (arg == "--screenshot" || arg.startsWith("--screenshot=")) {
+            if (!qEnvironmentVariableIsSet("QSG_USE_SIMPLE_ANIMATION_DRIVER"))
+                qputenv("QSG_USE_SIMPLE_ANIMATION_DRIVER", "1");
+            return;
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
@@ -160,6 +180,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     useBundledEmojiFont(argc, argv);
+    animateOnTheClockForScreenshots(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
     // These must happen before the application object exists.
     keepHiddenPagesRunning();
@@ -192,7 +213,7 @@ int main(int argc, char *argv[])
     QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene (sim.qml's scenes): locked, cards, stacks, longstack, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, hot, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, notifystacks, notifystacksbar, notifystackslocked, drawer, capture, capturepreview, justtype, keyboard, clipstrip, assistant, assistantbird, assistantbirds, assistantbirdmoves, wakeword, wakewordlocked, modal, systemmenu, empty; followup, followupanswer, followuplater, followupaction, followupchat; airpods, airpodsbattery, airpodsmenu, airpodssettings, trackeralert; notice, noticealert; and assistant:<ask>|<ask>... to put those questions to the Assistant."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
-    QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
+    QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot, from when the start-up scene is on the screen (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption installedOpt(QStringLiteral("installed-dir"), QStringLiteral("Where apps the user installs go (default: the simulator's data folder, cryptofs/apps)."), QStringLiteral("dir"));
@@ -827,12 +848,50 @@ int main(int argc, char *argv[])
 
     if (parser.isSet(shotOpt)) {
         const QString file = parser.value(shotOpt);
-        QTimer::singleShot(parser.value(delayOpt).toInt(), &view, [&view, file]() {
+        const int delay = parser.value(delayOpt).toInt();
+        const auto shoot = [&view, file]() {
             const bool ok = view.grabWindow().save(file);
             if (!ok)
                 qCritical("Could not write %s", qPrintable(file));
             QCoreApplication::exit(ok ? 0 : 1);
+        };
+        // --delay counts from the scene, not from the start: once sim.qml
+        // has made the start-up's scene (sceneReady) and a frame with it
+        // is on the screen. From the start, a fresh HOME's first run on a
+        // software rasteriser (llvmpipe compiling its shaders) took the
+        // picture before the scene was there, on the lock screen. A frame
+        // that never comes (no screen) waits at most 10 s, a scene never
+        // made a minute.
+        const auto afterFrame = [&view, delay, shoot]() {
+            auto frame = std::make_shared<QMetaObject::Connection>();
+            auto started = std::make_shared<bool>(false);
+            const auto start = [frame, started, &view, delay, shoot]() {
+                if (*started)
+                    return;
+                *started = true;
+                QObject::disconnect(*frame);
+                QTimer::singleShot(delay, &view, shoot);
+            };
+            *frame = QObject::connect(&view, &QQuickWindow::frameSwapped, &view, start, Qt::QueuedConnection);
+            view.update();
+            QTimer::singleShot(10000, &view, start);
+        };
+        QTimer *poll = new QTimer(&view);
+        auto waited = std::make_shared<QElapsedTimer>();
+        waited->start();
+        poll->setInterval(50);
+        QObject::connect(poll, &QTimer::timeout, &view, [poll, waited, &view, afterFrame]() {
+            QObject *root = view.rootObject();
+            const QVariant ready = root ? root->property("sceneReady") : QVariant();
+            const bool timedOut = waited->elapsed() > 60000;
+            if (ready.isValid() && !ready.toBool() && !timedOut)
+                return;
+            if (timedOut)
+                std::fprintf(stderr, "phoenix-sim: --screenshot: the scene was not made in a minute; taking it anyway\n");
+            poll->stop();
+            afterFrame();
         });
+        poll->start();
     }
 
     return app.exec();

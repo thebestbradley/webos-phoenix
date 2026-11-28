@@ -1579,6 +1579,12 @@ Two simulators at once with --instance, each with its own data:
 NODE_PATH="$(npm root -g)" node tools/test-instance-sim.cjs
 ```
 
+--screenshot waits for the scene: --delay counts from it, animations on the clock:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-screenshot-sim.cjs
+```
+
 Jabber against a real Prosody (skipped without it):
 
 ```sh

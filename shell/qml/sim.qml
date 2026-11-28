@@ -1908,6 +1908,13 @@ Item {
         }
     }
 
+    // The start-up's scene is made (the demo scene, --launch's apps, First
+    // Use): --screenshot counts its --delay from here, and from the frame
+    // after it, not from the start (main.cpp), so a slow first frame (a
+    // software rasteriser compiling its shaders) does not take the
+    // picture before the scene is there.
+    property bool sceneReady: false
+
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
         // The catalog's state, for every page as it loads.
@@ -1989,6 +1996,7 @@ Item {
                     sceneAirPods.start();
                 }
                 root.startOnTouchstone();
+                root.sceneReady = true;
             });
             return;
         }
@@ -2002,6 +2010,7 @@ Item {
             Qt.callLater(function() {
                 if (!shell.startFirstUse())
                     buildScene();
+                root.sceneReady = true;
             });
             return;
         }
@@ -2009,6 +2018,7 @@ Item {
         Qt.callLater(function() {
             buildScene();
             root.startOnTouchstone();
+            root.sceneReady = true;
         });
     }
 

@@ -358,6 +358,11 @@ jobs:
       - name: Two simulators at once
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-instance-sim.cjs --out app-tests/instance-sim
 
+      # --screenshot waits for the scene: --delay from the start-up scene on
+      # the screen, animations on the clock (a busy machine too).
+      - name: Screenshots wait for the scene
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-screenshot-sim.cjs --out app-tests/screenshot-sim
+
       # The activity manager with each app a page of its own: an alarm rings
       # at its minute with the Clock closed, once; activities due together
       # each fire once; --launch 'appId:{json}'.
