@@ -95,7 +95,7 @@
             "templateId": "com.webosphoenix.drive.googledrive",
             "title": "Google Drive",
             "provider": "Google Drive",
-            "summary": "Google Drive as a place in Files, the file pickers and Save to Files. Phoenix sees the files it saves there or opens from there (Google's per-file access), not the rest of your drive.",
+            "summary": "Google Drive as a place in Files, the file pickers and Save to Files. You choose what Phoenix sees: the files you open with it (picked in Google's own picker), or all your Drive once Google has approved Phoenix for that.",
             "capabilities": [
                 { "capability": "DOCUMENTS", "direction": "two-way" }
             ],

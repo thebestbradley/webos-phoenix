@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as kit from "@phoenix/connector-kit";
 import * as synckit from "@phoenix/synckit";
 import { conformanceChecks } from "../../../shared/connector-kit/src/conformance";
@@ -331,12 +331,15 @@ describe("OAuth drives", () => {
             const r = await w.methods.signIn({ templateId: T[k] });
             expect(r.returnValue, JSON.stringify(r)).toBe(true);
             expect(r.username).toBe(user);
-            expect(Object.keys(r.credentials.common)).toEqual(["oauthKey"]);
+            expect(Object.keys(r.credentials.common)).toEqual(k === "googledrive" ? ["oauthKey", "settings"] : ["oauthKey"]);
             const key = w.keys["key:" + r.credentials.common.oauthKey];
             expect(key).toMatchObject({ owner: SERVICE });
             expect(JSON.stringify(r)).not.toContain(key.accessToken);
             expect(w.sheets[0]).toMatch(/code_challenge=[\w-]{43}&code_challenge_method=S256/);
-            if (k === "googledrive") expect(decodeURIComponent(w.sheets[0])).toContain("scope=https://www.googleapis.com/auth/drive.file");
+            if (k === "googledrive") {
+                expect(decodeURIComponent(w.sheets[0])).toContain("scope=https://www.googleapis.com/auth/drive.file&");
+                expect(r.config.access).toBe("drive.file");
+            }
             const id = await w.addAccount(k, r);
             // The validator (Accounts' check) agrees with the sign-in.
             expect((await w.methods.checkCredentials({ templateId: T[k], config: r.config })).username).toBe(user);
@@ -357,6 +360,84 @@ describe("OAuth drives", () => {
             expect(w.keys["key:" + r.credentials.common.oauthKey]).toBeUndefined();
         });
     }
+
+    // Google Drive: the person chooses what Phoenix may see (the owner, 27 November 2026).
+    describe("Google Drive: files you open with Phoenix, or all your Drive", () => {
+        const idOf = (p: string) => fake.trees.googledrive.byPath(p).id;
+        const names = (l: any) => l.entries.map((e: any) => e.name).sort();
+        // (The other tests' files stay in the stand-in drive; what Phoenix may see starts afresh.)
+        beforeEach(() => { fake.gd.picks = []; fake.gd.fullScopeApproved = true; fake.gd.appFiles.clear(); });
+
+        it("files you open with Phoenix: drive.file with Google's Picker; only the app's files and the picked ones", async () => {
+            const w = await world();
+            expect(await w.methods.providerInfo({ templateId: T.googledrive })).toMatchObject({ available: true, fullScopeApproved: false });
+            const shown = fake.gd.pickerShown;
+            fake.gd.picks = [idOf("/Photos/lake.png")];
+            const r = await w.methods.signIn({ templateId: T.googledrive, access: "drive.file" });
+            expect(r.returnValue, JSON.stringify(r)).toBe(true);
+            const asked = new URL(w.sheets[0]).searchParams;
+            expect(asked.get("scope")).toBe("https://www.googleapis.com/auth/drive.file");
+            expect([asked.get("trigger_onepick"), asked.get("allow_multiple"), asked.get("prompt")]).toEqual(["true", "true", "consent"]);
+            expect(fake.gd.pickerShown).toBe(shown + 1);
+            expect(r.config.access).toBe("drive.file");
+            expect(r.credentials.common.settings).toEqual({ access: "drive.file" });
+            const id = await w.addAccount("googledrive", r, "gd-file");
+            // The picked picture, at the top (its folder is not Phoenix's to see); not the rest of the drive.
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual(["lake.png"]);
+            expect(await w.methods.listFiles({ accountId: id, path: "/Photos" })).toMatchObject({ returnValue: false, errorCode: E.NOT_FOUND });
+            const got = await w.methods.downloadFile({ accountId: id, path: "/lake.png", to: "/media/internal/lake.png" });
+            expect(got.returnValue, JSON.stringify(got)).toBe(true);
+            expect(same(w.files.data["/media/internal/lake.png"], fake.picture)).toBe(true);
+            // Search finds the picked file, not the person's other notes.
+            expect((await w.methods.searchFiles({ accountId: id, query: "notes" })).entries).toEqual([]);
+            expect((await w.methods.searchFiles({ accountId: id, query: "lake" })).entries.map((e: any) => e.path)).toEqual(["/lake.png"]);
+            // What Phoenix saves there is its own, in a folder it made too.
+            w.files.data["/media/internal/memo.txt"] = bytesOf(100);
+            expect((await w.methods.makeFolder({ accountId: id, path: "/From Phoenix" })).returnValue).toBe(true);
+            expect((await w.methods.uploadFile({ accountId: id, from: "/media/internal/memo.txt", to: "/From Phoenix/memo.txt" })).returnValue).toBe(true);
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual(["From Phoenix", "lake.png"]);
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/From Phoenix" }))).toEqual(["memo.txt"]);
+            // Signing in again picks more: the notes, from a folder of the person's.
+            fake.gd.picks = [idOf("/Documents/notes.txt")];
+            const again = await w.methods.signIn({ templateId: T.googledrive, access: "drive.file", accountId: id });
+            expect(again.returnValue, JSON.stringify(again)).toBe(true);
+            w.credentials[id] = again.credentials;
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual(["From Phoenix", "lake.png", "notes.txt"]);
+        });
+
+        it("all your Drive: the drive scope, no Picker; the whole drive", async () => {
+            const w = await world({ clients: Object.assign(fake.clients(), { googledrive: Object.assign(fake.clients().googledrive, { scope: "drive" }) }) });
+            expect((await w.methods.providerInfo({ templateId: T.googledrive })).fullScopeApproved).toBe(true);
+            const r = await w.methods.signIn({ templateId: T.googledrive, access: "drive" });
+            expect(r.returnValue, JSON.stringify(r)).toBe(true);
+            const asked = new URL(w.sheets[0]).searchParams;
+            expect(asked.get("scope")).toBe("https://www.googleapis.com/auth/drive");
+            expect(asked.get("trigger_onepick")).toBeNull();
+            expect(r.config.access).toBe("drive");
+            const id = await w.addAccount("googledrive", r, "gd-all");
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual(expect.arrayContaining(["Documents", "Photos", "Shared"]));
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/Photos" }))).toEqual(["hills.png", "lake.png"]);
+            expect((await w.methods.searchFiles({ accountId: id, query: "notes" })).entries.map((e: any) => e.path)).toContain("/Documents/notes.txt");
+        });
+
+        it("all your Drive before Google has approved Phoenix: refused on Google's page; changing access later by signing in again", async () => {
+            const w = await world();
+            fake.gd.fullScopeApproved = false;
+            expect(await w.methods.signIn({ templateId: T.googledrive, access: "drive" })).toMatchObject({ returnValue: false, errorCode: "ACCESS_DENIED" });
+            // Files you open with Phoenix instead; later, all of it, once approved (Change Access: a sign-in again).
+            const r = await w.methods.signIn({ templateId: T.googledrive, access: "drive.file" });
+            const id = await w.addAccount("googledrive", r, "gd-change");
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual([]);
+            fake.gd.fullScopeApproved = true;
+            const all = await w.methods.signIn({ templateId: T.googledrive, access: "drive", accountId: id });
+            expect(all.returnValue, JSON.stringify(all)).toBe(true);
+            expect(all.credentials.common.settings).toEqual({ access: "drive" });
+            w.credentials[id] = all.credentials;
+            // The old key went; the account now sees the whole drive though its first config said drive.file.
+            expect(w.keys["key:" + r.credentials.common.oauthKey]).toBeUndefined();
+            expect(names(await w.methods.listFiles({ accountId: id, path: "/" }))).toEqual(expect.arrayContaining(["Documents", "Photos", "Shared"]));
+        });
+    });
 
     it("without a client id in the build: 'not available in this build', no sign-in page", async () => {
         const w = await world({ clients: { dropbox: fake.clients().dropbox } });

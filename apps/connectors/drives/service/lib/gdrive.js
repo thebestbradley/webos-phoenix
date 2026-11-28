@@ -6,12 +6,28 @@
 // with Google's OAuth 2 for installed apps (PKCE; Google's "desktop app"
 // client has a secret that is not secret, docs/DEVELOPER-APPS.md).
 //
-// The scope is drive.file by default: Phoenix sees the files it made or
-// that were opened with it, and nothing else. It needs no verification by
-// Google beyond the consent screen. Seeing the whole drive (the "drive"
-// scope) is restricted: Google's verification and a yearly security
-// assessment (SYNERGY-MODERN.md 3.3, open question 2). The build setting
-// googledrive.scope = "drive" turns it on for a registration that has passed.
+// The person chooses what Phoenix may see when adding the account (the
+// owner, 27 November 2026), and the account keeps it (its access):
+//
+//   "drive.file"  Files you open with Phoenix: the files Phoenix made and
+//                 those the person picked for it in Google's Picker, nothing
+//                 else (https://www.googleapis.com/auth/drive.file;
+//                 non-sensitive: no security assessment). Google grants it
+//                 file by file, for what Phoenix uploads and what the Picker
+//                 returns. A picked file's folder is not Phoenix's to see, so
+//                 such files (and folders) are at the top of the drive here;
+//                 a folder Phoenix may see shows only the files in it Phoenix
+//                 may see (files.list answers only those). The sign-in shows
+//                 the Picker (Google's flow for desktop and mobile apps:
+//                 trigger_onepick on the authorization request,
+//                 https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker),
+//                 and signing in again picks more.
+//   "drive"       All your Drive (https://www.googleapis.com/auth/drive):
+//                 restricted, so Google must verify Phoenix and a yearly
+//                 security assessment must pass before more than its test
+//                 users can sign in (SYNERGY-MODERN.md 3.3, OPEN-QUESTIONS
+//                 Q77); the registration says when that is done
+//                 (clients.json googledrive.scope = "drive").
 //
 // Drive is a graph of ids, not paths: a path is found name by name from
 // "root" (one listing per folder, kept for the rest of the call). Google's
@@ -58,10 +74,10 @@ function driveError(res, what) {
     return kit.httpError(res.status, what, reason || (b.error && b.error.message) || "");
 }
 
-/** opts: {token(), api?, upload? (the tests' server)}. */
+/** opts: {token(), access? ("drive.file", the default, or "drive"), api?, upload? (the tests' server)}. */
 function createGdrive(ctx, opts) {
     var api = opts.api || API, upload = opts.upload || UPLOAD;
-    var ids = { "/": "root" };
+    var perFile = opts.access !== "drive";
 
     function call(method, url, body, ok, headers) {
         return opts.token().then(function (t) {
@@ -79,10 +95,10 @@ function createGdrive(ctx, opts) {
     }
     function json(method, url, body, ok) { return call(method, url, body, ok).then(function (r) { return N.jsonOf(r) || {}; }); }
 
-    function children(id, extra) {
+    function listAll(cond) {
         var out = [];
         function page(token) {
-            var url = api + "/files?q=" + encodeURIComponent(q(id) + " in parents and trashed = false" + (extra || "")) +
+            var url = api + "/files?q=" + encodeURIComponent(cond) +
                 "&fields=" + encodeURIComponent("nextPageToken,files(" + FIELDS + ")") + "&pageSize=1000&spaces=drive" +
                 (token ? "&pageToken=" + encodeURIComponent(token) : "");
             return json("GET", url).then(function (r) {
@@ -91,6 +107,22 @@ function createGdrive(ctx, opts) {
             });
         }
         return page(null);
+    }
+
+    // drive.file: the top of the drive is every file Phoenix may see whose
+    // folder it may not (one picked from a folder of the person's), and
+    // those in My Drive itself.
+    function topLevel() {
+        return listAll("trashed = false").then(function (all) {
+            var seen = {};
+            all.forEach(function (m) { seen[m.id] = true; });
+            return all.filter(function (m) { return !m.parents || !m.parents.length || !seen[m.parents[0]]; });
+        });
+    }
+
+    function children(id, extra) {
+        if (perFile && id === "root" && !extra) return topLevel();
+        return listAll(q(id) + " in parents and trashed = false" + (extra || ""));
     }
 
     // The name a file shows under (Google's documents: with the extension they download as).
@@ -111,6 +143,8 @@ function createGdrive(ctx, opts) {
     // The metadata of a path, name by name from the root.
     function resolve(p) {
         if (meta[p]) return Promise.resolve(meta[p]);
+        // drive.file: My Drive's own metadata is not Phoenix's to read; "root" names it.
+        if (p === "/" && perFile) { meta["/"] = { id: "root", name: "", mimeType: FOLDER }; return Promise.resolve(meta["/"]); }
         if (p === "/") return json("GET", api + "/files/root?fields=" + encodeURIComponent(FIELDS)).then(function (m) { meta["/"] = m; return m; });
         var parent = p.replace(/\/[^/]*$/, "") || "/", name = p.slice(p.lastIndexOf("/") + 1);
         return resolve(parent).then(function (pm) {
@@ -263,10 +297,14 @@ function createGdrive(ctx, opts) {
                     byId[id] = json("GET", api + "/files/" + encodeURIComponent(id) + "?fields=" + encodeURIComponent(FIELDS)).then(function (m) {
                         if (!m.parents || !m.parents.length) return "";
                         return pathOfId(m.parents[0]).then(function (pp) { return pp === null ? null : pp + "/" + shownName(m); });
-                    }, function () { return null; });
+                    }, function (e) {
+                        // drive.file: a folder Phoenix may not see; what is in it is at the top here.
+                        return perFile && e.code === E.NOT_FOUND ? "" : null;
+                    });
                     return byId[id];
                 }
-                return json("GET", api + "/files/root?fields=id").then(function (root) {
+                var top = perFile ? Promise.resolve({ id: "root" }) : json("GET", api + "/files/root?fields=id");
+                return top.then(function (root) {
                     byId[root.id] = Promise.resolve("");
                     return Promise.all((r.files || []).map(function (m) {
                         var parent = m.parents && m.parents[0];
@@ -308,5 +346,8 @@ module.exports = { createGdrive: createGdrive, whoAmI: whoAmI,
                             revocationEndpoint: "https://oauth2.googleapis.com/revoke",
                             scope: "https://www.googleapis.com/auth/drive.file",
                             fullScope: "https://www.googleapis.com/auth/drive",
-                            params: { access_type: "offline", prompt: "consent" } },
+                            params: { access_type: "offline", prompt: "consent" },
+                            // drive.file: Google's Picker in the sign-in (files and folders, several at once).
+                            pickerParams: { trigger_onepick: "true", allow_multiple: "true", allow_folder_selection: "true" } },
+                   ACCESS: { "drive.file": "https://www.googleapis.com/auth/drive.file", drive: "https://www.googleapis.com/auth/drive" },
                    HOSTS: ["www.googleapis.com"] };

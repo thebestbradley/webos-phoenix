@@ -24,7 +24,11 @@
 //      the app gets the device's copy and where it came from;
 //   7. a big upload: its progress in the notification area's ongoing
 //      activities, then cleared;
-//   8. offline: the drive's folder says it cannot be reached, with Try Again.
+//   8. offline: the drive's folder says it cannot be reached, with Try Again;
+//   9. Google Drive asks what Phoenix may see ("Files you open with
+//      Phoenix", "All your Drive", which Google must approve first); with
+//      the first, Google's sign-in asks for drive.file with its Picker, the
+//      account keeps the choice, and Files shows the picked picture only.
 //
 //   node tools/test-drives.cjs [--phone] [--out DIR]
 //
@@ -419,6 +423,44 @@ async function main() {
         await files.click("[data-testid=retry]");
         await files.waitForSelector("[data-testid=empty]", { timeout: 15000 }).catch(() => {});
         check(await files.locator("[data-testid=folder-error]").count() === 0, "online again: Try Again lists the folder");
+
+        // ---- 9. Google Drive: what Phoenix may see, chosen at sign-in -------------------------------------
+        await accounts.evaluate((c) => localStorage.setItem("phoenix:systemConfig:drives/clients.json", JSON.stringify({ dropbox: c.dropbox, googledrive: c.googledrive })),
+                                fake.clients());
+        const GD = "com.webosphoenix.drive.googledrive";
+        w = await wizardOf(GD);
+        const choices = await w.evaluate(() => enyo.$.drivesWizard.$.access.items.map((i) => i.caption));
+        check(JSON.stringify(choices) === JSON.stringify(["Files you open with Phoenix", "All your Drive"]),
+              "Google Drive asks what Phoenix may see: " + choices.join(" / "));
+        check(/sees only the files it saves to your Drive and the ones you pick/.test(await w.locator(".drives-access-help").textContent()),
+              "... Files you open with Phoenix (the default) says what it means");
+        await w.evaluate(() => { const d = enyo.$.drivesWizard; d.$.access.setValue("drive"); d.accessChanged(); });
+        check(/Google must approve Phoenix for this before it works for everyone/.test(await w.locator(".drives-access-help").textContent()),
+              "... All your Drive says Google must approve Phoenix first");
+        await shot(accounts, "19-googledrive-choice");
+        await w.evaluate(() => { const d = enyo.$.drivesWizard; d.$.access.setValue("drive.file"); d.accessChanged(); });
+        // The person picks a picture of theirs in Google's Picker (the stand-in's choice).
+        fake.gd.picks = [fake.trees.googledrive.byPath("/Photos/lake.png").id];
+        await tapSignIn(w);
+        const gdPage = await until(() => accounts.frames().find((f) => f.url().indexOf(fake.origin + "/oauth/googledrive/authorize") === 0), 15000);
+        const asked = gdPage && new URL(gdPage.url()).searchParams;
+        check(!!asked && asked.get("scope") === "https://www.googleapis.com/auth/drive.file" && asked.get("trigger_onepick") === "true",
+              "Google's sign-in asks for drive.file, with the Picker (trigger_onepick)");
+        if (gdPage) { await gdPage.waitForSelector("#allow"); await gdPage.click("#allow"); }
+        const create3 = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
+        await create3.waitFor({ timeout: 20000 }).catch(() => {});
+        await create3.click().catch(() => {});
+        const gdAcct = await until(async () => (await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId: GD })).results[0], 10000);
+        const gdCreds = gdAcct && await luna(accounts, "luna://com.palm.service.accounts/readCredentials", { accountId: gdAcct._id, name: "common" });
+        check(gdAcct && gdAcct.username === "phoenix@gdrive.test" && gdCreds.credentials.settings && gdCreds.credentials.settings.access === "drive.file",
+              "the Google Drive account keeps its choice (drive.file)");
+        const gdList = gdAcct && await until(async () => { const l = await luna(files, "luna://org.webosphoenix.filemanager/list", { path: "/media/drives/" + gdAcct._id });
+                                                             return l.returnValue && l; }, 10000);
+        check(gdList && JSON.stringify(gdList.entries.map((e) => e.name)) === JSON.stringify(["lake.png"]),
+              "Files: the picked picture, not the rest of the person's Drive (" + (gdList && gdList.entries.map((e) => e.name).join(", ")) + ")");
+        await files.goto(appUrl("org.webosphoenix.files", { path: "/media/drives/" + (gdAcct && gdAcct._id) }));
+        await files.waitForSelector("[data-testid='file-lake.png']", { timeout: 15000 }).catch(() => {});
+        await shot(files, "20-googledrive-files");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     } finally {

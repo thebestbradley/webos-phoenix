@@ -23,7 +23,13 @@
 //                 "Sign In": the provider's page in the system's browser
 //                 sheet (org.webosphoenix.service.drives/signIn, OAuth with
 //                 PKCE); "not available in this build" when Phoenix's app
-//                 is not registered in this image (providerInfo)
+//                 is not registered in this image (providerInfo). Google
+//                 Drive asks first what Phoenix may see, in plain words:
+//                 "Files you open with Phoenix" (drive.file: Google's Picker
+//                 follows the sign-in) or "All your Drive" (drive, which
+//                 Google must approve for Phoenix before it works for
+//                 everyone); the account keeps the choice, and signing in
+//                 again from the account (modify) changes it or picks more
 //   SFTP          the server and port, the user name, and a password or a
 //                 key: one made here (Make a Key: its public key shown, to
 //                 copy into the server's ~/.ssh/authorized_keys) or one of
@@ -45,10 +51,14 @@ enyo.kind({
         s3: "A bucket of S3-compatible storage as a drive: Backblaze B2, Wasabi, Amazon S3, MinIO and others. Make an access key for the bucket in your provider's console.",
         dropbox: "Your Dropbox in Files, the file pickers and Save to Files.",
         onedrive: "Your OneDrive in Files, the file pickers and Save to Files.",
-        googledrive: "Google Drive in Files, the file pickers and Save to Files. Phoenix sees the files it saves there or opens from there, not the rest of your drive (Google's per-file access).",
+        googledrive: "Google Drive in Files, the file pickers and Save to Files. Choose how much of it Phoenix may see.",
         box: "Your Box in Files, the file pickers and Save to Files.",
         sftp: "A folder of any SSH server (a NAS, a Raspberry Pi, your own server) in Files, the file pickers and Save to Files, over SFTP."
     },
+    ACCESS_ITEMS: [
+        {caption: "Files you open with Phoenix", value: "drive.file"},
+        {caption: "All your Drive", value: "drive"}
+    ],
     AUTH_ITEMS: [
         {caption: "Password", value: "password"},
         {caption: "A key made on this device", value: "device"},
@@ -64,6 +74,10 @@ enyo.kind({
             {kind: "Control", className: "box-center", components: [
                 {kind: "Control", name: "help", className: "drives-help"},
                 {kind: "Control", name: "unavailable", className: "drives-unavailable", showing: false},
+                {kind: "RowGroup", name: "accessGroup", caption: "WHAT PHOENIX MAY SEE", className: "accounts-group", showing: false, components: [
+                    {kind: "ListSelector", name: "access", value: "drive.file", onChange: "accessChanged", items: []}
+                ]},
+                {kind: "Control", name: "accessHelp", className: "drives-hint drives-access-help", showing: false},
                 {kind: "RowGroup", name: "presetGroup", caption: "PROVIDER", className: "accounts-group", showing: false, components: [
                     {kind: "ListSelector", name: "preset", value: "b2", onChange: "presetChanged", items: []}
                 ]},
@@ -175,6 +189,14 @@ enyo.kind({
         ["info", "validate", "oauth", "flowStart", "flowPoll", "hostKey", "makeKeySvc", "importKeySvc", "forgetKeySvc", "accountKeySvc"]
             .forEach(function (n) { this.$[n].setService(this.SERVICE); }, this);
         if (this.mode !== "modify") this.$.signUp.setTemplate(this.params.template || null);
+        if (this.provider === "googledrive") {
+            this.$.access.setItems(this.ACCESS_ITEMS);
+            this.$.access.setValue("drive.file");
+            this.$.accessGroup.setCaption(this.mode === "modify" ? "CHANGE WHAT PHOENIX MAY SEE" : "WHAT PHOENIX MAY SEE");
+            this.$.accessGroup.show();
+            this.$.accessHelp.show();
+            this.accessChanged();
+        }
         if (this.provider === "sftp") {
             this.$.auth.setItems(this.AUTH_ITEMS);
             this.$.privacy.setContent("Your files go between this device and your server only, encrypted by SSH; no Phoenix server is in between.");
@@ -370,11 +392,27 @@ enyo.kind({
         this.$.validate.call(p);
     },
 
+    // Google Drive: what each choice means, in plain words.
+    accessChanged: function () {
+        var text;
+        if (this.$.access.getValue() === "drive") {
+            text = "Phoenix sees and changes everything in your Google Drive.";
+            // Until Google has approved Phoenix for the whole drive (the registration says so: docs/DEVELOPER-APPS.md).
+            if (!(this.info && this.info.fullScopeApproved)) {
+                text += " Google must approve Phoenix for this before it works for everyone; until then Google may refuse it. " +
+                        "You can start with Files you open with Phoenix and change this later from the account.";
+            }
+        } else {
+            text = "Phoenix sees only the files it saves to your Drive and the ones you pick for it. After you allow Phoenix, " +
+                   "Google shows your Drive so you can pick files; sign in again from the account to pick more. This works now.";
+        }
+        this.$.accessHelp.setContent(text);
+    },
+
     gotInfo: function (inSender, r) {
         if (!r || !r.returnValue) return;
         this.info = r;
-        // A build registered for Google's full scope (docs/DEVELOPER-APPS.md): the whole drive.
-        if (r.scope === "drive") this.$.help.setContent("Your Google Drive in Files, the file pickers and Save to Files.");
+        if (this.provider === "googledrive") this.accessChanged();
         if (!r.available) {
             this.$.unavailable.setContent(r.reason || "Not available in this build.");
             this.$.unavailable.show();
@@ -443,7 +481,11 @@ enyo.kind({
             if (this.mode === "modify" && this.params.account) o.accountId = this.params.account._id;
             return o;
         }.bind(this);
-        if (this.oauth) return this.$.oauth.call(withAccount({templateId: this.templateId}));
+        if (this.oauth) {
+            var o = {templateId: this.templateId};
+            if (p === "googledrive") o.access = this.$.access.getValue();
+            return this.$.oauth.call(withAccount(o));
+        }
         if (p === "nextcloud" && this.how === "flow") return this.$.flowStart.call({server: this.$.server.getValue().trim()});
         if (p === "sftp") return this.sftpSignIn();
         var config;
@@ -493,7 +535,12 @@ enyo.kind({
         if (this.provider === "sftp" && r && r.errorText && r.errorCode !== "UNKNOWN_ERROR") return r.errorText;
         switch (r && r.errorCode) {
         case "CANCELED": return "";
-        case "ACCESS_DENIED": return "You did not allow Phoenix.";
+        case "ACCESS_DENIED":
+            if (this.provider === "googledrive" && this.$.access.getValue() === "drive") {
+                return "Google did not let Phoenix see all of your Drive: Google has not approved Phoenix for that yet, or you did not allow it. " +
+                       "Choose Files you open with Phoenix instead.";
+            }
+            return "You did not allow Phoenix.";
         case "NOT_AVAILABLE": case "TIMEOUT": case "UNSUPPORTED_CAPABILITY": return r.errorText;
         case "UNSUPPORTED": return "Signing in this way is not available on this device yet.";
         case "400_BAD_REQUEST": return r.errorText || AccountError.getErrorText("400_BAD_REQUEST");

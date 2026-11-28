@@ -20,8 +20,11 @@
 //       Wasabi, MinIO, AWS, ...): endpoint, region, bucket, an access key
 //   com.webosphoenix.drive.dropbox     Dropbox (OAuth, PKCE)
 //   com.webosphoenix.drive.onedrive    OneDrive (Microsoft Graph; OAuth, PKCE)
-//   com.webosphoenix.drive.googledrive Google Drive (OAuth; the drive.file
-//       scope: the files Phoenix made or opened)
+//   com.webosphoenix.drive.googledrive Google Drive (OAuth): the person
+//       chooses at sign-in "Files you open with Phoenix" (the drive.file
+//       scope, Google's Picker in the sign-in) or "All your Drive" (the
+//       drive scope, which Google must approve for Phoenix first); the
+//       account keeps which (its access, lib/gdrive.js)
 //   com.webosphoenix.drive.box         Box (OAuth)
 //   com.webosphoenix.drive.sftp        any SSH server's files (SFTP; lib/sftp.js):
 //       the host, port and user name, a password or a key (Ed25519 made on
@@ -97,14 +100,25 @@ function lunaOk(ctx, uri, params) {
 
 // ---- The OAuth providers' registrations (the image's setting) ----------------------
 
-function clientOf(ctx, provider) {
+// Google Drive's access: what the account asked for ("drive.file", the
+// default, or "drive"; lib/gdrive.js).
+function accessOf(a) { return a === "drive" ? "drive" : "drive.file"; }
+
+// access: Google Drive's, for its scope (and drive.file's Picker in the sign-in).
+function clientOf(ctx, provider, access) {
     return ctx.systemConfig(CLIENTS).then(function (all) {
         var c = all && all[provider];
         if (!c || typeof c.clientId !== "string" || !c.clientId) return null;
         var lib = OAUTH_PROVIDERS[provider].lib;
         var out = Object.assign({}, lib.OAUTH, c);
-        if (provider === "googledrive" && c.scope === "drive") out.scope = lib.OAUTH.fullScope;
-        else out.scope = lib.OAUTH.scope;
+        out.scope = lib.OAUTH.scope;
+        if (provider === "googledrive") {
+            // The registration's "scope": "drive" says Google has approved Phoenix for the whole drive.
+            out.fullScopeApproved = c.scope === "drive";
+            out.access = accessOf(access);
+            out.scope = GD.ACCESS[out.access];
+            if (out.access === "drive.file") out.params = Object.assign({}, lib.OAUTH.params, lib.OAUTH.pickerParams);
+        }
         // Endpoint addresses of the setting (a test server) may be reached.
         ["authorizationEndpoint", "tokenEndpoint", "revocationEndpoint"].concat(OAUTH_PROVIDERS[provider].endpoints).forEach(function (k) {
             if (c[k]) { try { ctx.http.allowHost(new URL(c[k]).host); } catch (e) { /* not an address */ } }
@@ -144,7 +158,9 @@ function driveFor(ctx) {
                                                   accessKeyId: cred.accessKeyId, secretAccessKey: cred.secretAccessKey }));
     }
     if (provider === "sftp") return sftpDrive(ctx, c, cred);
-    return clientOf(ctx, provider).then(function (client) {
+    // As the key, the access the last sign-in got (its credentials) wins over the first one's config.
+    var access = (cred.settings && cred.settings.access) || c.access;
+    return clientOf(ctx, provider, access).then(function (client) {
         if (!client) throw kit.fileError(kit.FILE_ERRORS.NOT_AVAILABLE, notAvailable(provider).message);
         var key = cred.oauthKey || c.oauthKey;
         var token = function () { return ctx.oauth.token(key); };
@@ -424,15 +440,29 @@ function whoAmI(ctx, provider, client, keyId) {
     });
 }
 
-function oauthResult(provider, keyId, me) {
-    return { username: me.username, credentials: { common: { oauthKey: keyId } }, config: { provider: provider, oauthKey: keyId } };
+// Google Drive's access goes with the key (credentials.common.settings, which
+// signing in again replaces: changing it) and in the config.
+function oauthResult(provider, keyId, me, access) {
+    var r = { username: me.username, credentials: { common: { oauthKey: keyId } }, config: { provider: provider, oauthKey: keyId } };
+    if (provider === "googledrive") {
+        r.config.access = accessOf(access);
+        r.credentials.common.settings = { access: r.config.access };
+    }
+    return r;
+}
+
+// What Google granted: the whole drive only when its scope came back.
+function grantedAccess(asked, scope) {
+    if (asked !== "drive") return "drive.file";
+    return !scope || String(scope).split(/\s+/).indexOf(GD.ACCESS.drive) >= 0 ? "drive" : "drive.file";
 }
 
 function signIn(ctx, p) {
     var provider = providerOf(p.templateId);
     if (!OAUTH_PROVIDERS[provider]) return Promise.reject(fail(NAMES[provider] + " signs in with a password", "400_BAD_REQUEST"));
     var client;
-    return clientOf(ctx, provider).then(function (c) {
+    var access = provider === "googledrive" ? accessOf(p.access) : undefined;
+    return clientOf(ctx, provider, access).then(function (c) {
         if (!c) throw notAvailable(provider);
         client = c;
         return lunaOk(ctx, OAUTH + "redirectUri", {});
@@ -450,7 +480,7 @@ function signIn(ctx, p) {
             var old = p.accountId ? lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: p.accountId, name: "common" })
                 .then(function (r) { var k = r.credentials && r.credentials.oauthKey; return k && k !== auth.keyId ? ctx.oauth.forget(k) : null; })
                 .catch(function () {}) : Promise.resolve();
-            return old.then(function () { return oauthResult(provider, auth.keyId, me); });
+            return old.then(function () { return oauthResult(provider, auth.keyId, me, provider === "googledrive" ? grantedAccess(access, auth.scope) : undefined); });
         });
     });
 }
@@ -521,10 +551,10 @@ module.exports = kit.defineConnector({
         if (provider === "sftp") return sftpValidate(ctx, p);
         var c = p.config || {};
         if (!c.oauthKey) return Promise.reject(fail("Sign in with " + NAMES[provider] + " first", "401_UNAUTHORIZED"));
-        return clientOf(ctx, provider).then(function (client) {
+        return clientOf(ctx, provider, c.access).then(function (client) {
             if (!client) throw notAvailable(provider);
             return whoAmI(ctx, provider, client, c.oauthKey);
-        }).then(function (me) { return oauthResult(provider, c.oauthKey, me); });
+        }).then(function (me) { return oauthResult(provider, c.oauthKey, me, c.access); });
     },
 
     capabilities: capabilities,
@@ -565,7 +595,8 @@ module.exports = kit.defineConnector({
     },
 
     methods: {
-        // {templateId} -> {available, reason?, provider, presets?}: what the sign-in page shows.
+        // {templateId} -> {available, reason?, provider, presets?, fullScopeApproved? (Google Drive:
+        // Google has approved Phoenix for all of a drive)}: what the sign-in page shows.
         providerInfo: function (ctx, p) {
             var provider = providerOf(p.templateId);
             var out = { provider: provider, name: NAMES[provider], available: true };
@@ -573,11 +604,12 @@ module.exports = kit.defineConnector({
             if (!OAUTH_PROVIDERS[provider]) return Promise.resolve(out);
             return clientOf(ctx, provider).then(function (c) {
                 if (!c) { out.available = false; out.reason = notAvailable(provider).message; }
-                else if (provider === "googledrive") out.scope = c.scope === GD.OAUTH.fullScope ? "drive" : "drive.file";
+                else if (provider === "googledrive") out.fullScopeApproved = !!c.fullScopeApproved;
                 return out;
             });
         },
-        // {templateId, accountId?} -> the validator's answer, after the provider's sign-in page.
+        // {templateId, accountId?, access? (Google Drive: "drive.file" or "drive")} -> the
+        // validator's answer, after the provider's sign-in page.
         signIn: function (ctx, p) { return signIn(ctx, p); },
         // {server} -> {loginUrl, pollEndpoint, pollToken, server}
         loginFlowStart: function (ctx, p) { return loginFlowStart(ctx, p); },
