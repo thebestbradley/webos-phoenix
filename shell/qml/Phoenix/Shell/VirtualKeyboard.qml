@@ -1064,6 +1064,50 @@ Item {
     // The keys alone (the original keyboard's height).
     readonly property real keysHeight: (_keymapHeight + _topPadding) * pixelScale
     readonly property alias keymap: kb._km
+    // ---- A screen reader's keys (GAPS V10) -------------------------------------------
+
+    // The name a screen reader says for a key: its character (which the
+    // reader speaks by name: "slash", "question mark"), else what it does.
+    function accessibleKeyName(key, label) {
+        switch (key) {
+        case KM.Key.Space: return qsTr("Space");
+        case KM.Key.Backspace: return qsTr("Delete");
+        case KM.Key.Return: return label && label !== "Enter" ? label : qsTr("Return");
+        case KM.Key.Shift: return qsTr("Shift");
+        case KM.Key.Alt: return _km.symbolMode === KM.SymbolMode.Lock ? qsTr("Letters") : qsTr("Numbers and symbols");
+        case KM.Key.Hide: return qsTr("Hide keyboard");
+        case KM.Key.Emoji: return qsTr("Emoji");
+        case KM.Key.ToggleLanguage: return label ? qsTr("Next keyboard, %1").arg(label) : qsTr("Next keyboard");
+        case KM.Key.MorePopup: return qsTr("More symbols");
+        case KM.Key.EmoticonOptions: return qsTr("Emoticons");
+        case KM.Key.Tab: return qsTr("Tab");
+        case KM.Key.Left: return qsTr("Left");
+        case KM.Key.Right: return qsTr("Right");
+        case KM.Key.Up: return qsTr("Up");
+        case KM.Key.Down: return qsTr("Down");
+        }
+        if (tablet && KM.isSizeKey(key))
+            return qsTr("Keyboard size %1").arg(_km.displayString(key, false));
+        if (KM.isUnicodeKey(key))
+            return label || String.fromCharCode(key);
+        return label || "";
+    }
+    // Activated by a screen reader: as a tap on it. A key with a popup
+    // (the emoticons, "...") opens it, where each cell is a button too.
+    function accessibleKeyPressed(key, col, row) {
+        if (!tablet && (key === KM.Key.EmoticonOptions || key === KM.Key.MorePopup)) {
+            _setExtendedKeys({ x: col, y: row }, false);
+            return;
+        }
+        _handleKey(key, null);
+    }
+    function accessibleExtendedPressed(index) {
+        var key = _extendedKeys ? _extendedKeys[index] : 0;
+        _clearExtendedKeys();
+        if (key)
+            _handleKey(key, null);
+    }
+
     // For tests: key rectangles in shell pixels, by label.
     function keyRect(label) {
         for (var i = 0; i < _keys.length; ++i) {
@@ -1412,6 +1456,7 @@ Item {
                     caps: (!tablet && plain === KM.Key.None) ? [] : _keyCap({ x: z.x, y: z.y, w: z.width, h: z.height }, x, y, key, 0),
                     ellipsis: _extendedKeys !== null && _km.extendedChars(x, y) !== null,
                     label: _km.displayString(key, true),
+                    key: key,
                     name: key === KM.Key.Space ? "Space" : KM.isFunctionKey(key) ? _km.displayString(key, true) : String.fromCharCode(key).toLowerCase()
                 });
             }
@@ -1704,8 +1749,9 @@ Item {
             _triggerRepaint();
             if (touch.visible && !touch.consumed) {
                 if (!_sameCoord(keyCoord, _repeatKey)) {
-                    if (!tablet && newTouch && newKey === KM.Key.EmoticonOptions) {
-                        // The emoticon key opens its popup at once (:650-656).
+                    if (!tablet && newTouch && (newKey === KM.Key.EmoticonOptions || newKey === KM.Key.MorePopup)) {
+                        // The emoticon key opens its popup at once (:650-656);
+                        // so does the "..." key (Phoenix: KeyboardKeymap.js PX.more).
                         if (!_setExtendedKeys(keyCoord, true))
                             _extendedKeys = null;
                         touch.consumed = true;
@@ -2483,6 +2529,21 @@ Item {
             delegate: Item {
                 id: keyItem
                 required property var modelData
+                required property int index
+                objectName: "keyboardKey" + index
+                // A key each to a screen reader (GAPS V10): a button with
+                // the key's name, which types it when activated; Shift a
+                // toggle, on while it is.
+                Accessible.role: keyItem.modelData.key === KM.Key.Shift ? Accessible.CheckBox : Accessible.Button
+                Accessible.name: kb.accessibleKeyName(keyItem.modelData.key, keyItem.modelData.label)
+                Accessible.description: keyItem.modelData.key === KM.Key.Shift && kb.keymap.isCapsLocked() ? qsTr("Caps lock")
+                                        : keyItem.modelData.ellipsis || kb.keymap.extendedChars(keyItem.modelData.col, keyItem.modelData.row) ? qsTr("Hold for more")
+                                        : ""
+                Accessible.checkable: keyItem.modelData.key === KM.Key.Shift
+                Accessible.checked: keyItem.modelData.key === KM.Key.Shift && kb.keymap.isCapActive()
+                Accessible.ignored: !kb.visible || kb.emojiOpen || kb.clipsOpen
+                Accessible.onPressAction: kb.accessibleKeyPressed(keyItem.modelData.key, keyItem.modelData.col, keyItem.modelData.row)
+                Accessible.onToggleAction: kb.accessibleKeyPressed(keyItem.modelData.key, keyItem.modelData.col, keyItem.modelData.row)
                 // Faded while the keyboard is a trackpad.
                 opacity: kb.trackpad ? 0.25 : 1
                 Behavior on opacity { NumberAnimation { duration: 150 } }
@@ -2675,6 +2736,9 @@ Item {
                     required property var modelData
                     required property int index
                     objectName: "extendedKey" + index
+                    Accessible.role: Accessible.Button
+                    Accessible.name: kb._extendedKeys ? kb.accessibleKeyName(kb._extendedKeys[index], cell.modelData.text) : cell.modelData.text
+                    Accessible.onPressAction: kb.accessibleExtendedPressed(index)
                     x: modelData.x
                     y: modelData.y
                     width: kb._popupKeyWidth

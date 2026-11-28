@@ -1795,9 +1795,20 @@ FocusScope {
     // Typing in card view starts it, and the first time in card view the
     // "Dismissing Cards" tutorial is up: the first space typed pressed its
     // OK instead ("how do" came out "howdo").
+    // Nor while a field has the keyboard (a text field of the shell's or a
+    // page's editable element, imeClient; on a device, where the shell
+    // does not hear of an app's field, while the platform's keyboard is
+    // up for one): what is typed is the field's,
+    // as the original's focused window kept every key (popup alerts never
+    // took the keyboard focus; SystemUiController::handleKeyEvent,
+    // SystemUiController.cpp:353-365, gave the keys it did not use to the
+    // active window). A popup alert up as an app's field was typed into
+    // took its first space as its button, and went.
+    readonly property bool _alertTakesKeys: notes.alertShown && !shell.locked && !justType.open && imeClient === null
+                                           && platformKeyboardHeight <= 0
     SystemKeys {
         id: alertKeys
-        enabled: notes.alertShown && !shell.locked && !justType.open
+        enabled: shell._alertTakesKeys
         keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
                Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
         onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
@@ -2549,7 +2560,17 @@ FocusScope {
     // The keyboard is on screen (it slides out with the negative space).
     property bool _imeOwnsSpace: false
     property string _keyboardShownUid: ""         // CardWindow::m_keyboardShownMessageSent
-    property var _webInput: null                  // {uid, state}: the page's focused field
+    // Each card's page's focused field, by window uid: {uid: state}. Per
+    // card, as each of the original's windows kept its own (the IME's
+    // client was the active window's field, IMEController::setClient on a
+    // focus change): a page whose field kept the focus while another card
+    // had the keyboard has it again when back in front, though it says
+    // nothing new (its field never lost the focus). With only the last
+    // page's kept, the Browser's address bar, back in front, had no
+    // keyboard, and a popup alert took its spaces.
+    property var _webInputs: ({})
+    readonly property var _webInput: _focusedWindowUid !== "" && _webInputs[_focusedWindowUid] !== undefined
+                                     ? { uid: _focusedWindowUid, state: _webInputs[_focusedWindowUid] } : null
     readonly property Item _focusItem: Window.activeFocusItem
     // The window that has the keyboard focus: Just Type's, else the
     // maximized card's, or its modal card's while one is up (CardWindow
@@ -2630,10 +2651,12 @@ FocusScope {
         // client), or the app showed or hid the keyboard itself
         // (PalmSystem.keyboardShow / keyboardHide in manual mode).
         function onInputFocusChanged(uid, focused, state) {
+            var inputs = Object.assign({}, shell._webInputs);
             if (focused)
-                shell._webInput = { uid: uid, state: state || {} };
-            else if (shell._webInput && shell._webInput.uid === uid)
-                shell._webInput = null;
+                inputs[uid] = state || {};
+            else
+                delete inputs[uid];
+            shell._webInputs = inputs;
             Qt.callLater(shell._updateImeClient);
         }
     }
@@ -2691,7 +2714,9 @@ FocusScope {
         } else {
             if (source && typeof source.removeInputFocus === "function")
                 source.removeInputFocus(c.uid);
-            _webInput = null;
+            var inputs = Object.assign({}, _webInputs);
+            delete inputs[c.uid];
+            _webInputs = inputs;
         }
         Qt.callLater(_updateImeClient);
     }

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The fields tst_keyboardweb.qml types into: a plain input (what a
+     Phoenix React app's TextField is), an Enyo 1.0 enyo.Input of the URL
+     type (the Browser's address bar, isis-browser AddressInput.js) and an
+     enyo.RichText (Memos, Just Type's search), with Enyo 1.0 from
+     third_party; and what every key event said. -->
+<html>
+<head>
+<meta charset="utf-8">
+<script src="../../third_party/enyo-1.0/framework/enyo.js" type="text/javascript"></script>
+</head>
+<body>
+<input id="plain" autocomplete="off" spellcheck="false">
+<div id="enyo"></div>
+<script>
+    window.keyLog = [];
+    ["keydown", "keypress"].forEach(function (t) {
+        document.addEventListener(t, function (e) { keyLog.push({ type: t, key: e.key, code: e.code, keyCode: e.keyCode, shift: e.shiftKey }); }, true);
+    });
+    window.fields = {};
+    function setUp() {
+        var box = new enyo.Control({ components: [
+            { kind: "Input", name: "url", inputType: "url", spellcheck: false, autocorrect: false, autoCapitalize: "lowercase" },
+            { kind: "RichText", name: "rich", richContent: false }
+        ] });
+        box.renderInto(document.getElementById("enyo"));
+        fields.plain = { node: function () { return document.getElementById("plain"); },
+                         clear: function () { this.node().value = ""; }, value: function () { return this.node().value; } };
+        fields.url = { node: function () { var n = box.$.url.hasNode(); return n.querySelector("input") || n; },
+                       clear: function () { box.$.url.setValue(""); }, value: function () { return box.$.url.getValue(); } };
+        fields.rich = { node: function () { return box.$.rich.$.input ? box.$.rich.$.input.hasNode() : box.$.rich.hasNode(); },
+                        clear: function () { box.$.rich.setValue(""); },
+                        value: function () { return (box.$.rich.getText ? box.$.rich.getText() : this.node().innerText).replace(/ /g, " "); } };
+        return true;
+    }
+    window.ready = false;
+    window.addEventListener("load", function () { ready = setUp(); });
+    function start(name) {
+        var f = fields[name];
+        f.clear();
+        f.node().focus();
+        keyLog = [];
+        return document.activeElement === f.node() || f.node().contains(document.activeElement);
+    }
+    function value(name) { return fields[name].value(); }
+</script>
+</body>
+</html>

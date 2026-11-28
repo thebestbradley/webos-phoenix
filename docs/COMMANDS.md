@@ -1537,6 +1537,12 @@ Terminal: the simulated shell, then /bin/sh:
 NODE_PATH="$(npm root -g)" node tools/test-terminal.cjs
 ```
 
+Every character typed in phoenix-sim: the virtual keyboard into web pages, a US, German and French hardware keyboard into Just Type, Enyo 1.0, the Browser, React and the lock screen (xvfb):
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-typing-sim.cjs
+```
+
 Settings > Updates against the update feed (PHP):
 
 ```sh

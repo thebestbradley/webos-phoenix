@@ -164,6 +164,43 @@ Item {
             verify(kb.visible);
         }
 
+        // A popup alert up while a field has the keyboard: what is typed is
+        // the field's, Space and Enter too, and the alert stays (its keys,
+        // alertKeys, are for when nothing is being typed into). The
+        // "Dismissing Cards" tutorial up as an app's field was typed into
+        // took its first space and went: "a b" came out "ab" (found in
+        // phoenix-sim with tools/test-typing-sim.cjs).
+        function test_typingWithAnAlertUp() {
+            sys.hardwareKeyboard = true;
+            field.forceActiveFocus();
+            tryVerify(function() { return shell.imeClient !== null; }, 1000);
+            windows.dismissedFirstCard = false;
+            windows.firstCardAlert();
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            keyClick(Qt.Key_A);
+            keyClick(Qt.Key_Space);
+            keyClick(Qt.Key_B);
+            keyClick(Qt.Key_Return);
+            compare(field.text, "a b");
+            compare(windows.alerts.count, 1, "the tutorial is not dismissed by typing");
+            verify(shell.notifications.alertShown);
+            // A web page's field the same (the card's editable element).
+            field.text = "";
+            field.focus = false;
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            windows.inputFocusChanged(uid, true, { type: 0 });
+            tryVerify(function() { return shell.imeClient !== null && shell.imeClient.kind === "web"; }, 1000);
+            verify(!shell._alertTakesKeys, "the alert leaves a page's field its keys");
+            windows.inputFocusChanged(uid, false, null);
+            tryVerify(function() { return shell.imeClient === null; }, 1000);
+            verify(shell._alertTakesKeys, "with no field, the alert's buttons take them");
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
+            sys.hardwareKeyboard = false;
+        }
+
         // A hardware keyboard attached (GAPS V8 (1)): a field taking the
         // focus leaves the keyboard down and shows the keyboard button;
         // the button brings it up, and a key typed on the hardware keyboard
@@ -890,6 +927,39 @@ Item {
             tryCompare(shell, "keyboardOpen", true, 2000);
             windows.inputFocusChanged(uid, false, null);
             tryCompare(shell, "keyboardOpen", false, 1000);
+        }
+
+        // Each card keeps its own field: a page whose field kept the focus
+        // while another card's took the keyboard has it again when it is
+        // in front again (its page says nothing new: the field never lost
+        // the focus). The shell kept only the last page's, and so the
+        // Browser's address bar, back in front, had no keyboard and a
+        // popup alert took its spaces (tools/test-typing-sim.cjs).
+        function test_eachCardKeepsItsField() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized && cv.currentUid === a; }, 3000);
+            windows.inputFocusChanged(a, true, { type: 7 });
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+            windows.inputFocusChanged(b, true, { type: 4 });
+            tryVerify(function() { return shell.imeClient !== null && shell.imeClient.uid === b; }, 1000);
+            compare(kb.editorState.type, 4);
+            // Back to the first: its page's field still has the focus.
+            shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized && cv.currentUid === a; }, 3000);
+            tryVerify(function() { return shell.imeClient !== null && shell.imeClient.uid === a; }, 1000, "the first card's field again");
+            compare(kb.editorState.type, 7);
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            windows.inputFocusChanged(a, false, null);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            // And the second's, which no card took.
+            shell.launch("org.webosphoenix.calendar");
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+            tryVerify(function() { return shell.imeClient !== null && shell.imeClient.uid === b; }, 1000, "the second card's field again");
+            windows.close(b);
+            tryVerify(function() { return shell.imeClient === null; }, 2000, "a closed card's field goes with it");
         }
 
         // The text around the cursor in a web page's field (GAPS V3): the
