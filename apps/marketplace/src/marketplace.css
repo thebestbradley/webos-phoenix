@@ -116,9 +116,11 @@
 .mk-privacy { background: #f2f7ee; border-color: #a8c49a; }
 .mk-privacy p { margin: 4px 0; }
 .mk-filter-title { margin: 4px 2px 8px; }
-/* Five tabs on a phone: each as wide as its label needs. */
+/* Five tabs on a phone: each as wide as its label needs, on one line. At
+   320 px the labels and 3 px sides came to 301 px of the bar's 298, and
+   the row broke "Web Apps" in two; with 2 px sides they take 291. */
 @media (max-width: 480px) {
-    .mk-tabs button { flex: 1 1 auto; padding: 7px 3px; font-size: 13px; }
+    .mk-tabs button { flex: 1 1 auto; padding: 7px 2px; font-size: 13px; white-space: nowrap; }
 }
 /* Installed Apps: an update and what it brings, between rules as the list's rows. */
 .mk-update { border-bottom: 1px solid silver; }

@@ -136,6 +136,16 @@ async function main() {
         check(drawn.src.startsWith(catalog.catalogUrl + "icons/copy/org.webosphoenix.pwa.tides-") && drawn.w > 0,
               `a curated web app's icon is the catalog's copy, and shows (${drawn.src}, ${drawn.w} px)`);
         await shot("3-featured");
+        // The five tabs each on one line, and inside their bar (a phone's
+        // 320 px wrapped "Web Apps" onto two).
+        const tabs = await page.$$eval("[role=tablist] [role=tab]", (bs) => bs.map((b) => {
+            const r = document.createRange();
+            r.selectNodeContents(b);
+            const lines = new Set([...r.getClientRects()].map((c) => Math.round(c.top))).size;
+            const bar = b.parentElement.getBoundingClientRect(), box = b.getBoundingClientRect();
+            return { label: b.textContent, lines, inside: box.right <= bar.right + 0.5 && b.scrollWidth <= b.clientWidth };
+        }));
+        check(tabs.length === 5 && tabs.every((t) => t.lines === 1 && t.inside), `the tabs are one line each (${JSON.stringify(tabs)})`);
 
         // ---- A web app ----------------------------------------------------------------------------------
         await page.click("[data-testid=tab-web]");
