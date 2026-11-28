@@ -1291,6 +1291,12 @@ Fediverse against a fake Mastodon (needs PHP):
 NODE_PATH="$(npm root -g)" node tools/test-fediverse.cjs
 ```
 
+The browser in phoenix-sim: a 404 page shown, no error over it:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-browser-sim.cjs
+```
+
 File pickers:
 
 ```sh

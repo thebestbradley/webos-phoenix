@@ -597,6 +597,18 @@ Item {
                     win._webViewEvent(viewId, "documentLoadFinished", []);
                     break;
                 case WebEngineView.LoadFailedStatus:
+                    // An error status with the server's own page (404 Not
+                    // Found, 500...) is a page shown, as WebKit under
+                    // BrowserAdapter loaded it (no mainDocumentLoadFailed):
+                    // the browser said "Unable to Load Page" over a page it
+                    // was showing. Qt WebEngine calls it a failure in the
+                    // domain of HTTP status codes (tools/test-browser-sim.cjs).
+                    if (info.errorDomain === WebEngineLoadingInfo.HttpStatusCodeDomain) {
+                        report();
+                        win._webViewEvent(viewId, "loadStopped", []);
+                        win._webViewEvent(viewId, "documentLoadFinished", []);
+                        break;
+                    }
                     win._webViewEvent(viewId, "mainDocumentLoadFailed", ["", info.errorCode, info.url.toString(), info.errorString]);
                     win._webViewEvent(viewId, "loadStopped", []);
                     break;
