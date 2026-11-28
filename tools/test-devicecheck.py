@@ -199,6 +199,18 @@ def main():
         for m in others:
             ok(not held(m), "Accounts may not call %s/%s (%s)" % (svc, m, ", ".join(held(m)) or "refused"))
 
+    # check-luna reads the catalog connectors' sysbus files too (apps/connectors:
+    # a device installs them with the package), so every sign-in group Accounts
+    # holds is one a provider defines, and their services are checked as callers.
+    from devicecheck import luna
+    services, _ = luna.load_phoenix(REPO)
+    defined = {g for e in services.values() for gs in e["methods"].values() for g in gs}
+    for g in sorted(x for x in accounts if x.startswith("phoenix.") and x.endswith(".signin")):
+        ok(g in defined, "check-luna knows the group %s Accounts holds" % g)
+    callers = {os.path.relpath(d, REPO) for d in luna.sysbus_files(REPO)}
+    for base in sorted(pages):
+        ok(os.path.dirname(base) in callers, "check-luna reads %s" % os.path.dirname(base))
+
     # This repository, with its allowlist, as CI runs it.
     for c in CHECKERS:
         status, out = run(c, REPO)

@@ -138,6 +138,34 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
+ "luna:missing-permission:org.webosphoenix.service.bluesky->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/bluesky): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.deltachat->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/deltachat): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.drives->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/drives): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.drives->com.palm.service.accounts/readCredentials": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/drives): its sysbus files come with its package, read by check-luna since 28 November 2026): as listAccounts",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.matrix->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/matrix): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.slack->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/slack): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.service.xmpp->com.palm.service.accounts/listAccounts": {
+  "owner": "the connector's owner (a catalog connector (apps/connectors/xmpp): its sysbus files come with its package, read by check-luna since 28 November 2026): its perm.json lacks the accounts service's group (phoenix.appservices.accounts, which the Fediverse's holds); not granted here, a privilege decision",
+  "row": "C4"
+ },
  "luna:missing-permission:org.webosphoenix.videos->com.webos.service.systemservice/setPreferences": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
@@ -278,10 +306,6 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
- "luna:unknown-group:org.webosphoenix.filemanager:drives.files": {
-  "owner": "the drives connector (apps/connectors/drives: installed from the catalog, its sysbus files come with it, not with the image)",
-  "row": "C6"
- },
  "luna:unknown-group:org.webosphoenix.flashlight:torch.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
@@ -302,8 +326,28 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.service.bluesky:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/bluesky): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.bluesky:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/bluesky): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.service.dav:accounts.operation": {
   "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.deltachat:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/deltachat): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.deltachat:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/deltachat): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.drives:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/drives): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.service.fediverse:accounts.operation": {
@@ -314,12 +358,56 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.service.google:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/google): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.linkedin:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/linkedin): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.matrix:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/matrix): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.matrix:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/matrix): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.microsoft:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/microsoft): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.slack:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/slack): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.slack:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/slack): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.service.telegram:accounts.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.service.telegram:messaging.operation": {
   "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.todoist:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/todoist): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.xmpp:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/xmpp): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.xmpp:messaging.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/xmpp): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.zoom:accounts.operation": {
+  "owner": "the app's or service's owner (a catalog connector (apps/connectors/zoom): its sysbus files come with its package, read by check-luna since 28 November 2026), as the Fediverse's",
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.voicememos:media.operation": {
@@ -384,6 +472,10 @@
  },
  "luna:unknown-method:org.webosphoenix.service.oauth/broker": {
   "owner": "the OAuth service's owner (services/oauth): the token relay's broker, PLATFORM.md 6.5.4, OPEN-QUESTIONS Q49; the connector kit's viaRelay probes it",
+  "row": "C5"
+ },
+ "luna:unknown-method:org.webosphoenix.service.oauth/sheet": {
+  "owner": "intended: Bluesky's oauthAvailable probes it and offers an app password when it is refused (apps/connectors/bluesky/service/connector.js: the sheet cannot be lent for the AT Protocol's sign-in yet)",
   "row": "C5"
  },
  "luna:unknown-method:org.webosphoenix.transcriber/listen": {

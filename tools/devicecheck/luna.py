@@ -146,7 +146,8 @@ def sysbus_files(root):
     Node service's (install-rootfs.py), the native services' (their CMake
     installs them), Open webOS's app services' (OSE's bus files for them in
     compat/app-services: install-rootfs.py APP_SERVICES_SYSBUS) and the
-    shell's."""
+    shell's; and Phoenix's own catalog connectors' (connector_dirs), whose
+    sysbus files a device installs with the package."""
     dirs = []
     app_services = os.path.join(root, "compat", "app-services")
     if os.path.isdir(app_services):
@@ -163,10 +164,28 @@ def sysbus_files(root):
                 d = os.path.join(b, name, sub)
                 if os.path.isdir(d):
                     dirs.append(d)
+    for c in connector_dirs(root):
+        d = os.path.join(c, "service", "sysbus")
+        if d not in dirs:
+            dirs.append(d)
     d = os.path.join(root, "shell", "sysbus")
     if os.path.isdir(d):
         dirs.append(d)
     return dirs
+
+
+def connector_dirs(root):
+    """Phoenix's own connector packages under apps/connectors (Bluesky, the
+    drives, Matrix and the rest), one folder deeper than applicationDirs.
+    The catalog's Connections install them, and the Marketplace installs a
+    package's service with its sysbus files (role, api, groups, perm), so
+    their groups are defined on a device that has them, as Accounts' sign-in
+    groups for their pages (phoenix.<name>.signin) expect."""
+    base = os.path.join(root, "apps", "connectors")
+    if not os.path.isdir(base):
+        return []
+    return [os.path.join(base, n) for n in sorted(os.listdir(base))
+            if os.path.isdir(os.path.join(base, n, "service", "sysbus"))]
 
 
 def load_phoenix(root):
