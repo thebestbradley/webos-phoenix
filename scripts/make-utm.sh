@@ -18,7 +18,8 @@
 #                    ipad     UTM on an iPad (TCG: there is no hypervisor
 #                             on iOS), with or without JIT: at most 4 CPUs
 #                             and 3072 MiB, a 384 MiB translation cache,
-#                             systemd's start timeouts at 10 minutes
+#                             systemd's start timeouts and SAM's app
+#                             transition timeout at 10 minutes
 #                    ipad-se  the same, for UTM SE (its interpreter is many
 #                             times slower than JIT): timeouts at 30 minutes
 #                    mac      UTM on an Apple silicon Mac (HVF): the
@@ -37,9 +38,12 @@
 #                    far slower)
 #   --audio hda|virtio|none  Intel HDA (default: what UTM itself gives an
 #                    ARM64 Linux), virtio-sound-pci, or none
-#   --disk qcow2|raw the root disk in the bundle: qcow2 (default when
-#                    qemu-img is there) holds only what the image uses,
-#                    which matters for copying it to an iPad
+#   --disk raw|qcow2 the root disk in the bundle. Default: raw, as a clone
+#                    of the image (APFS; a Btrfs or XFS reflink) when the
+#                    bundle goes on the image's volume and it can clone:
+#                    instant, and it takes no space. Else qcow2 when qemu-img
+#                    is there (it holds only what the image uses), else a
+#                    raw copy. qcow2 is the smaller one to copy to an iPad
 #   --ssh-port N     the port forwarded to the VM's ssh, on the host's
 #                    127.0.0.1 (default 2222)
 #   --gps PORT|off   the VM's GPS: a virtio serial port (org.webosphoenix.gps.0)
@@ -50,6 +54,8 @@
 #                    manual position instead)
 #   --force          replace a bundle that is already there
 #   --dry-run        print the plan and config.plist; copy nothing
+#
+# PHOENIX_UTM_QEMU_IMG names qemu-img; PHOENIX_UTM_CLONE=no never clones.
 #
 # UTM reads config.plist (ConfigurationVersion 4: UTM 4.0 or later) and
 # Data/, which holds the kernel and the root disk; it deletes any other file
@@ -63,7 +69,7 @@ PROFILES="$REPO_DIR/meta-phoenix/recipes-phoenix/phoenix-device-config/files/dev
 QEMU_IMG=${PHOENIX_UTM_QEMU_IMG:-qemu-img}
 
 die() { echo "make-utm.sh: $*" >&2; exit 2; }
-usage() { sed -n '11,53p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '11,58p' "$0" | sed 's/^# \{0,1\}//'; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is needed (to read the device profiles and write config.plist)"
 
@@ -118,7 +124,11 @@ APPEND="root=/dev/vda rw rootwait console=ttyAMA0 phoenix.device=$DEVICE"
 # Platform/Shared/VMConfigSystemView.swift validateMemorySize). 3072 MiB
 # and 384 MiB come to about 4 GB, inside what an 8 GB iPad gives one app.
 # Booting is minutes, not seconds: systemd's 90-second limits would stop
-# units that are only slow.
+# units that are only slow, and SAM's 10-second limit on an app's
+# transition killed the shell's status bar and Just Type while WAM was
+# still loading them (40 s under TCG on a Mac; 25 November 2026). SAM
+# reads SAM_TRANSITION_TIMEOUT_MS (meta-phoenix's sam.bbappend), which
+# systemd.setenv= gives every service.
 case $FOR in
     mac)
         SUFFIX=-mac LABEL=" (Mac)"
@@ -132,7 +142,7 @@ case $FOR in
         [ -n "$MEMORY" ] || { MEMORY=$DEV_MEMORY; [ "$MEMORY" -le 3072 ] || MEMORY=3072; }
         JIT_CACHE=384 ;;
 esac
-[ -z "$TIMEOUT" ] || APPEND="$APPEND systemd.default_timeout_start_sec=$TIMEOUT systemd.default_device_timeout_sec=$TIMEOUT"
+[ -z "$TIMEOUT" ] || APPEND="$APPEND systemd.default_timeout_start_sec=$TIMEOUT systemd.default_device_timeout_sec=$TIMEOUT systemd.setenv=SAM_TRANSITION_TIMEOUT_MS=${TIMEOUT}000"
 [ -n "$GPS" ] || { if [ "$FOR" = mac ]; then GPS=45570; else GPS=off; fi; }
 if [ "$GL" = on ]; then GPU=virtio-gpu-gl-pci; else GPU=virtio-gpu-pci; fi
 case $AUDIO in hda) SOUND=intel-hda ;; virtio) SOUND=virtio-sound-pci ;; none) SOUND='' ;; esac
@@ -149,17 +159,65 @@ else
     ROOTFS=$IMAGE
     KERNEL=${KERNEL:-$(dirname "$IMAGE")/Image}
 fi
-if [ -z "$DISK" ]; then
-    if command -v "$QEMU_IMG" >/dev/null 2>&1; then DISK=qcow2; else DISK=raw; fi
-fi
-ROOT_NAME=$(basename "$ROOTFS" .ext4)
-case $DISK in qcow2) ROOT_NAME=$ROOT_NAME.qcow2 ;; raw) ROOT_NAME=$ROOT_NAME.ext4 ;; esac
 KERNEL_NAME=$(basename "$KERNEL")
 INITRD_NAME=''
 [ -z "$INITRD" ] || INITRD_NAME=$(basename "$INITRD")
-[ "$KERNEL_NAME" != "$ROOT_NAME" ] && [ "$INITRD_NAME" != "$KERNEL_NAME" ] && [ "$INITRD_NAME" != "$ROOT_NAME" ] \
-    || die "the kernel, the initrd and the root disk need different file names in the bundle"
 BUNDLE=$OUT/Phoenix-$DEVICE$SUFFIX.utm
+
+# The root disk. A clone of the image (an APFS clone, a Btrfs/XFS reflink)
+# shares its blocks: instant, no space taken, and the VM's writes go to the
+# bundle's copy only. It needs the bundle on the image's own volume and a
+# file system that clones. Else qcow2 (qemu-img convert), which holds only
+# the image's used blocks; else a raw copy. --disk raw still clones when it
+# can; --disk qcow2 always converts.
+has_qemu_img() { command -v "$QEMU_IMG" >/dev/null 2>&1; }
+# A folder that is there: $1, or the nearest one above it.
+existing() { d=$1; while [ ! -e "$d" ]; do d=$(dirname "$d"); done; printf '%s\n' "$d"; }
+# The file system $1 is on: its volume and its type (apfs, btrfs, ...).
+# On macOS by df's device: the system and data volumes share one st_dev.
+fs_of() {
+    case $(uname -s) in
+        Darwin) dev=$(df -P "$1" | awk 'NR == 2 { print $1 }')
+                printf '%s %s\n' "$dev" \
+                    "$(mount | awk -v d="$dev" '$1 == d { t = $0; sub(/^[^(]*\(/, "", t); sub(/[,)].*$/, "", t); print t; exit }')" ;;
+        *) printf '%s %s\n' "$(stat -c %d "$1")" "$(stat -f -c %T "$1")" ;;
+    esac
+}
+# Whether the root disk can be a clone: the plan's guess (making it tries).
+clone_expected() {
+    [ "${PHOENIX_UTM_CLONE:-}" != no ] && [ -f "$ROOTFS" ] || return 1
+    src=$(fs_of "$(dirname "$ROOTFS")") dst=$(fs_of "$(existing "$OUT")")
+    [ "$src" = "$dst" ] || return 1
+    case ${src#* } in apfs|btrfs|xfs) return 0 ;; esac
+    return 1
+}
+# A clone of $1 at $2, or nothing: never a copy (macOS's cp -c copies when
+# it cannot clone, clonefile(2) does not).
+clone() {
+    [ "${PHOENIX_UTM_CLONE:-}" != no ] || return 1
+    case $(uname -s) in
+        Darwin) python3 -c 'import ctypes, os, sys
+libc = ctypes.CDLL(None, use_errno=True)
+sys.exit(libc.clonefile(os.fsencode(sys.argv[1]), os.fsencode(sys.argv[2]), 0) != 0)' "$1" "$2" 2>/dev/null ;;
+        *) cp --reflink=always "$1" "$2" 2>/dev/null || { rm -f "$2"; return 1; } ;;
+    esac
+}
+# The root disk's name in the bundle, for $DISK.
+root_name() {
+    ROOT_NAME=$(basename "$ROOTFS" .ext4)
+    case $DISK in qcow2) ROOT_NAME=$ROOT_NAME.qcow2 ;; raw) ROOT_NAME=$ROOT_NAME.ext4 ;; esac
+    [ "$KERNEL_NAME" != "$ROOT_NAME" ] && [ "$INITRD_NAME" != "$KERNEL_NAME" ] && [ "$INITRD_NAME" != "$ROOT_NAME" ] \
+        || die "the kernel, the initrd and the root disk need different file names in the bundle"
+}
+DISK_AUTO='' HOW=''
+if [ -z "$DISK" ]; then
+    DISK_AUTO=1
+    if clone_expected; then DISK=raw
+    elif has_qemu_img; then DISK=qcow2
+    else DISK=raw; fi
+fi
+[ "$DISK" != raw ] || ! clone_expected || HOW=' (a clone of the image)'
+root_name
 
 # config.plist: UTM's QEMU configuration (Configuration/UTMQemuConfiguration*.swift).
 write_config() {
@@ -279,14 +337,14 @@ EOF
 }
 
 plan() {
-    echo "make-utm.sh: $BUNDLE: the $NAME for UTM ($FOR): ${WIDTH}x$HEIGHT, $CPUS CPUs, $MEMORY MiB, $GPU, sound ${SOUND:-none}, a $DISK root disk; ssh on 127.0.0.1:$SSH_PORT; GPS $([ "$GPS" = off ] && echo off || echo "from 127.0.0.1:$GPS")"
+    echo "make-utm.sh: $BUNDLE: the $NAME for UTM ($FOR): ${WIDTH}x$HEIGHT, $CPUS CPUs, $MEMORY MiB, $GPU, sound ${SOUND:-none}, a $DISK root disk$HOW; ssh on 127.0.0.1:$SSH_PORT; GPS $([ "$GPS" = off ] && echo off || echo "from 127.0.0.1:$GPS")"
 }
 
 if [ -n "$DRY" ]; then
     plan
     echo "make-utm.sh: Data/$KERNEL_NAME from $KERNEL"
     [ -z "$INITRD" ] || echo "make-utm.sh: Data/$INITRD_NAME from $INITRD"
-    echo "make-utm.sh: Data/$ROOT_NAME from $ROOTFS"
+    echo "make-utm.sh: Data/$ROOT_NAME from $ROOTFS$HOW"
     write_config -
     exit 0
 fi
@@ -295,22 +353,46 @@ fi
 [ -f "$ROOTFS" ] || die "no image at $ROOTFS (build it: scripts/mac-build.sh phoenix-vm-arm64; or --image)"
 [ -z "$INITRD" ] || [ -f "$INITRD" ] || die "no initrd at $INITRD"
 if [ "$DISK" = qcow2 ]; then
-    command -v "$QEMU_IMG" >/dev/null 2>&1 || die "--disk qcow2 needs $QEMU_IMG (macOS: brew install qemu); or --disk raw"
+    has_qemu_img || die "--disk qcow2 needs $QEMU_IMG (macOS: brew install qemu); or --disk raw"
 fi
 if [ -e "$BUNDLE" ] && [ -z "$FORCE" ]; then
     die "$BUNDLE is there already (--force replaces it; UTM keeps its own copy once imported)"
 fi
 
-# Room for it: the root disk's used blocks (its holes are not copied), the kernel.
 mkdir -p "$OUT"
-need_kb=$(du -k "$ROOTFS" "$KERNEL" ${INITRD:+"$INITRD"} | awk '{ s += $1 } END { print s + 1024 }')
-free_kb=$(df -Pk "$OUT" | awk 'NR == 2 { print $4 }')
-[ "$free_kb" -ge "$need_kb" ] || die "$OUT has $((free_kb / 1024)) MiB free; the bundle needs about $((need_kb / 1024)) MiB"
-
 TMP=$OUT/.Phoenix-$DEVICE$SUFFIX.utm.$$
 trap 'rm -rf "$TMP"' EXIT INT TERM
 rm -rf "$TMP"
 mkdir -p "$TMP/Data"
+
+# The root disk first: a clone takes no room. By default, and with --disk
+# raw, it tries one; by default, without one, it is qcow2 when there is a
+# qemu-img, as the plan's guess was.
+CLONED='' HOW=''
+if [ "$DISK" = raw ] || [ -n "$DISK_AUTO" ]; then
+    want=$DISK DISK=raw
+    root_name
+    if clone "$ROOTFS" "$TMP/Data/$ROOT_NAME"; then
+        CLONED=1 HOW=' (a clone of the image: it takes no space)'
+    elif [ -n "$DISK_AUTO" ] && has_qemu_img; then
+        DISK=qcow2
+        root_name
+    else
+        DISK=$want
+        root_name
+    fi
+fi
+
+# Room for the rest: the kernel and, unless it is a clone, the root disk's
+# used blocks (a copy keeps its holes; qcow2 holds no more than them).
+if [ -n "$CLONED" ]; then
+    need_kb=$(du -k "$KERNEL" ${INITRD:+"$INITRD"} | awk '{ s += $1 } END { print s + 1024 }')
+else
+    need_kb=$(du -k "$ROOTFS" "$KERNEL" ${INITRD:+"$INITRD"} | awk '{ s += $1 } END { print s + 1024 }')
+fi
+free_kb=$(df -Pk "$OUT" | awk 'NR == 2 { print $4 }')
+[ "$free_kb" -ge "$need_kb" ] || die "$OUT has $((free_kb / 1024)) MiB free; the bundle needs about $((need_kb / 1024)) MiB"
+
 # A copy that shares the blocks where the file system can (APFS clones,
 # Btrfs/XFS reflinks), else a plain copy that keeps the holes.
 copy() {
@@ -321,10 +403,12 @@ copy() {
 }
 copy "$KERNEL" "$TMP/Data/$KERNEL_NAME"
 [ -z "$INITRD" ] || copy "$INITRD" "$TMP/Data/$INITRD_NAME"
-case $DISK in
-    qcow2) "$QEMU_IMG" convert -q -f raw -O qcow2 "$ROOTFS" "$TMP/Data/$ROOT_NAME" ;;
-    raw) copy "$ROOTFS" "$TMP/Data/$ROOT_NAME" ;;
-esac
+if [ -z "$CLONED" ]; then
+    case $DISK in
+        qcow2) "$QEMU_IMG" convert -q -f raw -O qcow2 "$ROOTFS" "$TMP/Data/$ROOT_NAME" ;;
+        raw) copy "$ROOTFS" "$TMP/Data/$ROOT_NAME" ;;
+    esac
+fi
 write_config "$TMP/config.plist"
 rm -rf "$BUNDLE"
 mv "$TMP" "$BUNDLE"
@@ -332,6 +416,7 @@ trap - EXIT INT TERM
 plan
 case $FOR in
     mac) next="open it in UTM (double-click it)" ;;
-    *) next="copy it to the iPad: AirDrop, or Finder's Files tab for UTM (docs/BUILDING-MAC.md, \"Run it on an iPad with UTM\")" ;;
+    *) next="copy it to the iPad: AirDrop, or Finder's Files tab for UTM (docs/BUILDING-MAC.md, \"Run it on an iPad with UTM\")"
+       [ "$DISK" != raw ] || ! has_qemu_img || next="$next; --disk qcow2 makes a smaller one to copy" ;;
 esac
 echo "make-utm.sh: $(du -sk "$BUNDLE" | awk '{ printf "%d MiB", $1 / 1024 }'); $next"
