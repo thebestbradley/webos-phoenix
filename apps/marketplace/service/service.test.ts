@@ -30,7 +30,7 @@ import { pack } from "../../shared/connector-kit/src/tools/package";
 const gzip = { gzip: async (b: Uint8Array) => new Uint8Array(zlib.gzipSync(b)), gunzip: async (b: Uint8Array) => new Uint8Array(zlib.gunzipSync(b)) };
 const ipk = ipkLib.createIpk({ gzip });
 
-function makeService(sources: Any[], preinstalled?: Any[]) {
+function makeService(sources: Any[], preinstalled?: Any[], extra?: Any) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
                     devMode: false, noIcons: false, pending: [] as Any[],
@@ -93,7 +93,8 @@ function makeService(sources: Any[], preinstalled?: Any[]) {
         defaultSources: () => sources,
         preinstalled: preinstalled ? () => preinstalled : undefined,
         // The launcher's pending icons, as the runtime passes them on.
-        pending: (st: Any) => world.pending.push(st)
+        pending: (st: Any) => world.pending.push(st),
+        ...(extra || {})
     });
     return { service, world };
 }
@@ -429,7 +430,7 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         await service.setSource({ id: "precentral", enabled: true });
         const all = (await service.browse({ section: "classics" })).apps.filter((a: Any) => a.kind === "preware");
         expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"],
-                                                                ["org.example.feeds", "0.1.0"]]);
+                                                                ["org.example.feeds", "0.1.0"], ["org.example.signin", "1.0.0"], ["org.example.borrowed", "1.0.0"]]);
         expect(all[0]).toMatchObject({ description: "Line one\nLine two", license: "GPL-2.0", developer: { name: "Homebrewer" } });
         expect(all[1].verdict).toMatchObject({ ok: false });
         const native = await service.install({ sourceId: "precentral", id: "org.example.nativelib" });
@@ -465,6 +466,51 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         world.devMode = true;
         expect(await service.install({ sourceId: "precentral", id: "org.example.feeds" })).toMatchObject({ returnValue: true, appId: "org.example.feeds" });
         expect(world.installs.at(-1)).toMatchObject({ id: "org.example.feeds", developerMode: true });
+    });
+
+    // Rule C17 on the device (packagesservice.js "Sign-in pages"): a sign-in
+    // page of its own runs in Accounts' frame with Accounts' groups, so only
+    // Phoenix's own packages, from a Phoenix catalog the device ships with,
+    // may have one; and the page must be the package's own app (C7).
+    it("refuses a third party's package with a sign-in page of its own, in Developer Mode too, before the installer sees it", async () => {
+        const { service, world } = makeService(defaults());
+        await service.setSource({ id: "precentral", enabled: true });
+        await service.refresh({ id: "precentral" });
+        const refused = await service.install({ sourceId: "precentral", id: "org.example.signin" });
+        expect(refused).toMatchObject({ returnValue: false, errorCode: "THIRD_PARTY_SIGNIN",
+            errorText: "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in" });
+        world.devMode = true;
+        expect(await service.install({ sourceId: "precentral", id: "org.example.signin" })).toMatchObject({ errorCode: "THIRD_PARTY_SIGNIN" });
+        const borrowed = await service.install({ sourceId: "precentral", id: "org.example.borrowed" });
+        expect(borrowed).toMatchObject({ errorCode: "BAD_PACKAGE" });
+        expect(borrowed.errorText).toMatch(/must be the package's own app, org\.example\.borrowed/);
+        expect(world.installs).toHaveLength(0);
+        expect((await service.listInstalled()).apps).toEqual([]);
+    });
+
+    it("installs Phoenix's own connector with its sign-in page from the Phoenix catalog, and Accounts may frame it", async () => {
+        // Jabber (apps/connectors/xmpp): Phoenix's, its own sign-in page, uploaded by an admin (Phoenix's namespaces).
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-xmpp-"));
+        const packed = pack(path.resolve(__dirname, "../../connectors/xmpp"), out, { vendor: false, writeAppinfo: false,
+                                                                                     namespaces: ["org.webosphoenix", "com.webosphoenix"] });
+        const up = await catalog.api("POST", "/api/apps/packages", new Uint8Array(fs.readFileSync(packed.file)), catalog.admin);
+        expect(up).toMatchObject({ status: 200, app: { kind: "connector" } });
+        if (up.release.state !== "published") await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        const firstParty = [{ id: "org.webosphoenix.xmpp", sourceId: "phoenix", templates: ["com.webosphoenix.xmpp"] }];
+        const { service, world } = makeService([{ ...defaults()[0], key: catalog.key, builtin: true }], undefined, { firstParty: () => firstParty });
+        await service.refresh({});
+        expect(await service.install({ sourceId: "phoenix", id: "org.webosphoenix.xmpp" })).toMatchObject({ returnValue: true, appId: "org.webosphoenix.xmpp" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "org.webosphoenix.xmpp", developerMode: false, firstParty: true });
+        expect(world.state.installed["org.webosphoenix.xmpp"].signIn).toEqual(["com.webosphoenix.xmpp"]);
+        expect(await service.checkSignInPage({ appId: "org.webosphoenix.xmpp", templateId: "com.webosphoenix.xmpp" })).toMatchObject({ allowed: true });
+        // The same package from a catalog the user added: not Phoenix's own there.
+        const other = makeService([{ ...defaults()[0], key: catalog.key }], undefined, { firstParty: () => firstParty });
+        await other.service.removeSource({ id: "phoenix" });
+        await other.service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        other.world.devMode = true;
+        const added = (await other.service.getSources()).sources.find((x: Any) => x.url === catalog.catalogUrl);
+        expect(await other.service.install({ sourceId: added.id, id: "org.webosphoenix.xmpp" })).toMatchObject({ errorCode: "THIRD_PARTY_SIGNIN" });
+        fs.rmSync(out, { recursive: true, force: true });
     });
 
     // ---- Connector packages in the catalog (docs/SYNERGY-CONNECTORS.md C4) ----
@@ -621,5 +667,109 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         world.formFactor = "";
         expect(await ids("apps")).toContain("com.example.sketchpad");
         await catalog.api("POST", "/api/admin/availability", { off: {} }, catalog.admin);
+    });
+});
+
+// ---- Sign-in pages: rule C17 on the device (packagesservice.js "Sign-in pages") ----
+//
+// The accounts library asks checkSignInPage before it frames a template's own
+// sign-in page (compat lib/accounts/source/cross-app.js), so a package that
+// never went through a catalog (a Developer Mode sideload, nova install) is
+// refused too.
+describe("a template's own sign-in page (checkSignInPage)", () => {
+    const C17 = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
+    const phoenix = { id: "phoenix", name: "Phoenix Marketplace", kind: "phoenix", url: "https://catalog.example/v1/", key: "KEY", enabled: true };
+    const system = [{ templateId: "com.webosphoenix.dav", appId: "org.webosphoenix.dav" },
+                    { templateId: "com.webosphoenix.webcal", appId: "org.webosphoenix.dav" },
+                    { templateId: "com.palm.imap", appId: null }];
+    const pre = [{ id: "org.webosphoenix.fediverse", sourceId: "phoenix", version: "1.0.0", templates: ["com.webosphoenix.fediverse"] }];
+    const firstParty = [{ id: "org.webosphoenix.matrix", sourceId: "phoenix", templates: ["com.webosphoenix.matrix"] }];
+    function device(sources: Any[] = [phoenix]) {
+        const made = makeService(sources, pre, { systemTemplates: () => system, firstParty: () => firstParty });
+        // The image's apps (not removable) and the connector it came with.
+        made.world.builtins = { "org.webosphoenix.dav": "1.0.0", "com.palm.app.email": "4.0.0" };
+        made.world.installed["org.webosphoenix.fediverse"] = {};
+        return made;
+    }
+    const ask = (service: Any, appId: string, templateId: string) => service.checkSignInPage({ appId, templateId });
+
+    it("frames the image's own pages: a built-in app with its template in the image", async () => {
+        const { service } = device();
+        expect(await ask(service, "org.webosphoenix.dav", "com.webosphoenix.dav")).toEqual(
+            { returnValue: true, appId: "org.webosphoenix.dav", templateId: "com.webosphoenix.dav", allowed: true });
+        expect(await ask(service, "org.webosphoenix.dav", "com.webosphoenix.webcal")).toMatchObject({ allowed: true });
+    });
+
+    it("frames a connector the image came with (preinstalled.json), for the templates it lists", async () => {
+        const { service } = device();
+        expect(await ask(service, "org.webosphoenix.fediverse", "com.webosphoenix.fediverse")).toMatchObject({ allowed: true });
+        // Not one of its templates (another package's, naming its page): refused.
+        expect(await ask(service, "org.webosphoenix.fediverse", "org.example.lure")).toMatchObject({ allowed: false, reason: "template", errorText: C17 });
+    });
+
+    it("refuses a sideloaded third party's page (installed outside the Marketplace), with C17's words", async () => {
+        const { service, world } = device();
+        world.installed["org.example.chat"] = {};
+        expect(await ask(service, "org.example.chat", "org.example.chat")).toEqual(
+            { returnValue: true, appId: "org.example.chat", templateId: "org.example.chat", allowed: false, reason: "app", errorText: C17 });
+    });
+
+    it("refuses a third party's template that names a built-in app's page (C7), and a template the image has not", async () => {
+        const { service } = device();
+        expect(await ask(service, "org.webosphoenix.dav", "org.example.lure")).toMatchObject({ allowed: false, reason: "template" });
+        // The image's template with another app's page in it: not the image's pair.
+        expect(await ask(service, "com.palm.app.email", "com.webosphoenix.dav")).toMatchObject({ allowed: false, reason: "template" });
+    });
+
+    it("refuses a sideloaded app with Phoenix's id that the Marketplace did not install (preinstalled.json firstParty is not enough)", async () => {
+        const { service, world } = device();
+        world.installed["org.webosphoenix.matrix"] = {};
+        expect(await ask(service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: false, reason: "app" });
+    });
+
+    it("frames Phoenix's own package installed from a Phoenix catalog the device ships with, for its templates", async () => {
+        const { service, world } = device();
+        world.installed["org.webosphoenix.matrix"] = {};
+        world.installed["org.webosphoenix.drives"] = {};
+        world.state = { installed: {
+            "org.webosphoenix.matrix": { sourceId: "phoenix", catalogId: "org.webosphoenix.matrix", kind: "connector", version: "1.0.0" },
+            "org.webosphoenix.drives": { sourceId: "phoenix", catalogId: "org.webosphoenix.drives", kind: "connector", version: "1.0.0",
+                                         signIn: ["com.webosphoenix.drive.webdav"] } } };
+        // preinstalled.json's list (a record from before templates were recorded) or the templates recorded at install.
+        expect(await ask(service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: true });
+        expect(await ask(service, "org.webosphoenix.drives", "com.webosphoenix.drive.webdav")).toMatchObject({ allowed: true });
+        expect(await ask(service, "org.webosphoenix.drives", "com.webosphoenix.drive.mega")).toMatchObject({ allowed: false, reason: "template" });
+    });
+
+    it("refuses an install from a catalog the user added, and from a Phoenix catalog whose key nobody checked", async () => {
+        const added = device([phoenix, { id: "mine", name: "Mine", kind: "phoenix", url: "https://mine.example/", key: "MINE", enabled: true }]);
+        added.world.installed["org.webosphoenix.matrix"] = {};
+        added.world.state = { sources: [{ id: "mine", name: "Mine", kind: "phoenix", url: "https://mine.example/", key: "MINE", enabled: true, builtin: false }],
+                              installed: { "org.webosphoenix.matrix": { sourceId: "mine", kind: "connector", signIn: ["com.webosphoenix.matrix"] } } };
+        expect(await ask(added.service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: false, reason: "app" });
+        const unkeyed = device([{ ...phoenix, key: null }]);
+        unkeyed.world.installed["org.webosphoenix.matrix"] = {};
+        unkeyed.world.state = { installed: { "org.webosphoenix.matrix": { sourceId: "phoenix", kind: "connector", signIn: ["com.webosphoenix.matrix"] } } };
+        expect(await ask(unkeyed.service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: false, reason: "app" });
+        // A third party's id from Phoenix's own catalog: not Phoenix's namespace.
+        const theirs = device();
+        theirs.world.installed["org.example.feeds"] = {};
+        theirs.world.state = { installed: { "org.example.feeds": { sourceId: "phoenix", kind: "connector", signIn: ["org.example.feeds"] } } };
+        expect(await ask(theirs.service, "org.example.feeds", "org.example.feeds")).toMatchObject({ allowed: false, reason: "app" });
+    });
+
+    it("forgets a record once its app is gone, so a later sideload of that id is refused", async () => {
+        const { service, world } = device();
+        world.state = { installed: { "org.webosphoenix.matrix": { sourceId: "phoenix", kind: "connector", signIn: ["com.webosphoenix.matrix"] } } };
+        // Removed from the launcher (not the Marketplace): the next check forgets it.
+        expect(await ask(service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: false, reason: "app" });
+        world.installed["org.webosphoenix.matrix"] = {};
+        expect(await ask(service, "org.webosphoenix.matrix", "com.webosphoenix.matrix")).toMatchObject({ allowed: false, reason: "app" });
+    });
+
+    it("needs an app and a template", async () => {
+        const { service } = device();
+        expect(await service.checkSignInPage({ appId: "org.webosphoenix.dav" })).toMatchObject({ returnValue: false, errorCode: "BAD_PARAMS" });
+        expect(await service.checkSignInPage({})).toMatchObject({ returnValue: false, errorCode: "BAD_PARAMS" });
     });
 });

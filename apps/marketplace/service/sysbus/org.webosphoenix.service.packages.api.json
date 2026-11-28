@@ -17,5 +17,8 @@
         "org.webosphoenix.service.packages/listAccountTypes",
         "org.webosphoenix.service.packages/getAvailability",
         "org.webosphoenix.service.packages/setKind"
+    ],
+    "phoenix.packages.signin": [
+        "org.webosphoenix.service.packages/checkSignInPage"
     ]
 }
