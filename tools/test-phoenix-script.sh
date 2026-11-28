@@ -156,6 +156,25 @@ check "Linux, everything there: nothing to install" \
     'lacks "  install  "' 'has "would run: cmake -S .*-DCMAKE_PREFIX_PATH=$QT"' \
     'has "would run: cmake --build $BUILD --parallel"'
 
+# The disk: a first build adds about 3.5 GB to the checkout (apps/' packages
+# and builds, build/ and the assistant's models). Short of it, the script
+# says so before it starts, not with ENOSPC deep in the apps' build.
+# df -Pk: the checkout's file system, 1 GB free (in 1024-byte blocks).
+computer Linux
+QT_ASK=$QT
+mock df 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/x 100000000 99000000 1048576 99%% /\n"'
+phoenix build
+check "Linux, 1 GB free, no build yet: stops before installing, with what it needs" \
+    '[ $status = 1 ]' 'has "1024 MB free"' 'has "a first build needs about 3500 MB"' 'lacks "would run:"' \
+    'lacks "==> Building"'
+phoenix check
+check "Linux, 1 GB free: the dry run says so and goes on" \
+    '[ $status = 0 ]' 'has "note     1024 MB free"' 'has "a first build needs about 3500 MB"' 'has "Nothing to install"'
+mkdir -p "$BUILD" && echo "CMAKE_PREFIX_PATH:PATH=$QT" > "$BUILD/CMakeCache.txt"
+phoenix build --dry-run
+check "Linux, 1 GB free, built before: enough for a rebuild" \
+    '[ $status = 0 ]' 'lacks "MB free"'
+
 computer Linux
 QT_ASK=$QT
 phoenix build --dry-run

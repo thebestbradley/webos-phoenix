@@ -739,6 +739,23 @@ build() {
     run cmake --build "$BUILD_DIR" --parallel "$JOBS"
 }
 
+# The checkout's disk, before anything is installed: a first build adds
+# about 3.5 GB to it (a fresh clone, 28 November 2026: 1.2 GB, then 4.2 GB
+# built: apps/ with its npm packages and builds 2.6 GB, build/ with the
+# assistant's models 1.2 GB; and whisper.cpp's and llama.cpp's sources
+# while they build). Short of it, say so now rather than fail with ENOSPC
+# deep in the apps' build. Qt (2.3 GB) goes to its own folder, said with it.
+disk_space() {
+    have df || return 0
+    if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then need=1024 what="a rebuild needs about"
+    else need=3500 what="a first build needs about"; fi
+    free=$(df -Pk "$REPO_DIR" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
+    case $free in ''|*[!0-9]*) return 0 ;; esac
+    [ "$free" -lt "$need" ] || return 0
+    msg="$free MB free on the disk of $REPO_DIR; $what $need MB (apps/' packages and builds, build/, the assistant's models; --no-assistant needs about 1 GB less)"
+    if [ $DRY = 1 ]; then echo "  note     $msg"; else die "$msg. Free some space and run it again."; fi
+}
+
 summary() {
     elapsed=$(( $(date +%s) - START ))
     if [ -n "$INSTALLED" ]; then
@@ -752,6 +769,7 @@ summary() {
 
 # ---- The command --------------------------------------------------------------------
 [ $DRY = 1 ] && echo "(dry run: nothing is installed or built)"
+disk_space
 case "$OS" in
     Darwin) mac_prerequisites ;;
     Linux) linux_prerequisites ;;

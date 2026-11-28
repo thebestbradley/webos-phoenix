@@ -324,6 +324,12 @@ macOS asks for microphone access the first time. Without a microphone,
 
 ## On Ubuntu 24.04 (desktop, VM or a cloud container)
 
+Disk: about 6 GB free. A fresh clone is 1.2 GB and 4.2 GB once built
+(apps/ with its npm packages and builds 2.6 GB, build/ with the
+assistant's models 1.2 GB), and Qt 6.11.3 takes 2.3 GB in `/opt/Qt`.
+`./phoenix` stops before it installs anything when the checkout's disk has
+less than a first build needs, and `./phoenix check` says so.
+
 | Command | What it does |
 | --- | --- |
 | `./phoenix` | Qt 6.11.3 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build; the assistant's parts |
