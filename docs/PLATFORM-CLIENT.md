@@ -141,8 +141,9 @@ servers.json's `feeds` (F) or `api` (A).
   its pinned key and hand-over, [DRIVERS.md](DRIVERS.md)).
 - **What is pinned where.** servers.json: `catalog.root` (or `.key`),
   `updates.root` (or `.key`), `drivers.key`, `account.key` (entitlements).
-  The RAUC keyring is the image's (`/etc/rauc/`, not yet in meta-phoenix:
-  [Still to do](#still-to-do)).
+  The RAUC keyring is the image's (`/etc/rauc/keyring.pem`, meta-phoenix
+  `rauc-conf`'s `PHOENIX_RAUC_KEYRING`): the public test CA in test images,
+  the owner's release CA in release images (PLATFORM.md 7.2).
 - **Revoked keys.** The signed revocation list's `keys` are never trusted
   again, whatever signs them: a leaked online key is answered by a new
   delegation plus this entry.
@@ -227,6 +228,40 @@ alerts.
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
 (`runtime.updateSlots`); in tests `services/updates/test/fake-rauc.cjs`.
+
+**The image side** (meta-phoenix `dynamic-layers/rauc`, on LuneOS's layers;
+`phoenix-vm-arm64` first, PRE-IMAGE-CHECKLIST.md U1-U4):
+
+- **The disk** (`files/wic/phoenix-ab-efi.wks.in`, the `.wic` beside the
+  image): GPT, 1 `phoenix-boot` (the EFI system partition: GRUB, its A/B
+  script `phoenix-ab-grub.cfg` and `EFI/BOOT/grubenv`), 2 `phoenix-root-a`,
+  3 `phoenix-root-b` (empty until the first update), 4 `phoenix-data`. Each
+  slot carries its kernel (`/boot/Image`), so an update brings its kernel.
+- **The boot counter**: RAUC's GRUB variables (`ORDER`, `A_OK`/`B_OK`,
+  `A_TRY`/`B_TRY`). GRUB takes the first slot in `ORDER` that is marked OK
+  and has been tried fewer than three times, counts the try, and boots it
+  with `rauc.slot=`; `rauc status mark-good` (step 6) sets the count back to
+  0. A slot whose system never reaches the System UI is skipped after its
+  third start (a kernel panic restarts by itself, `panic=10`; a hang needs
+  the power button), and the slot that worked before starts.
+- **What outlives an update** (`phoenix-slots`, a systemd generator, only
+  on a boot with `phoenix.data=` from GRUB): `/var`, `/home` and `/media` are
+  overlays whose upper layers are on the data partition and whose lower
+  layers are the running slot's, so what the user changed stays and what
+  they did not is always the running system's; `/var/lib/phoenix` (this
+  service's downloads and state, dev push's overlays) is on the data
+  partition itself; RAUC's own records are `/data/rauc`. `/etc` is the
+  slot's: what is written there at run time (`/etc/machine-id`) starts again
+  after an update.
+- **The bundle** (`phoenix-bundle`): the image's ext4 root as a verity
+  bundle (RAUC checks each block as it reads it; `system.conf` refuses plain
+  bundles) for the device type (`phoenix-<MACHINE>`, `phoenix-vm-arm64` for
+  the VM), whose build and version are the rootfs's own (`BUILD_ID`, the
+  product's version), so step 4's checks and step 6's comparison hold.
+  Signed with the test development certificate; a release bundle is
+  re-signed with the owner's (`rauc resign`, PLATFORM.md 7.2). Test
+  releases go on a channel with Phoenix-Web-Services'
+  `platform:publish-testing-update`.
 
 ## The account and cloud services
 
@@ -363,9 +398,10 @@ tools/test-install-rootfs.py` checks the image layout and `servers-json.py`.
 
 ## Still to do
 
-- **RAUC in meta-phoenix**: no RAUC recipe, `system.conf` or keyring yet
-  (PLATFORM.md 7.2; PRE-IMAGE-CHECKLIST U-rows). The update service calls
-  the CLI and needs `rauc` and its daemon in the image.
+- **RAUC on the phones and tablets**: the VM has its slots, keyring and
+  boot counter (above); the PINE64 devices (U-Boot or Tow-Boot reading
+  `extlinux.conf`) and the Fairphone (Android's boot loader) have none yet
+  (PRE-IMAGE-CHECKLIST U2). The production keyring is the owner's (U3).
 - **The connectivity probe** is configured (`connectivity.probe`) but
   OSE's network stack still uses its own; pointing it there is
   meta-phoenix configuration.

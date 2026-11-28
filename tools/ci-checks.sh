@@ -151,6 +151,7 @@ checks() {
     check serve-rootfs "serve-rootfs.py answers a browser's burst of connections while busy" python3 tools/test-serve-rootfs.py
     check nova-bundle "Dev bundles: the image's manifest, the bundle maker, the device's checks (tools/nova)" node tools/test-nova-bundle.cjs
     check packageconfig "PACKAGECONFIG options meta-phoenix asks for (scripts/packageconfig-check.py)" python3 tools/test-packageconfig-check.py
+    check rauc-slots "The A/B layout for system updates: grubenv, the data mounts, the names they share" python3 tools/test-rauc-slots.py
     check make-utm "UTM bundles (scripts/make-utm.sh, tools/check-utm-bundle.py)" python3 tools/test-make-utm.py
     check mac-build "The Mac's image build on either layer stack (scripts/mac-build.sh, container-build.sh)" --needs rsync python3 tools/test-mac-build.py
     check php-marketplace "Marketplace catalog service (PHP)" --needs php php server/marketplace/tests/run.php

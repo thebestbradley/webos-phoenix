@@ -1,0 +1,28 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The A/B disk for a UEFI machine (phoenix-vm-arm64 first;
+# docs/PRE-IMAGE-CHECKLIST.md U1, U2), GPT:
+#
+#   1 phoenix-boot    EFI system partition: GRUB (EFI/BOOT/bootaa64.efi), its
+#                     A/B script (phoenix-ab-grub.cfg) and environment
+#                     (grubenv, phoenix-grubenv.bb). No kernel: each slot has
+#                     its own (/boot/Image), so an update brings its kernel.
+#   2 phoenix-root-a  root slot A, the image as built
+#   3 phoenix-root-b  root slot B, empty: the first system update goes here
+#   4 phoenix-data    /var, /home and /media's upper layers and
+#                     /var/lib/phoenix (phoenix-slots), RAUC's data
+#
+# The partition numbers and names are fixed: phoenix-ab-grub.cfg boots
+# gpt2/gpt3, the RAUC configuration (rauc-conf's files/<MACHINE>/system.conf)
+# names the slots by these names, and the kernel finds its root by name
+# (root=PARTLABEL=). Only the root has a mount point here, so wic adds no
+# line to the slot's /etc/fstab (slot B, written from a bundle, would not
+# have it): phoenix-slots mounts the rest.
+
+part --source bootimg-efi --sourceparams="loader=grub-efi,install-kernel-into-boot-dir=false" --fstype=vfat --label PHXBOOT --part-name phoenix-boot --part-type C12A7328-F81F-11D2-BA4B-00A0C93EC93B --active --align 1024 --fixed-size 64M
+part / --source rootfs --fstype=ext4 --label phoenix-root --part-name phoenix-root-a --align 4096 --fixed-size ${PHOENIX_ROOT_SLOT_SIZE}
+part --source empty --part-name phoenix-root-b --align 4096 --fixed-size ${PHOENIX_ROOT_SLOT_SIZE}
+part --fstype=ext4 --label phoenix-data --part-name phoenix-data --align 4096 --fixed-size ${PHOENIX_DATA_SIZE}
+
+bootloader --ptable gpt --configfile="${PHOENIX_WIC_DIR}/phoenix-ab-grub.cfg" --timeout=0

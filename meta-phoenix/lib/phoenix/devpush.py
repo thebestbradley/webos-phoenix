@@ -101,6 +101,40 @@ def stamp(rootfs, build=None, compatible=None):
     return m
 
 
+PRODUCT = "/usr/share/phoenix/product.json"
+
+
+def build_info(rootfs):
+    """What a system update made of ROOTFS must say about itself (the RAUC
+    bundle's build and version: phoenix-bundle.bb): {"build": BUILD_ID as a
+    number, "version": the product's version (product.json, which
+    com.palm.update reports; os-release's VERSION_ID without one)}. Raises
+    ValueError without a numeric BUILD_ID: com.palm.update compares builds
+    as whole numbers."""
+    build = os_release_build(rootfs)
+    if not build or not build.isdigit() or len(build) > 15:
+        raise ValueError("BUILD_ID %r in %s/etc/os-release is not a build number" % (build, rootfs))
+    version = None
+    try:
+        with open(os.path.join(rootfs, PRODUCT.lstrip("/")), encoding="utf-8") as f:
+            version = json.load(f).get("version")
+    except (OSError, ValueError, AttributeError):
+        version = None
+    if not version:
+        for rel in OS_RELEASE:
+            try:
+                with open(_inside(rootfs, rel), encoding="utf-8") as f:
+                    for line in f:
+                        k, _, v = line.strip().partition("=")
+                        if k == "VERSION_ID":
+                            version = v.strip().strip("\"'")
+            except OSError:
+                continue
+            if version:
+                break
+    return {"build": int(build), "version": str(version or "0")}
+
+
 # Developer Mode's flag and OSE's markers beside it (com.palm.service.devmode
 # devmode_service.js:20-27, 81-110 at 94b6921). OSE's recipe writes the flag
 # into OSE images (com.palm.service.devmode.bb do_install:append:webos), so

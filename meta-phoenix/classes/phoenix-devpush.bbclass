@@ -17,6 +17,14 @@
 #   - /usr/share/phoenix/manifest.json (phoenix-apps wrote it "unstamped"):
 #     every listed file's size, hash and mode read from the image's own
 #     copy, with that BUILD_ID, which nova builds bundles against.
+#   - <image>.phoenix.json beside the image in DEPLOY_DIR_IMAGE: that
+#     BUILD_ID and the product's version, read from this rootfs. A system
+#     update's RAUC bundle (phoenix-bundle) takes its build and version from
+#     it, so the bundle always says the build of the rootfs it carries,
+#     even when the rootfs was not rebuilt (DATETIME and PHOENIX_BUILD_ID
+#     are left out of this task's signature): com.palm.update compares
+#     them, and a bundle whose build is not the running system's after the
+#     restart reads as an update that did not start (docs/DEV-PUSH.md 4.6).
 
 PHOENIX_BUILD_ID ??= "${DATETIME}"
 PHOENIX_BUILD_ID[vardepsexclude] = "DATETIME"
@@ -43,6 +51,18 @@ python phoenix_devpush_rootfs () {
         bb.note("phoenix-devpush: stamped %s: build %s, %d files" % (devpush.MANIFEST, m["build"], len(m["files"])))
     else:
         bb.warn("phoenix-devpush: no %s (phoenix-apps not in the image?): nova cannot push to it" % devpush.MANIFEST)
+    info = devpush.build_info(rootfs)
+    deploy = d.getVar("IMGDEPLOYDIR")
+    bb.utils.mkdirhier(deploy)
+    name = d.getVar("IMAGE_NAME") + ".phoenix.json"
+    with open(os.path.join(deploy, name), "wb") as f:
+        f.write(devpush.dump_manifest(info))
+    link = os.path.join(deploy, d.getVar("IMAGE_LINK_NAME") + ".phoenix.json")
+    if name != os.path.basename(link):
+        if os.path.lexists(link):
+            os.remove(link)
+        os.symlink(name, link)
+    bb.note("phoenix-devpush: %s: build %s, version %s" % (name, info["build"], info["version"]))
 }
 phoenix_devpush_rootfs[vardepsexclude] = "DATETIME PHOENIX_BUILD_ID"
 
