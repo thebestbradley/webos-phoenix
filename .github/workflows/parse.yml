@@ -4,10 +4,21 @@ name: image parse
 # recipe and resolve webos-phoenix-image's whole task graph for each machine,
 # without fetching sources or building anything. Uses about 500 MB of disk.
 
-# Every PR. Pushes to main only when the layer or its setup changes; they
-# also save the layer cache that PRs restore.
+# PRs and pushes to main only when the layer or its setup changes (a
+# change elsewhere cannot change what BitBake parses; every PR running all
+# its machines filled the account's runners on 28 Nov 2026 and stalled the
+# shell CI of every PR behind them). Pushes to main also save the layer
+# cache that PRs restore.
 on:
   pull_request:
+    paths:
+      - meta-phoenix/**
+      - scripts/setup-build.sh
+      - scripts/setup-build-luneos.sh
+      - scripts/luneos-layers.txt
+      - scripts/parse-check.sh
+      - scripts/packageconfig-check.py
+      - .github/workflows/parse.yml
   push:
     branches: [main]
     paths:
