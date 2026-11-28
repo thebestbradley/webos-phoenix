@@ -1,7 +1,8 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The one user agent policy for every web page phoenix-sim shows: the
+// The compatibility user agent policy (SimBrowser can instead restore the
+// native engine identity, from Web Preferences). It applies to the
 // apps' cards (Phoenix's apps, the original webOS apps, installed web apps
 // such as Slack, the Sign In card) and the browser's page views (normal and
 // private). What a page is told: the User-Agent header and

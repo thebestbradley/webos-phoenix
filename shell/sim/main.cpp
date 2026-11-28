@@ -573,13 +573,18 @@ int main(int argc, char *argv[])
         // (the runtime's osInfo, from host.json).
         const QString chromium = QString::fromLatin1(qWebEngineChromiumVersion());
         const QString patches = QString::fromLatin1(qWebEngineChromiumSecurityPatchVersion());
-        qInfo("phoenix-sim: web engine: Chromium %s (security patches %s), Qt WebEngine %s; pages are told Chrome %d",
+        if (qgetenv("PHOENIX_BROWSER_IDENTITY") == "engine")
+            qInfo("phoenix-sim: web engine: Chromium %s (security patches %s), Qt WebEngine %s; engine identity diagnostics", qPrintable(chromium), qPrintable(patches), QTWEBENGINECORE_VERSION_STR);
+        else
+            qInfo("phoenix-sim: web engine: Chromium %s (security patches %s), Qt WebEngine %s; pages are told Chrome %d",
               qPrintable(chromium), qPrintable(patches), qWebEngineVersion(), UserAgent::chromeMajor());
         hostInfo.insert(QStringLiteral("webEngine"), QJsonObject{
             { QStringLiteral("name"), QStringLiteral("Chromium") },
             { QStringLiteral("version"), chromium },
             { QStringLiteral("securityPatches"), patches },
-            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) } });
+            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) },
+            { QStringLiteral("extensions"), simBrowser->extensionsSupported() },
+            { QStringLiteral("engineIdentity"), true } });
         webEngine = true;
         webApps = rootfs.apps();
     }

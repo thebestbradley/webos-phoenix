@@ -817,10 +817,14 @@ Item {
             else if (launched !== "" && behind && uid !== "" && uid === focusedUid)
                 cardFocusRequested(uid);
         } else if (type === "browserData") {
+            if (appId !== "com.palm.app.browser")
+                return;
             // The browser's Clear Cookies and Clear Cache (com.palm.browserServer):
             // the page views' profile (phoenix-sim's simBrowser).
             if (typeof simBrowser !== "undefined" && simBrowser !== null) {
-                if (payload.op === "clearCookies")
+                if (payload.op === "extensions")
+                    simBrowser.showExtensions();
+                else if (payload.op === "clearCookies")
                     simBrowser.clearCookies();
                 else if (payload.op === "clearCache")
                     simBrowser.clearCache();
