@@ -281,6 +281,27 @@ check(entry is not None and entry["sha256"] == hashlib.sha256(want).hexdigest() 
       "manifest: an app page's hash is of the page with the runtime's tag, as the image holds it")
 check(all(f["mode"] in ("0644", "0755") for f in man["files"]), "manifest: modes 0644 or 0755")
 
+# The recipe's tree (meta-phoenix phoenix-apps): the checkout as git has it
+# (gitsm: its submodules too) with tools/pack-apps-dist.sh's archive unpacked
+# over it, since BitBake's do_compile has no network for npm. Every file
+# install-rootfs.py installs is in one or the other, or do_install stops
+# ("not installed", "not built"): the services' npm packages from
+# apps/node_modules (nova's @noble/curves) as much as the apps' dist/.
+tracked = set(subprocess.run(["git", "-C", REPO, "ls-files", "-z", "--recurse-submodules"], check=True,
+                             capture_output=True, text=True).stdout.split("\0"))
+with tempfile.TemporaryDirectory() as tmp:
+    archive = os.path.join(tmp, "apps-dist.tar.gz")
+    subprocess.run(["sh", os.path.join(REPO, "tools", "pack-apps-dist.sh"), archive], check=True, capture_output=True)
+    packed = set(m.rstrip("/") for m in subprocess.run(["tar", "-tzf", archive], check=True, capture_output=True,
+                                                         text=True).stdout.splitlines())
+untracked = sorted({os.path.relpath(src, REPO) for dev, src in final.items()
+                    if dev not in ir.GENERATED and os.path.isfile(src)} - tracked)
+missing = [p for p in untracked if p not in packed]
+check(not missing, "the recipe's tree has every file the image gets: the checkout and apps-dist (%d not: %s)"
+      % (len(missing), ", ".join(sorted({"/".join(p.split("/")[:4]) for p in missing})[:5]) or "none"))
+check(any(p.startswith("apps/node_modules/@noble/curves/") for p in packed),
+      "apps-dist has nova's @noble/curves (Developer Mode pairing, services/nova/lib/pake.js)")
+
 # No macOS Finder files reach ${D} (Revisions 41 and 43 stopped in
 # phoenix-apps' do_package, installed-vs-shipped, on /.DS_Store and
 # /usr/.DS_Store): install-rootfs.py leaves them out of every tree, and

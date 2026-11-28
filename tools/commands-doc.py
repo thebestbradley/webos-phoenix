@@ -262,7 +262,7 @@ it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "w
 it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix/apps/shared/connector-kit/src/tools/cli.ts:6-20 · docs/SYNERGY-SDK.md:719",
    ["npm run build -w @phoenix/connector-kit", ("npx phoenix-connector new <app id>", "options: --capability CONTACTS, --share, --dir DIR"),
     "npx phoenix-connector validate <folder or .ipk>", ("npx phoenix-connector pack <folder>", "--out DIR"), "npx phoenix-connector publish <folder or .ipk> --local", "npx phoenix-connector test <folder>"])
-it("Pack the built apps for an image", "Then set `PHOENIX_APPS_DIST = \"/path/to/apps-dist.tar.gz\"` in local.conf.", B, WP, "webos-phoenix/tools/pack-apps-dist.sh:7-17 · tools/install-rootfs.py:28",
+it("Pack the built apps for an image", "Then set `PHOENIX_APPS_DIST = \"/path/to/apps-dist.tar.gz\"` in local.conf.", B, WP, "webos-phoenix/tools/pack-apps-dist.sh:7-19 · tools/install-rootfs.py:28",
    ["tools/pack-apps-dist.sh apps-dist.tar.gz", ("python3 tools/install-rootfs.py out/rootfs --list", "show the image's layout")])
 
 sec("Developer tools for a device (nova)", "`nova`, after Palm's codename for webOS, is the developer command for a test device in Developer Mode (docs/DEV-PUSH.md): it pairs with a device, pushes changed system files into its developer overlay and restarts only what changed, and makes dev bundles. Node.js 22 and Python 3; nothing to build. Its key is `~/.config/nova/key`, made on first use; the devices it is paired with are in `~/.config/nova/devices.json`. Every device command takes `-d NAME|usb|sim[:INSTANCE]|ADDRESS` (without it: the only device paired, else the last used).")
