@@ -22,6 +22,7 @@
 // scales to the screen.
 
 import QtQuick
+import "LocaleFormat.js" as LocaleFormat
 
 Item {
     id: digitalclock
@@ -38,6 +39,8 @@ Item {
     // Laid out for a screen wider than tall.
     property bool landscape: true
     property var fixedTime: null
+    // The locale of the month and AM/PM (the device's region).
+    property string formatLocale: "en-US"
 
     readonly property string orientation: landscape ? "landscape" : "portrait"
     function art(name) { return Theme.asset("dockmode/time/digital/" + orientation + "/" + name + ".png") }
@@ -50,8 +53,9 @@ Item {
         minutes = d.getMinutes();
         date = d.getDate();
         year = d.getFullYear();
-        month = Qt.locale().monthName(d.getMonth(), Locale.ShortFormat).toUpperCase();
-        ampm = h < 12 ? Qt.locale().amText : Qt.locale().pmText;
+        var l = LocaleFormat.locale(formatLocale);
+        month = l.standaloneMonthName(d.getMonth(), Locale.ShortFormat).toUpperCase();
+        ampm = h < 12 ? l.amText : l.pmText;
     }
 
     property int hours: 0
@@ -64,6 +68,7 @@ Item {
     Component.onCompleted: read()
     onFixedTimeChanged: read()
     onTwelveHourClockChanged: read()
+    onFormatLocaleChanged: read()
 
     Timer {
         interval: 100; running: digitalclock.timerRunning; repeat: true

@@ -9,6 +9,7 @@ import QtQuick
 import Phoenix.Native
 import "LauncherLayout.js" as LauncherLayout
 import "KeyboardShortcuts.js" as KeyboardShortcuts
+import "LocaleFormat.js" as LocaleFormat
 
 FocusScope {
     id: shell
@@ -82,6 +83,31 @@ FocusScope {
     property alias lockScreen: lockScreen
 
     focus: true
+
+    // ---- The device's language (localeInfo.locales.UI) ---------------------------
+    // The shell's qsTr() strings in it, changed at once (ShellTranslator), as
+    // LunaSysMgr's LOCALIZED() strings followed localeInfo (luna-sysmgr-common
+    // Localization.cpp:57-106, LocalePreferences.cpp:550-651). Dates and
+    // times follow localeInfo's region (LocaleFormat.formatTag) where they are
+    // drawn.
+    readonly property string uiLocale: LocaleFormat.uiTag(system ? system.localeInfo : null)
+    // Written right to left (Arabic, Hebrew, ...): the shell's layout is
+    // kept, text runs and aligns right to left (docs/spec/GAPS.md L1).
+    readonly property bool rightToLeft: LocaleFormat.isRightToLeft(uiLocale)
+    ShellTranslator {
+        id: translator
+        language: shell.uiLocale
+    }
+    readonly property string translation: translator.loadedLanguage
+    // As luna-surfacemanager logs it (SystemSettings.qml "Localization: UI
+    // Locale changed"), LunaSysMgr too (LocalePreferences.cpp:296-299).
+    onUiLocaleChanged: _logLocale()
+    onTranslationChanged: _logLocale()
+    function _logLocale() {
+        console.info("Localization: UI locale " + uiLocale + ", formats "
+                     + LocaleFormat.formatTag(system ? system.localeInfo : null)
+                     + ", translation " + (translation || "none (English)") + (rightToLeft ? ", right to left" : ""));
+    }
 
     Binding { target: Theme; property: "tablet"; value: shell.tablet }
     // The device has a Home button its maker uses instead of the gesture
@@ -3654,6 +3680,7 @@ FocusScope {
                 puckId: shell.system && shell.system.puckId ? shell.system.puckId : ""
                 fixedTime: shell.system && shell.system.fixedTime ? shell.system.fixedTime : null
                 twelveHourClock: !(shell.system && shell.system.twentyFourHour)
+                formatLocale: LocaleFormat.formatTag(shell.system ? shell.system.localeInfo : null)
             }
 
             // The volume keys' indicator, centred in the positive space;

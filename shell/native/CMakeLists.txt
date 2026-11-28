@@ -18,6 +18,7 @@ qt_add_qml_module(phoenix-native
             keyboardaccess.h keyboardaccess.cpp cornermask.h cornermask.cpp
             localmodels.h localmodels.cpp speech.h speech.cpp
             renderinfo.h renderinfo.cpp
+            shelltranslator.h shelltranslator.cpp
 )
 # Network: the Assistant's model downloads and llama-server's health check.
 find_package(Qt6 REQUIRED COMPONENTS Network)
@@ -36,6 +37,34 @@ if(TARGET Qt6::Multimedia)
     message(STATUS "Phoenix.Native: dictation enabled (Qt Multimedia found)")
 else()
     message(STATUS "Phoenix.Native: Qt Multimedia not found; no dictation")
+endif()
+
+# The shell's translations (ShellTranslator): shell/i18n/phoenix-shell_<lang>.ts
+# made into .qm files by lrelease, in the plugin's resources at
+# :/phoenix/i18n. Qt's LinguistTools (qttools; qttools-native in
+# meta-phoenix). Without it the shell is built in English only.
+# New strings: lupdate shell/qml -extensions qml,js -locations relative
+#              -ts shell/i18n/phoenix-shell_*.ts
+find_package(Qt6 QUIET COMPONENTS LinguistTools)
+file(GLOB PHOENIX_SHELL_TS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../i18n/phoenix-shell_*.ts)
+if(TARGET Qt6::lrelease AND PHOENIX_SHELL_TS)
+    set(PHOENIX_SHELL_QM)
+    foreach(ts ${PHOENIX_SHELL_TS})
+        get_filename_component(name ${ts} NAME_WE)
+        set(qm ${CMAKE_CURRENT_BINARY_DIR}/i18n/${name}.qm)
+        add_custom_command(OUTPUT ${qm}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/i18n
+            COMMAND Qt6::lrelease -silent ${ts} -qm ${qm}
+            DEPENDS ${ts} VERBATIM)
+        list(APPEND PHOENIX_SHELL_QM ${qm})
+    endforeach()
+    qt_add_resources(phoenix-native phoenix_shell_i18n
+        PREFIX /phoenix/i18n
+        BASE ${CMAKE_CURRENT_BINARY_DIR}/i18n
+        FILES ${PHOENIX_SHELL_QM})
+    message(STATUS "Phoenix.Native: shell translations: ${PHOENIX_SHELL_QM}")
+else()
+    message(WARNING "Phoenix.Native: Qt LinguistTools not found; the shell is built without its translations")
 endif()
 
 # A plugin library, so on the device it goes with Qt's own QML modules

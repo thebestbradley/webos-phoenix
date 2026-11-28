@@ -36,6 +36,8 @@ Item {
 
     property bool mainTimerRunning: false
     property bool twelveHourClock: true
+    // The device's region for the clocks' month, weekday and AM/PM.
+    property string formatLocale: "en-US"
     property var fixedTime: null
     // Dock mode's wallpaper is behind: no clock_bg.png.
     property bool wallpaperBehind: false
@@ -76,6 +78,7 @@ Item {
                 glass: 1
                 timerRunning: clocks.mainTimerRunning
                 fixedTime: clocks.fixedTime
+                formatLocale: clocks.formatLocale
             }
         }
         Item {
@@ -89,6 +92,7 @@ Item {
                 twelveHourClock: clocks.twelveHourClock
                 timerRunning: clocks.mainTimerRunning
                 fixedTime: clocks.fixedTime
+                formatLocale: clocks.formatLocale
             }
         }
         Item {
@@ -101,6 +105,7 @@ Item {
                 glass: 0
                 timerRunning: clocks.mainTimerRunning
                 fixedTime: clocks.fixedTime
+                formatLocale: clocks.formatLocale
             }
         }
     }

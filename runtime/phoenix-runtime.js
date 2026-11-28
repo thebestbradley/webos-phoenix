@@ -6945,6 +6945,11 @@
                 rotationLocked: !!p.rotationLock,
                 rotationLockOrientation: ROTATION_LOCK_ORIENTATIONS.indexOf(p.rotationLock) >= 0 ? p.rotationLock : "",
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
+                // The device's language and region for the shell's strings,
+                // dates and times (LocaleFormat.js, ShellTranslator), as
+                // LunaSysMgr subscribed to localeInfo (luna-sysmgr-common
+                // LocalePreferences.cpp:404-407).
+                localeInfo: (s.settings[""] && s.settings[""].localeInfo) || null,
                 muted: !!s.audio.muted,
                 // What the shell's system sounds follow (SystemSounds.qml):
                 // volumes (master, then pringtones / palerts / pfeedback),

@@ -13,6 +13,7 @@
 // knows unlocks as its last digit goes in, with no Done (UnlockPanel).
 
 import QtQuick
+import "LocaleFormat.js" as LocaleFormat
 
 Item {
     id: lock
@@ -560,6 +561,8 @@ Item {
         onTriggered: lock.now = new Date()
     }
     readonly property date shownTime: system && system.fixedTime ? system.fixedTime : now
+    // The device's region for the clock and date (localeInfo; LocaleFormat.js).
+    readonly property string formatLocale: LocaleFormat.formatTag(system ? system.localeInfo : null)
 
     // Swallow input to everything underneath.
     MouseArea { anchors.fill: parent }
@@ -611,30 +614,29 @@ Item {
 
     Row {
         id: clock
+        objectName: "lockClock"
         anchors.horizontalCenter: parent.horizontalCenter
         opacity: lock.sideways && lock._covered ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         // Centred 15% down the screen (LockWindow.cpp:427).
         y: Math.max(Theme.statusBarHeight, lock.height * Theme.lockClockCenterRatio - Theme.lockDigitHeight / 2)
 
-        // ClockWindow::tick: 12 h without a leading zero, or 24 h.
-        readonly property string text: {
-            var m = lock.shownTime.getMinutes();
-            var h = lock.shownTime.getHours();
-            if (lock.system && lock.system.twentyFourHour)
-                return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
-            h = h % 12;
-            if (h === 0) h = 12;
-            return h + ":" + (m < 10 ? "0" : "") + m;
-        }
+        // ClockWindow::tick: 12 h without a leading zero, or 24 h
+        // (ClockWindow.cpp:133-145), the locale's clock in European digits:
+        // the clock is pictures of 0-9 and the colon, which stands for the
+        // locale's separator too ("21.41").
+        readonly property string text: LocaleFormat.latinDigits(
+            LocaleFormat.clock(lock.shownTime, lock.formatLocale, !!(lock.system && lock.system.twentyFourHour)))
 
         Repeater {
             model: clock.text.length
             delegate: Image {
                 required property int index
+                objectName: "lockClockChar" + index
                 readonly property string ch: clock.text.charAt(index)
-                source: Theme.asset(ch === ":" ? "screen-lock-clock-colon.png" : "screen-lock-clock-" + ch + ".png")
-                width: ch === ":" ? Theme.lockColonWidth : Theme.lockDigitWidth
+                readonly property bool digit: ch >= "0" && ch <= "9"
+                source: Theme.asset(!digit ? "screen-lock-clock-colon.png" : "screen-lock-clock-" + ch + ".png")
+                width: !digit ? Theme.lockColonWidth : Theme.lockDigitWidth
                 height: Theme.lockDigitHeight
             }
         }
@@ -647,7 +649,10 @@ Item {
         anchors.top: clock.bottom
         anchors.topMargin: Theme.px(4)
         opacity: clock.opacity
-        text: Qt.formatDate(lock.shownTime, "dddd, MMMM d")
+        // The weekday, month and day in the device's locale
+        // ("Saturday, June 6", "Samstag, 6. Juni"): its long date without
+        // the year.
+        text: LocaleFormat.dayAndMonth(lock.shownTime, lock.formatLocale)
         color: Theme.text
         font.family: Theme.fontFamily
         font.pixelSize: Theme.px(16)

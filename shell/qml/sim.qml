@@ -233,6 +233,10 @@ Item {
                 // time, before the system UI's page reports them: the boot
                 // animation (its style, its pace) starts with the first frame.
                 tweaks: root.savedTweaks()
+                // The language and region as last reported (system/localeInfo),
+                // as LunaSysMgr read localeInfo at boot (LocalePreferences.cpp:236-299):
+                // the shell starts in the device's language.
+                localeInfo: root.savedLocaleInfo()
                 reduceMotion: typeof simSettings !== "undefined" && !!simSettings && simSettings.value("accessibility/reduceMotion") === "1"
             }
         }
@@ -629,6 +633,18 @@ Item {
         }
     }
 
+    // localeInfo as last reported (system/localeInfo), or null (en-US).
+    function savedLocaleInfo() {
+        if (typeof simSettings === "undefined" || !simSettings)
+            return null;
+        try {
+            var info = JSON.parse(simSettings.value("system/localeInfo") || "null");
+            return info && typeof info === "object" ? info : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     // Settings > Advanced as last reported (system/tweaks), or {} (the defaults).
     function savedTweaks() {
         if (typeof simSettings === "undefined" || !simSettings)
@@ -696,6 +712,8 @@ Item {
                 simSettings.setValue("system/tweaks", JSON.stringify(s.tweaks));
             if (s.reduceMotion !== undefined && typeof simSettings !== "undefined")
                 simSettings.setValue("accessibility/reduceMotion", s.reduceMotion ? "1" : "0");
+            if (s.localeInfo && typeof simSettings !== "undefined")
+                simSettings.setValue("system/localeInfo", JSON.stringify(s.localeInfo));
         }
     }
     Connections {

@@ -149,6 +149,11 @@ QtObject {
     property string notificationtone: "/usr/palm/sounds/notification.wav"
     // The clock's format (system preference timeFormat "HH24").
     property bool twentyFourHour: false
+    // The device's language and region: the settings service's localeInfo
+    // ({locales: {UI, FMT}, clock, timezone}) as the runtime's simulated
+    // com.webos.settingsservice keeps it (Settings > Language & Region,
+    // First Use); null until a page reports it (en-US, LocaleFormat.js).
+    property var localeInfo: null
     // Settings > Screen & Lock: "Turn off after" (seconds) and "Lock after"
     // (seconds locked before the passcode is asked for; 0 at once).
     property int screenTimeout: 60
@@ -443,7 +448,7 @@ QtObject {
 
     // Apply a "systemStatus" report from the web runtime: wifiEnabled,
     // wifiConnected, wifiBars, bluetoothOn, airplaneMode, brightness
-    // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
+    // (0-100), rotationLocked, muted, timeFormat, localeInfo, showAlertsWhenLocked,
     // screenTimeout, lockTimeout, advancedGestures, appRelaunch, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, keyboardSize, ringtone, alerttone,
@@ -483,6 +488,9 @@ QtObject {
             callForwarding = !!s.callForwarding;
         if (s.timeFormat !== undefined)
             twentyFourHour = s.timeFormat === "HH24";
+        if (s.localeInfo && typeof s.localeInfo === "object"
+                && JSON.stringify(s.localeInfo) !== JSON.stringify(localeInfo))
+            localeInfo = s.localeInfo;
         if (s.showAlertsWhenLocked !== undefined)
             showAlertsWhenLocked = !!s.showAlertsWhenLocked;
         if (s.lockScreenPreviews !== undefined)

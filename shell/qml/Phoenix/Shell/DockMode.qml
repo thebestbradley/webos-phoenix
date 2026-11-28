@@ -53,6 +53,8 @@ Item {
     property string puckId: ""
     property var fixedTime: null
     property bool twelveHourClock: true
+    // The device's region for the clocks' names (localeInfo).
+    property string formatLocale: "en-US"
 
     readonly property string timeAppId: "com.palm.app.dockmodetime"
     // What shows, and its row's title (the status bar's title).
@@ -316,6 +318,7 @@ Item {
             opacity: front ? dock._fade : 1 - dock._fade
             mainTimerRunning: front && dock.active && dock.running
             twelveHourClock: dock.twelveHourClock
+            formatLocale: dock.formatLocale
             fixedTime: dock.fixedTime
             wallpaperBehind: String(dock.wallpaper) !== ""
         }

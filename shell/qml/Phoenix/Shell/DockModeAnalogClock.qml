@@ -22,6 +22,7 @@
 // the dock-mode Time exhibition scales to the screen (DockModeTime.qml).
 
 import QtQuick
+import "LocaleFormat.js" as LocaleFormat
 
 Item {
     id: analogclock
@@ -31,6 +32,8 @@ Item {
     property bool timerRunning: false
     // The time to show (a fixed time for screenshots), else now.
     property var fixedTime: null
+    // The locale of the date and weekday (the device's region).
+    property string formatLocale: "en-US"
 
     function pt(size) { return Theme.px(size * 4 / 3) }
 
@@ -41,8 +44,9 @@ Item {
         seconds = date.getSeconds();
         // The glass clock's long date; the matte clock's day of the month and
         // short weekday (Runtime::getLocalizedDay, WindowServer.cpp:306-311).
-        day = glass ? Qt.formatDate(date, Qt.locale().dateFormat(Locale.LongFormat)) : String(date.getDate());
-        weekday = Qt.locale().dayName(date.getDay(), Locale.ShortFormat);
+        var l = LocaleFormat.locale(formatLocale);
+        day = glass ? LocaleFormat.longDate(date, formatLocale) : String(date.getDate());
+        weekday = l.standaloneDayName(date.getDay(), Locale.ShortFormat);
     }
 
     property int hours: 0
@@ -54,6 +58,7 @@ Item {
     Component.onCompleted: read()
     onFixedTimeChanged: read()
     onGlassChanged: read()
+    onFormatLocaleChanged: read()
 
     Timer {
         interval: 100; running: analogclock.timerRunning; repeat: true
