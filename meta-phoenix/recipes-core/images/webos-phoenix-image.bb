@@ -46,6 +46,13 @@ IMAGE_INSTALL:append = " phoenix-devmode"
 IMAGE_INSTALL:append = "${@' phoenix-devmode-ssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 inherit phoenix-devpush
 
+# The platform's test, demo and example apps (OSE's YouTube test page, its QML
+# examples) are developer apps, as Phoenix's own Notification Lab, framework
+# demos and Terminal: in the launcher, the dock, Just Type and the app
+# pickers only while Developer Mode is on (docs/APP-RUNTIME.md, "Developer
+# apps"): conf/developer-apps.json, phoenix-developer-apps.bbclass.
+inherit phoenix-developer-apps
+
 # System updates (docs/PLATFORM-CLIENT.md, "System updates"): on a machine
 # with A/B slots (PHOENIX_RAUC = "1", from its .conf, where meta-rauc is in
 # the build), RAUC (its D-Bus service, which com.palm.update's `rauc`

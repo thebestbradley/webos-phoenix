@@ -301,6 +301,18 @@ export const devMode = {
     watch(cb: (on: boolean) => void, onError?: OnError): Subscription {
         return subscribe("luna://com.webos.service.devmode/getDevMode", {}, (r) => cb(r.status === "enabled" || r.enabled === true), onError);
     },
+    /**
+     * getDevMode: whether Developer Mode is on now (false when it cannot be
+     * told). Phoenix's provider answers {status, enabled}; OSE's {enabled}.
+     */
+    async get(): Promise<boolean> {
+        try {
+            const r = await call("luna://com.webos.service.devmode/getDevMode", {});
+            return r.status === "enabled" || r.enabled === true;
+        } catch {
+            return false;
+        }
+    },
     /** setDevMode {status}: Settings asks for the device passcode before turning it on. */
     set(on: boolean) {
         return call("luna://com.webos.service.devmode/setDevMode", { status: on ? "enabled" : "disabled" });
@@ -321,6 +333,34 @@ export const devMode = {
 
 // ---- Applications: com.webos.applicationManager (SAM) ---------------------------------
 
+/**
+ * An app as listApps gives it: on a device SAM's (its appinfo.json: "visible",
+ * "phoenix": {hidden, developer}), in the simulator the runtime's launch point
+ * record (hidden, developer "devmode" | "unlock" | "").
+ */
+export interface AppRecord {
+    id?: string;
+    title?: string;
+    visible?: boolean;
+    hidden?: boolean;
+    developer?: string | boolean;
+    phoenix?: { hidden?: boolean; developer?: string | boolean };
+}
+
+/**
+ * The apps of a listApps reply the launcher shows: not hidden ("visible":
+ * false, "phoenix": {"hidden": true}), and a developer app ("phoenix":
+ * {"developer": true}: Notification Lab, the framework demos, Terminal, the
+ * image's test apps) only while Developer Mode is on.
+ */
+export function shownApps(list: AppRecord[], developerOn: boolean): { id: string; title: string }[] {
+    return list.filter((a) => {
+        if (typeof a.id !== "string" || a.visible === false || a.hidden === true || a.phoenix?.hidden === true) return false;
+        const developer = a.phoenix?.developer ?? a.developer;
+        return developerOn || !(developer === true || developer === "devmode");
+    }).map((a) => ({ id: a.id!, title: a.title || a.id! }));
+}
+
 export const apps = {
     /** launch {id, params}: start or relaunch an app. {newCard: true}
      *  (Phoenix): another card of it, in a stack of its own, even while
@@ -340,6 +380,15 @@ export const apps = {
         const r = await call("luna://com.webos.applicationManager/listApps", {});
         const list = (r as { apps?: { id?: string; title?: string }[] }).apps || [];
         return list.filter((a) => typeof a.id === "string").map((a) => ({ id: a.id!, title: a.title || a.id! }));
+    },
+    /**
+     * The apps the launcher shows, by id and title, for a list to pick an
+     * app from: listApps less the hidden ones and, while Developer Mode is
+     * off, the developer apps (shownApps; docs/APP-RUNTIME.md "Developer apps").
+     */
+    async shown(): Promise<{ id: string; title: string }[]> {
+        const [r, developerOn] = await Promise.all([call("luna://com.webos.applicationManager/listApps", {}), devMode.get()]);
+        return shownApps(((r as { apps?: AppRecord[] }).apps) || [], developerOn);
     },
     /** getAppInfo {id}: whether an app is installed (false when it is not). */
     async installed(id: string): Promise<boolean> {

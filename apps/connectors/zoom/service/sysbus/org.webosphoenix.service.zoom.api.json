@@ -11,5 +11,10 @@
         "org.webosphoenix.service.zoom/providerInfo",
         "org.webosphoenix.service.zoom/signIn",
         "org.webosphoenix.service.zoom/createMeeting"
+    ],
+    "phoenix.zoom.signin": [
+        "org.webosphoenix.service.zoom/providerInfo",
+        "org.webosphoenix.service.zoom/checkCredentials",
+        "org.webosphoenix.service.zoom/signIn"
     ]
 }

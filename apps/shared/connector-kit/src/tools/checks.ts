@@ -40,6 +40,13 @@
 //       which the sheet opens to compose, is in the package
 //   C16 the template's sign-up link (signUp: {url?, servers?: [{name,
 //       url}]}, written from the definition's signUp): https addresses only
+//   C17 a sign-in page of its own (validator.customUI) only in Phoenix's own
+//       connectors (firstParty): Accounts shows the page in a frame of its
+//       card, so the page calls with Accounts' groups, which hold every
+//       Phoenix connector's sign-in group (docs/DEVICE-AUDIT.md). Until each
+//       page runs as its own connector (docs/ROADMAP.md, per-connector
+//       sign-in isolation), a third-party connector uses the standard
+//       sign-in: Accounts' user name and password, sent to its validator.
 //
 // files: the package's files by path relative to the app's folder.
 
@@ -110,6 +117,23 @@ function serviceOf(address: unknown): string | null {
     return m ? m[1] : null;
 }
 
+/**
+ * Phoenix's own connector: its app id is in Phoenix's namespace and it is
+ * checked with Phoenix's namespaces. The catalogs give those only to
+ * Phoenix's packages (server/marketplace Catalog::submitPackage: an admin's
+ * upload; a developer's org.webosphoenix.* id is refused there and in
+ * Phoenix-Web-Services), and the devices trust them from preinstalled.json
+ * (apps/marketplace packagesservice.js firstPartyEntry).
+ */
+export const PHOENIX_NAMESPACE = "org.webosphoenix";
+
+export function isFirstParty(appId: string, namespaces: string[]): boolean {
+    return appId.indexOf(PHOENIX_NAMESPACE + ".") === 0 && namespaces.indexOf(PHOENIX_NAMESPACE) >= 0;
+}
+
+/** C17's answer to a third-party connector's own sign-in page. */
+export const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
+
 function inNamespace(id: string, namespaces: string[]): boolean {
     return namespaces.some((ns) => id === ns || id.indexOf(ns + ".") === 0);
 }
@@ -143,6 +167,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
     if (!out.version) errors.push("C1 appinfo.json: no version");
     if (!(info.value.phoenix && info.value.phoenix.hidden)) warnings.push("C1 appinfo.json: a connector's app is usually hidden (\"phoenix\": {\"hidden\": true})");
     const namespaces = (options && options.namespaces && options.namespaces.length) ? options.namespaces : [appId.split(".").slice(0, 2).join(".")];
+    const firstParty = isFirstParty(appId, namespaces);
 
     // C12 native code
     Object.keys(files).forEach((p) => { if (isNative(p, files[p])) errors.push("C12 native code is not allowed: " + p); });
@@ -266,6 +291,9 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
             if (v.customUI.appId !== appId) errors.push("C7 " + id + ": the sign-in page (customUI) must be the package's own app, " + appId);
             else if (!files[String(v.customUI.name || "")]) errors.push("C7 " + id + ": the sign-in page " + v.customUI.name + " is not in the app");
         }
+
+        // C17 a sign-in page of its own: Phoenix's own connectors only
+        if (v && typeof v === "object" && v.customUI !== undefined && v.customUI !== null && !firstParty) errors.push("C17 " + id + ": " + THIRD_PARTY_SIGNIN);
 
         // C8 capability providers
         const seen: Record<string, boolean> = {};

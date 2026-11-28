@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { call, subscribe } from "./bridge";
-import { devMode } from "./services";
+import { apps, devMode, shownApps } from "./services";
 
 const REPO = resolve(__dirname, "../../../..");
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
@@ -79,6 +79,35 @@ describe("developer apps", () => {
             { change: "removed", launchPointId: "org.webosphoenix.notificationlab_default" },
             { change: "removed", launchPointId: "org.webosphoenix.settings.devmode" },
         ]);
+    });
+});
+
+describe("the apps a list to pick from offers (apps.shown)", () => {
+    it("leaves out the hidden apps, and the developer apps until Developer Mode is on", async () => {
+        expect(await devMode.get()).toBe(false);
+        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
+        await devMode.set(true);
+        expect(await devMode.get()).toBe(true);
+        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks", "org.webosphoenix.terminal",
+            "org.webosphoenix.notificationlab"]);
+        await devMode.set(false);
+        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
+        // apps.list() still names them all (an app's title by its id).
+        expect((await apps.list()).map((a) => a.id)).toContain("org.webosphoenix.notificationlab");
+    });
+
+    it("reads a device's listApps the same way (SAM's appinfo.json: visible, phoenix.hidden, phoenix.developer)", () => {
+        const list = [
+            { id: "org.webosphoenix.notes", title: "Notes" },
+            { id: "org.webosphoenix.notificationlab", title: "Notification Lab", phoenix: { developer: true } },
+            { id: "com.webos.app.test.youtube", title: "YouTube", phoenix: { developer: true } },
+            { id: "com.palm.app.teams", title: "Teams", visible: false },
+            { id: "org.webosphoenix.drives", title: "Drives", phoenix: { hidden: true } },
+            { title: "No id" },
+        ];
+        expect(shownApps(list, false).map((a) => a.id)).toEqual(["org.webosphoenix.notes"]);
+        expect(shownApps(list, true).map((a) => a.id)).toEqual(["org.webosphoenix.notes", "org.webosphoenix.notificationlab",
+            "com.webos.app.test.youtube"]);
     });
 });
 

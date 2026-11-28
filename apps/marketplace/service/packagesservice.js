@@ -89,6 +89,23 @@
 //                                          whatsNew (the update's notes)}]}
 //   updateAll {}                        installs every update there is
 //   scheduled {$activity}               the daily check (an activity)
+//   checkSignInPage {appId, templateId} -> {allowed, reason?, errorText?}:
+//                                          whether a template's own sign-in
+//                                          page (validator.customUI) may be
+//                                          shown (rule C17 on the device; see
+//                                          "Sign-in pages" below); the
+//                                          accounts library asks before it
+//                                          frames one (group
+//                                          phoenix.packages.signin)
+//   sideload {file, signer, signerName?} a developer's .ipk (nova install):
+//                                          file, a name in the sideload
+//                                          folder (/var/lib/phoenix/sideload,
+//                                          deps.sideload) that novad wrote;
+//                                          signer, the paired computer's
+//                                          key that sent it (ed25519:...)
+//                                          -> {appId, version, skipped?}.
+//                                          Developer Mode only; group
+//                                          phoenix.packages.sideload (novad's)
 //
 // Which apps are offered here (docs/APP-STORE.md 3.17, lib/availability.js):
 // the device's class (the shell's layout: com.palm.systemmanager
@@ -104,7 +121,57 @@
 // BAD_SIGNATURE, NO_DELEGATION, REVOKED_KEY, EXPIRED, ROLLBACK, BAD_INDEX,
 // BAD_SERVER, CONNECTION_FAILED, DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED,
 // NEEDS_DEVMODE, NEEDS_MOJO, BAD_MANIFEST, REVOKED, INSTALL_FAILED, BUSY,
-// BAD_PARAMS, NOT_SET_UP, OFF_HERE.
+// BAD_PARAMS, NOT_SET_UP, OFF_HERE, THIRD_PARTY_SIGNIN, OTHER_PUBLISHER, BUILT_IN.
+//
+// Who may update an installed app (its publisher, as Android and iOS take an
+// update only signed with the installed app's key). An app's publisher is
+// the catalog it came from (the key the catalog's index is signed with: an
+// update must come from that catalog, still signed with that key unless the
+// device itself pinned the new one), the developer whose paired computer
+// sideloaded it (nova install: that computer's key), or the image (a
+// built-in app, not removable). Every install here checks it, Developer Mode
+// or not:
+//   - an app installed from one publisher is never replaced by another's
+//     package, nor one this service did not install (put there another way):
+//     OTHER_PUBLISHER, "This app is already installed from another
+//     publisher; remove it first";
+//   - a built-in app is replaced only by its update from a Phoenix catalog
+//     the device ships with ("Updating a built-in app" above: the publisher
+//     the image trusts for it), never by a sideload or another catalog's
+//     package: BUILT_IN;
+//   - Developer Mode still installs new apps and updates the developer's
+//     own sideloads.
+// OSE's installer (appinstalld2) checks no signature, so it must only be
+// reached through here: its group (applicationinstall.management) is the
+// oem trust level's and this service is the only one holding it (no app,
+// Files included, nor novad's developer role, nova luna-send:
+// tools/test-devicecheck.py), and nova install comes here (sideload).
+//
+// Sign-in pages (rule C17 on the device). A template's own sign-in page
+// (validator.customUI) is a frame of the card that shows it (Accounts, and
+// Calendar's and Email's account pages, through the accounts library's
+// CrossAppUI), and WebAppMgr gives the frame's calls that card's name, so
+// the page holds Accounts' groups: every Phoenix connector's sign-in group
+// (compat/app-permissions.json). The catalogs refuse a third party's page
+// (connector-kit checks.ts and server/marketplace Connector.php, C17); a
+// package that never went through a catalog (a Developer Mode sideload,
+// nova install, a Preware feed) is refused here twice:
+//   - install refuses a package with such a page (THIRD_PARTY_SIGNIN)
+//     unless it is Phoenix's own: from a Phoenix catalog the device ships
+//     with (signed with its key, as firstPartyEntry), with an app id in
+//     Phoenix's namespace (org.webosphoenix.*) or a built-in app's id (an
+//     update of it); the page must be the package's own app (C7);
+//   - checkSignInPage, which the accounts library (compat overlay
+//     lib/accounts/source/cross-app.js) asks before every frame, so every
+//     way onto the device is covered: the page's app must be built into
+//     the image (not removable) or installed as Phoenix's own (the
+//     connectors the image came with, preinstalled.json, or installed from
+//     a Phoenix catalog the device ships with, as above), and the template
+//     one that app carries (the image's /usr/palm/public/accounts for a
+//     built-in app; for an installed one, the templates its package had,
+//     recorded at install, or preinstalled.json's list).
+// A Developer Mode sideload (nova install) comes through sideload here,
+// which refuses to replace a built-in app or another publisher's (above).
 //
 // The Phoenix catalog's address and keys (the built-in "phoenix" source)
 // and the revocation list's address come from /etc/palm/phoenix/servers.json
@@ -145,12 +212,16 @@ var b64 = require("./lib/b64");
 var SERVICE = "org.webosphoenix.service.packages";
 var METHODS = ["getSources", "addSource", "trustSource", "setSource", "removeSource", "refresh", "browse", "search",
                "getApp", "install", "remove", "listInstalled", "updateAll", "scheduled", "listAccountTypes",
-               "getAvailability", "setKind"];
+               "getAvailability", "setKind", "checkSignInPage", "sideload"];
 var ACTIVITY = "org.webosphoenix.marketplace.updates";
 var PAGE = 20;
 var MAX_PACKAGE = 64 * 1024 * 1024;
 var MAX_DETAIL = 1024 * 1024;   // an app's detail file (its version history)
 var MAX_MANIFEST = 256 * 1024;  // a web app manifest the catalog wrote
+// Rule C17 (apps/shared/connector-kit/src/tools/checks.ts THIRD_PARTY_SIGNIN,
+// server/marketplace Connector.php): the same words on the device.
+var THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
+var PHOENIX_NAMESPACE = "org.webosphoenix.";
 
 function fail(code, text) {
     return { returnValue: false, errorCode: code, errorText: text };
@@ -186,10 +257,17 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //            connector packages the device came with
 //            (/etc/palm/marketplace/preinstalled.json), the version each
 //            has now (its appinfo.json)
-//   firstParty() (optional) -> [{id, sourceId}]: Phoenix's own connector
-//            packages the device does not come with but trusts as it trusts
-//            those (preinstalled.json "firstParty": the drives, Jabber,
-//            Matrix, Delta Chat)
+//   firstParty() (optional) -> [{id, sourceId, templates?}]: Phoenix's own
+//            connector packages the device does not come with but trusts as
+//            it trusts those (preinstalled.json "firstParty": the drives,
+//            Jabber, Matrix, Delta Chat); templates: their template ids
+//            (preinstalled() gives them too)
+//   systemTemplates() (optional) -> [{templateId, appId}]: the account
+//            templates in the system image (/usr/palm/public/accounts),
+//            each with its sign-in page's app (validator.customUI.appId,
+//            or null)
+//   sideload (optional): {read(name, max) -> bytes, remove(name)}: the
+//            folder novad writes nova install's packages to
 //   now(), log(msg) (optional)
 //   pending({appId, catalogId, sourceId, title, icon, state, progress,
 //            errorText}) (optional): an install as it goes, for the
@@ -239,6 +317,9 @@ function createPackagesService(deps) {
         s.sources = s.sources || [];
         s.indexes = s.indexes || {};
         s.installed = s.installed || {};
+        // The developers' apps nova install put here (sideload): by app id,
+        // {signer, signerName, version, installedAt}.
+        s.sideloaded = s.sideloaded || {};
         // The kinds of app the user hid on this device (setKind).
         s.hiddenKinds = s.hiddenKinds || [];
         // Sources the device ships with join once, and stay as the user sets them;
@@ -318,6 +399,22 @@ function createPackagesService(deps) {
         try { return ((deps.firstParty ? deps.firstParty() : []) || []).some(function (p) { return p.id === id; }); } catch (e) { return false; }
     }
     function sourceOf(s, id) { return s.sources.filter(function (x) { return x.id === id; })[0] || null; }
+    // A Phoenix catalog the device ships with, whose key it was given or
+    // the user checked (as firstPartyEntry asks).
+    function phoenixSource(src) { return !!src && !!src.builtin && src.kind === "phoenix" && !!(src.key || src.root); }
+    // The template ids preinstalled.json lists for one of Phoenix's own
+    // packages (packages and firstParty), or [].
+    function listedTemplates(id) {
+        var all = preinstalledList().concat(function () {
+            try { return (deps.firstParty ? deps.firstParty() : []) || []; } catch (e) { return []; }
+        }());
+        return all.filter(function (p) { return p.id === id; }).reduce(function (out, p) {
+            return out.concat(Array.isArray(p.templates) ? p.templates.map(String) : []);
+        }, []);
+    }
+    function systemTemplates() {
+        try { return (deps.systemTemplates ? deps.systemTemplates() : []) || []; } catch (e) { return []; }
+    }
     function publicSource(x) {
         // insecure: read over plain HTTP from another computer, so anyone on
         // the way can change what it offers (a Preware feed has only MD5
@@ -680,6 +777,11 @@ function createPackagesService(deps) {
         if (shipped !== null) {
             o.builtin = { version: shipped, replaced: !!inst };
             if (!inst) o.update = e.version && !e.rolloutWaiting && version.compare(e.version, shipped) > 0 ? e.version : null;
+            // Only its publisher's catalog updates a built-in app (install: BUILT_IN).
+            if (!phoenixSource(sourceOf(s, e.sourceId))) {
+                o.update = null;
+                o.verdict = { ok: false, text: builtInText(e.title || e.id) };
+            }
         }
         var rv = revokedFor(s, e.id, found && found.appId);
         if (rv) {
@@ -877,12 +979,45 @@ function createPackagesService(deps) {
             !!src && src.builtin && src.kind === "phoenix" && !!(src.key || src.root);
     }
 
+    // The templates of a package's app with a sign-in page of their own
+    // (validator.customUI, as C17 reads it: any value but null): every
+    // *.json in each folder of its public/accounts, as the accounts service
+    // reads them (app-services accounts.js getTemplatePaths) ->
+    // [{templateId, appId (the page's app)}].
+    function signInTemplates(pkg, app) {
+        var dir = app.dir + "public/accounts/", out = [];
+        pkg.files.forEach(function (f) {
+            if (f.path.indexOf(dir) !== 0 || !/^[^\/]+\/[^\/]+\.json$/i.test(f.path.slice(dir.length))) return;
+            var parsed;
+            try { parsed = JSON.parse(typeof f.data === "string" ? f.data : new TextDecoder().decode(f.data)); } catch (e) { return; }
+            (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                var v = t && typeof t.validator === "object" ? t.validator : null;
+                if (!v || v.customUI === undefined || v.customUI === null) return;
+                out.push({ templateId: String(t.templateId || ""), appId: v.customUI && typeof v.customUI === "object" ? String(v.customUI.appId || "") : "" });
+            });
+        });
+        return out;
+    }
+
+    // Whether an entry's package may have sign-in pages of its own (C17 on
+    // the device): Phoenix's, from a Phoenix catalog the device ships with
+    // (whose catalogs give Phoenix's namespace only to Phoenix's packages,
+    // checks.ts isFirstParty): an app id in that namespace, or a built-in
+    // app's (shipped: an update of it).
+    function signInTrusted(s, entry, shipped) {
+        return phoenixSource(sourceOf(s, entry.sourceId)) &&
+            (String(entry.id || "").indexOf(PHOENIX_NAMESPACE) === 0 || (shipped !== null && shipped !== undefined));
+    }
+
     // The package's bytes -> its app, or an error saying why it cannot be installed.
     // dev (Developer Mode): install scripts, services and files outside the
     // app are allowed ({developer: true}: the installer is told so).
     // firstParty: a connector the device came with, from a catalog it ships
     // with (firstPartyEntry): installed without Developer Mode.
-    function check(bytes, entry, dev, firstParty) {
+    // phoenixOwn: the package may have sign-in pages of its own (rule C17
+    // on the device, "Sign-in pages" above): from a Phoenix catalog the
+    // device ships with, and Phoenix's (signInTrusted).
+    function check(bytes, entry, dev, firstParty, phoenixOwn) {
         return ipk.read(bytes).then(function (pkg) {
             var app = pkg.apps[0];
             if (!app || pkg.apps.length > 1) throw err("BAD_PACKAGE", "The package does not hold one app");
@@ -895,6 +1030,12 @@ function createPackagesService(deps) {
             var connector = pkg.files.some(function (f) {
                 return f.path === app.dir + "service/package.json" || f.path.indexOf(app.dir + "service/sysbus/") === 0;
             });
+            // Its own sign-in pages (C17, C7): before Developer Mode, which does not change this.
+            var pages = signInTemplates(pkg, app);
+            pages.forEach(function (t) {
+                if (t.appId !== app.id) throw err("BAD_PACKAGE", "The sign-in page of " + t.templateId + " (customUI) must be the package's own app, " + app.id);
+            });
+            if (pages.length && !phoenixOwn) throw err("THIRD_PARTY_SIGNIN", THIRD_PARTY_SIGNIN);
             var needs = pkg.scripts.length ? "The package runs install scripts as the system"
                 : pkg.services.length ? "The app has background services"
                 : connector && !firstParty ? "It is a Synergy connector (an account type with a background service)"
@@ -912,7 +1053,8 @@ function createPackagesService(deps) {
                 var m = f.path.indexOf(app.dir) === 0 && /([^/]+)_appinfo\.json$/.exec(f.path);
                 return m ? m[1] : "";
             }).filter(Boolean);
-            return { pkg: pkg, app: app, developer: !!needs, firstParty: !!(connector && firstParty && !needs), plugins: plugins };
+            return { pkg: pkg, app: app, developer: !!needs, firstParty: !!(connector && firstParty && !needs), plugins: plugins,
+                     signIn: pages.map(function (t) { return t.templateId; }) };
         });
     }
 
@@ -1082,8 +1224,11 @@ function createPackagesService(deps) {
             // installed; one installed already still takes its updates.
             var off = installedFor(s, entry) ? null : offHere(s, offContext(s, cls), entry);
             if (off) throw err("OFF_HERE", off.text);
-            // A built-in app's id: only a newer version, which takes its place.
+            // A built-in app's id: only a newer version, which takes its place,
+            // and only from a Phoenix catalog the device ships with (its publisher).
             shipped = builtinFor(s, entry);
+            if (shipped !== null && !phoenixSource(sourceOf(s, entry.sourceId)))
+                throw err("BUILT_IN", builtInText(entry.title || entry.id));
             if (shipped !== null && !(entry.version && version.compare(entry.version, shipped) > 0))
                 throw err("UNSUPPORTED", (entry.title || entry.id) + " " + (shipped || "") + " is built into this device; the Marketplace's "
                           + (entry.version || "version") + " is not newer");
@@ -1095,13 +1240,12 @@ function createPackagesService(deps) {
             return Promise.all([packageFor(s, entry, progress), devMode()]);
         }).then(function (got) {
             var bytes = got[0];
-            return check(bytes, entry, got[1], firstPartyEntry(s, entry)).then(function (c) {
+            return check(bytes, entry, got[1], firstPartyEntry(s, entry), signInTrusted(s, entry, shipped)).then(function (c) {
                 appId = c.app.id;
                 ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
-                var owner = load().installed[appId];
-                if (owner && owner.sourceId !== entry.sourceId)
-                    throw err("UNSUPPORTED", "This app was installed from another catalog; remove it first");
+                var why = publisherProblem(load(), appId, entry, shipped);
+                if (why) throw why;
                 return Promise.resolve(deps.temp.write(appId + ".ipk", bytes)).then(function (where) {
                     path = where;
                     progress({ state: "installing", progress: 80 });
@@ -1112,8 +1256,10 @@ function createPackagesService(deps) {
                     s2.installed[appId] = {
                         sourceId: entry.sourceId, catalogId: entry.id, kind: entry.kind, title: entry.title || c.app.appinfo.title || appId,
                         icon: entry.icon || "", version: entry.kind === "pwa" ? entry.version : (c.app.appinfo.version || c.pkg.control.Version || entry.version || ""),
-                        museumId: entry.museumId || null, installedAt: now().toISOString()
+                        museumId: entry.museumId || null, installedAt: now().toISOString(), signer: signerOf(sourceOf(s2, entry.sourceId))
                     };
+                    // The templates whose own sign-in page it may show (checkSignInPage).
+                    if (c.signIn.length) s2.installed[appId].signIn = c.signIn;
                     // An update of a built-in app: the version removing it brings back.
                     if (shipped !== null && appId === entry.id) s2.installed[appId].builtin = shipped;
                     save(s2);
@@ -1148,6 +1294,94 @@ function createPackagesService(deps) {
         });
     }
 
+    // ---- Publishers ("Who may update an installed app" above) ---------------------
+
+    var OTHER_PUBLISHER = "This app is already installed from another publisher; remove it first";
+    function builtInText(name) { return name + " is built into this device and can't be replaced"; }
+    // A catalog's signing identity: its root (which delegates to the online
+    // key) or its key; null for a feed nothing signs (App Museum, Preware).
+    function signerOf(src) { return src ? (src.root || src.key || null) : null; }
+    function isBuiltIn(appId) { return Object.prototype.hasOwnProperty.call(builtinApps, appId); }
+    // Why entry's package may not install as appId (null: it may). shipped:
+    // builtinFor (an update of a built-in app, already checked to come from
+    // a Phoenix catalog the device ships with).
+    function publisherProblem(s, appId, entry, shipped) {
+        var src = sourceOf(s, entry.sourceId), rec = s.installed[appId];
+        // A built-in app: only its own update (shipped, for the same id).
+        if (isBuiltIn(appId) && !(shipped !== null && appId === entry.id)) return err("BUILT_IN", builtInText(appId));
+        if (s.sideloaded[appId]) return err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+        if (rec) {
+            if (rec.sourceId !== entry.sourceId) return err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+            // The same catalog, signed with another key since (the user
+            // trusted a new one): not the same publisher; a key the device
+            // pinned (an OS update) still is.
+            var now = signerOf(src);
+            if (rec.signer && now && rec.signer !== now && !(src && src.keyFromDevice)) return err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+            return null;
+        }
+        // On the device, but not installed here: put there another way.
+        if (removableApps[appId]) return err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+        return null;
+    }
+
+    // nova install's package (sideload {file, signer, signerName?}): a
+    // developer's .ipk from the paired computer whose key is signer
+    // (novad checked it on the connection). The same checks as a
+    // catalog's package (check: one web app, no Mojo, no native code; its
+    // own sign-in pages refused, C17), with what Developer Mode allows, and
+    // the publisher rules: a new app, or an update of this developer's own.
+    function sideload(p) {
+        var file = p && typeof p.file === "string" ? p.file : "";
+        var signer = p && typeof p.signer === "string" ? p.signer.trim() : "";
+        if (!file || !signer || /[\/\\]/.test(file) || file.charAt(0) === ".")
+            return Promise.resolve(fail("BAD_PARAMS", "file (a name in the sideload folder) and signer are required"));
+        if (!deps.sideload) return Promise.resolve(fail("UNSUPPORTED", "Sideloading is not available here"));
+        var appId = "", path = "";
+        return devMode().then(function (dev) {
+            if (!dev) throw err("NEEDS_DEVMODE", "Developer Mode is off");
+            return reconcile();
+        }).then(function () {
+            return Promise.resolve(deps.sideload.read(file, MAX_PACKAGE));
+        }).then(function (bytes) {
+            if (!bytes || !bytes.length) throw err("NOT_FOUND", "No such package in the sideload folder");
+            return check(bytes, { kind: "sideload" }, true, false, false).then(function (c) {
+                appId = c.app.id;
+                if (busy[appId]) throw err("BUSY", "It is being installed already");
+                var s = load(), mine = s.sideloaded[appId];
+                if (isBuiltIn(appId) || (s.installed[appId] && typeof s.installed[appId].builtin === "string"))
+                    throw err("BUILT_IN", builtInText(c.app.appinfo.title || appId));
+                if (s.installed[appId] || (mine && mine.signer !== signer) || (!mine && removableApps[appId]))
+                    throw err("OTHER_PUBLISHER", OTHER_PUBLISHER);
+                busy[appId] = true;
+                return Promise.resolve(deps.temp.write(appId + ".ipk", bytes)).then(function (where) {
+                    path = where;
+                    return osInstall(appId, path, c.developer, false);
+                }).then(function (r) {
+                    if (!r.ok) throw err("INSTALL_FAILED", r.error);
+                    var v = c.app.appinfo.version || c.pkg.control.Version || "";
+                    var s2 = load();
+                    s2.sideloaded[appId] = { signer: signer, signerName: String((p && p.signerName) || "").slice(0, 80), version: v,
+                                             installedAt: now().toISOString() };
+                    save(s2);
+                    log("sideloaded " + appId + " " + v + " from " + signer);
+                    var done = { returnValue: true, appId: appId, version: v };
+                    if (r.skipped && r.skipped.length) done.skipped = r.skipped;
+                    return done;
+                });
+            });
+        }).then(null, function (e) {
+            var r = errorReply(e);
+            if (appId) r.appId = appId;
+            log("sideload " + (appId || file) + ": " + r.errorText);
+            return r;
+        }).then(function (r) {
+            if (appId && r.errorCode !== "BUSY") delete busy[appId];
+            if (path) Promise.resolve(deps.temp.remove(path)).then(null, function () {});
+            Promise.resolve(deps.sideload && deps.sideload.remove && deps.sideload.remove(file)).then(null, function () {});
+            return r;
+        });
+    }
+
     function remove(p) {
         if (!p || !p.id) return Promise.resolve(fail("BAD_PARAMS", "id is required"));
         return new Promise(function (resolve) {
@@ -1164,6 +1398,7 @@ function createPackagesService(deps) {
                 // An update of a built-in app: the built-in one is back.
                 if (s.installed[p.id] && typeof s.installed[p.id].builtin === "string") r.builtin = s.installed[p.id].builtin;
                 delete s.installed[p.id];
+                delete s.sideloaded[p.id];
                 save(s);
             }
             return r;
@@ -1178,6 +1413,10 @@ function createPackagesService(deps) {
     var ownIcons = {};
     // The built-in apps on the device (not removable), by id: their versions.
     var builtinApps = {};
+    // The apps the user may remove that are on the device now, by id
+    // (reconcile): one this service has no record of was put there another
+    // way, by a publisher it cannot name.
+    var removableApps = {};
 
     // Apps removed some other way (the launcher) are forgotten here too; an
     // update of a built-in app removed so is gone once the app is no longer
@@ -1193,6 +1432,7 @@ function createPackagesService(deps) {
             var present = {}, removable = {};
             ownIcons = {};
             builtinApps = {};
+            removableApps = {};
             r.launchPoints.forEach(function (lp) {
                 present[lp.id] = true;
                 var own = !lp.launchPointId || lp.launchPointId === lp.id + "_default";
@@ -1212,13 +1452,57 @@ function createPackagesService(deps) {
                     if (!a.removable) builtinApps[a.id] = String(a.version || "");
                 }
             });
+            Object.keys(removable).forEach(function (id) { if (removable[id] && present[id]) removableApps[id] = true; });
             var s = load(), changed = false;
             Object.keys(s.installed).forEach(function (id) {
                 var updateGone = typeof s.installed[id].builtin === "string" && removable[id] === false;
                 if (!present[id] || updateGone) { delete s.installed[id]; changed = true; }
             });
+            Object.keys(s.sideloaded).forEach(function (id) {
+                if (!present[id] || removable[id] === false) { delete s.sideloaded[id]; changed = true; }
+            });
             if (changed) save(s);
         }, function () {});
+    }
+
+    // ---- Sign-in pages (C17 on the device; "Sign-in pages" above) -------------------
+
+    // {appId, templateId}: may the template's own sign-in page, in app
+    // appId, be shown? -> {returnValue: true, appId, templateId, allowed}
+    // and, refused, {reason, errorText}. reason: "app" (the page's app is
+    // neither built in nor installed as Phoenix's own), "template" (the
+    // template is not one that app carries).
+    function checkSignInPage(p) {
+        var appId = p && typeof p.appId === "string" ? p.appId : "";
+        var templateId = p && typeof p.templateId === "string" ? p.templateId : "";
+        if (!appId || !templateId) return Promise.resolve(fail("BAD_PARAMS", "appId and templateId are required"));
+        return reconcile().then(function () {
+            var s = load(), rec = s.installed[appId] || null;
+            var system = systemTemplates().filter(function (t) { return t && t.templateId === templateId; })[0] || null;
+            var inImage = !!system && system.appId === appId;
+            // Not removable: SAM runs the image's own copy (reconcile).
+            var builtin = Object.prototype.hasOwnProperty.call(builtinApps, appId);
+            var own = false, carries = false;
+            if (builtin) {
+                own = true;
+                carries = inImage;
+            } else if (rec) {
+                var update = typeof rec.builtin === "string";
+                // A package the image came with (preinstalled.json), or one
+                // installed from a Phoenix catalog the device ships with.
+                own = (rec.preinstalled === true && isPreinstalled(appId)) ||
+                      (phoenixSource(sourceOf(s, rec.sourceId)) && (appId.indexOf(PHOENIX_NAMESPACE) === 0 || update));
+                carries = (Array.isArray(rec.signIn) && rec.signIn.indexOf(templateId) >= 0) ||
+                          listedTemplates(appId).indexOf(templateId) >= 0 || (update && inImage);
+            }
+            var out = { returnValue: true, appId: appId, templateId: templateId, allowed: own && carries };
+            if (!out.allowed) {
+                out.reason = own ? "template" : "app";
+                out.errorText = THIRD_PARTY_SIGNIN;
+                log("sign-in page of " + templateId + " in " + appId + " refused (" + out.reason + ")");
+            }
+            return out;
+        });
     }
 
     function updatesOf(s) {
@@ -1370,6 +1654,8 @@ function createPackagesService(deps) {
         updateAll: updateAll,
         scheduled: scheduled,
         listAccountTypes: listAccountTypes,
+        checkSignInPage: checkSignInPage,
+        sideload: sideload,
         getAvailability: function () { return availabilityNow(); },
         setKind: function (p) {
             if (!p || availability.KINDS.indexOf(p.kind) < 0) return Promise.resolve(fail("BAD_PARAMS", "kind: one of " + availability.KINDS.join(", ")));

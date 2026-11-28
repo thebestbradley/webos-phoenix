@@ -37,6 +37,12 @@
 //       the app's requiredPermissions name; the app's main page in the package
 //   C16 the template's sign-up link (signUp: {url?, servers?: [{name, url}]}):
 //       https addresses only
+//   C17 a sign-in page of its own (validator.customUI) only in Phoenix's own
+//       connectors (isFirstParty): Accounts shows the page in a frame of its
+//       card, with Accounts' groups, which hold every Phoenix connector's
+//       sign-in group (docs/DEVICE-AUDIT.md). Until each page runs as its own
+//       connector (docs/ROADMAP.md, per-connector sign-in isolation), a
+//       third-party connector uses the standard sign-in
 //
 // Phase C4 (connector packages in the catalog) uses this: Catalog::submitPackage
 // takes a package with a service only when checkIpk finds no error (Ipk::check
@@ -67,6 +73,10 @@ final class Connector
                                      'org.webosphoenix.service.oauth', 'org.webosphoenix.service.keystore', 'org.webosphoenix.service.push',
                                      'com.webos.notification', 'org.webosports.service.messaging', 'org.webosphoenix.ongoing'];
 
+    /** Phoenix's namespace (isFirstParty). */
+    public const PHOENIX_NAMESPACE = 'org.webosphoenix';
+    /** C17's answer to a third-party connector's own sign-in page. */
+    public const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
     private const CALLBACKS = ['onCreate', 'onEnabled', 'onDelete', 'onCredentialsChanged', 'sync'];
     private const SYSBUS_REQUIRED = ['.service', '.role.json', '.api.json'];
 
@@ -75,6 +85,19 @@ final class Connector
      * @param string[] $namespaces the developer's (default: the app id's first two labels)
      * @return array{errors: string[], warnings: string[], appId: string, version: string, service: string, templates: string[], kinds: string[]}
      */
+    /**
+     * Phoenix's own connector: its app id is in Phoenix's namespace and it is checked with
+     * Phoenix's namespaces, which Catalog::submitPackage gives only to an admin's upload (a
+     * developer's org.webosphoenix.* id is refused there and in Phoenix-Web-Services); devices
+     * trust these from preinstalled.json (connector-kit checks.ts isFirstParty).
+     *
+     * @param string[] $namespaces
+     */
+    public static function isFirstParty(string $appId, array $namespaces): bool
+    {
+        return str_starts_with($appId, self::PHOENIX_NAMESPACE . '.') && in_array(self::PHOENIX_NAMESPACE, $namespaces, true);
+    }
+
     public static function check(array $files, array $namespaces = []): array
     {
         $errors = [];
@@ -121,6 +144,7 @@ final class Connector
             return false;
         };
         $nsText = implode(', ', $namespaces);
+        $firstParty = self::isFirstParty($appId, $namespaces);
 
         // C12
         foreach ($files as $path => $bytes) {
@@ -239,7 +263,7 @@ final class Connector
             }
             $list = is_array($t) && array_is_list($t) && $t !== [] ? $t : [$t];
             foreach ($list as $tpl) {
-                self::checkTemplate($tpl, "public/accounts/{$m[1]}/", $m[1], $files, $appId, $service, $kinds, $inNs, $nsText, $errors, $warnings, $out);
+                self::checkTemplate($tpl, "public/accounts/{$m[1]}/", $m[1], $files, $appId, $service, $kinds, $inNs, $nsText, $firstParty, $errors, $warnings, $out);
             }
         }
         if (!$own) {
@@ -466,7 +490,7 @@ final class Connector
     }
 
     private static function checkTemplate($tpl, string $dir, string $folder, array $files, string $appId, string $service, array $kinds,
-                                          callable $inNs, string $nsText, array &$errors, array &$warnings, array &$out): void
+                                          callable $inNs, string $nsText, bool $firstParty, array &$errors, array &$warnings, array &$out): void
     {
         if (!is_array($tpl) || (array_is_list($tpl) && $tpl !== [])) {
             $errors[] = "C3 $dir: a template is an object";
@@ -564,6 +588,11 @@ final class Connector
             } elseif (!isset($files[(string) ($v['customUI']['name'] ?? '')])) {
                 $errors[] = "C7 $id: the sign-in page " . ($v['customUI']['name'] ?? '') . ' is not in the app';
             }
+        }
+
+        // C17 a sign-in page of its own: Phoenix's own connectors only
+        if (is_array($v) && isset($v['customUI']) && !$firstParty) {
+            $errors[] = "C17 $id: " . self::THIRD_PARTY_SIGNIN;
         }
 
         // C8

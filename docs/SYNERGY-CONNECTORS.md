@@ -323,7 +323,7 @@ calendar directory, ratings, terms notes.
 ```
 org.example.foo/                       hidden app, appinfo.json: "phoenix": {"hidden": true},
   appinfo.json                           "requiredPermissions": ["accounts.transport"]
-  accounts/wizard.html                 optional custom sign-in page (validator.customUI)
+  accounts/wizard.html                 optional custom sign-in page (validator.customUI; Phoenix's own connectors only for now, rule C17)
   public/accounts/org.example.foo/     the template + images/ (32, 48 px and @2x/@3x)
     org.example.foo.json
   configuration/db/kinds/              own kinds, each "extends" a generic kind, "owner": the service

@@ -49,7 +49,6 @@ News Feed example is the same with its code written:
 ```
 org.example.feeds/                      hidden app ("phoenix": {"hidden": true})
   appinfo.json  index.html  icon.png
-  accounts/signin.html                  the sign-in page (validator.customUI)
   public/accounts/org.example.feeds/    the account template, and its pictures
     org.example.feeds.json              (images/, 32 and 48 px with @2x and @3x)
   configuration/db/kinds/               org.example.feeds.entry, .state, .item
@@ -64,6 +63,18 @@ org.example.feeds/                      hidden app ("phoenix": {"hidden": true})
     test/fixture.js                     the conformance suite's fixture
 ```
 
+The `.perm.json` holds the groups the kit's own calls need, besides your
+code's: `database.operation`, `activity.operation`, and the accounts
+service's two read groups, `phoenix.accounts.info` (`getAccountInfo`) and
+`phoenix.accounts.read-credentials` (`readCredentials`), which the kit calls
+for every account it works on (`ctx.account`, `ctx.credentials`). Without
+them `ctx.credentials` is empty on a device. Which accounts the service may
+read is the template's `readPermissions`, checked per caller, so list the
+service's own name there. Never ask for the whole accounts service
+(`phoenix.appservices.accounts`, which can create, change and delete any
+account). `tools/check-luna.py` charges the kit's calls to each service that
+runs on it (`KIT_CALLS` in `tools/devicecheck/luna.py`).
+
 The whole connector (`service/connector.js`, shortened):
 
 ```js
@@ -75,9 +86,10 @@ module.exports = kit.defineConnector({
     templateIds: ["org.example.feeds"],
     kinds: { state: "org.example.feeds.state:1", item: "org.example.feeds.item:1" },
 
-    // The template's validator: the sign-in page sends {config: {url}}.
+    // The template's validator: Accounts' standard sign-in sends the feed's
+    // address as the user name (the template's loc_usernameLabel).
     validate: function (ctx, p) {
-        var url = new URL(p.config.url).href;
+        var url = new URL((p.config && p.config.url) || p.username).href;
         ctx.http.allowHost(new URL(url).host);
         return fetchFeed(ctx, url, null).then(function (r) {
             return { username: url, credentials: { common: { url: url } },
@@ -136,7 +148,7 @@ up"**:
 - on the sign-in step in Accounts, under the fields: the accounts
   library's own user name and password page shows it for a template with a
   `signUp` (Phoenix's compat overlay, `lib/accounts/source/phoenix-signup.js`);
-  a sign-in page of your own adds `{kind: "Accounts.SignUpLink", name:
+  a sign-in page of its own (Phoenix's own connectors only, rule C17) adds `{kind: "Accounts.SignUpLink", name:
   "signUp"}` and calls `this.$.signUp.setTemplate(params.template)` (the
   Fediverse's `accounts/FediverseWizard.js` does). Suggested servers show as
   "Or join a, b or c";
@@ -148,13 +160,26 @@ The link opens in the browser; nothing is sent to the service. The
 Fediverse's is joinmastodon.org's list of servers; a feed reader needs no
 account and has none.
 
-The sign-in page (`accounts/signin.html`) is plain HTML: the Accounts app
-loads it in a frame with `?enyoWindowParams={mode, template, account}`, it
-calls the validator over the bus (`PalmServiceBridge`), and posts its answer
-to the parent as `"enyoCrossAppResult=" + JSON` (Enyo's `CrossAppResult.js`):
+**The sign-in is Accounts' standard one**: its own user name and password
+page, captioned by the template's `loc_usernameLabel` and
+`loc_passwordLabel`, calls your validator with them. Both fields must be
+filled, so the News Feed example takes the feed's address as the user name
+and says its password is not used.
+
+A template may name a sign-in page of its app instead
+(`validator.customUI`), but for now **only Phoenix's own connectors may**
+(rule C17: "Custom sign-in pages from third-party connectors aren't
+supported yet; use the connector kit's standard sign-in"). The Accounts app
+shows such a page in a frame of its own card, and the page's calls go out
+with Accounts' permissions, which include every Phoenix connector's sign-in
+methods (docs/DEVICE-AUDIT.md). Third-party pages come back when each page
+runs as its own connector ([ROADMAP.md](ROADMAP.md), per-connector sign-in
+isolation). Phoenix's pages are plain HTML (or Enyo): Accounts loads one with
+`?enyoWindowParams={mode, template, account}`, it calls the validator over
+the bus (`PalmServiceBridge`), and posts its answer to the parent as
+`"enyoCrossAppResult=" + JSON` (Enyo's `CrossAppResult.js`):
 `{returnValue: true, template, templateId, username, credentials, config}`,
-or `{returnValue: false}` to cancel. Without a custom page, Accounts shows its
-own user name and password page and calls the validator with them.
+or `{returnValue: false}` to cancel.
 
 A feed reader posts nothing, so the example has no `share` (section 7) and
 is in no share sheet.
@@ -644,6 +669,7 @@ starts with its rule:
 | C14 | share targets: each written from the definition's `share` (none by hand), its template and service the package's, `accepts` and `audience` well formed, `types` what `accepts` takes; on a folder, `validate` also compares it with the definition |
 | C15 | sharing reaches the service: `<service>/share` in an `.api.json` group the app's `requiredPermissions` names; the app's main page (the compose page) in the package |
 | C16 | the template's `signUp`: `https://` addresses only (`url`, `servers[].url`), each server with a name |
+| C17 | a sign-in page of its own (`validator.customUI`) only in Phoenix's own connectors (an `org.webosphoenix.*` app checked with Phoenix's namespaces, which the catalogs give only to Phoenix's uploads): the page would run with Accounts' permissions; use the standard sign-in (section 2) |
 
 `pack` writes `appinfo.json`'s share target from the definition (section
 7), validates, then writes the `.ipk` the Marketplace takes: every
@@ -737,7 +763,8 @@ once (the key comes from the catalog's own data folder, not the network).
    checked), its service starts in the page, its kinds are put, and its
    template is in Accounts.
 4. **Add the account**: **Set up** opens Accounts at your template: your
-   sign-in page (`customUI`) or the template's user name and password, then
+   the template's user name and password (Phoenix's own connectors may have
+   a sign-in page of their own, `customUI`, rule C17), then
    your validator, then Create Account.
 5. **Sync**: Contacts' and Calendar's **Sync now**, or the account's own
    sync; periodic syncs do not run in the simulator (no background
@@ -758,7 +785,8 @@ the runtime's "Synergy connectors on the kit" block. Any other: pack it and
 install the `.ipk` with Developer Mode on (Settings > Developer Mode), through
 `com.webos.appInstallService/install` with `developerMode: true` (as the
 Marketplace installs in Developer Mode); without it the install is refused,
-as on a device. Its service then runs in the page, its
+as on a device. On a device, `nova install` does it (the Marketplace's
+service: a new app, or an update of one the same computer installed). Its service then runs in the page, its
 template is in Accounts, and its kinds are put from its
 `configuration/db/kinds`. The simulator plays the device's parts: HTTP
 through the host's proxy (bytes too), avatars kept in the Files store under

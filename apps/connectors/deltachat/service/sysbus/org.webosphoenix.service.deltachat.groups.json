@@ -7,5 +7,11 @@
     ],
     "deltachat.account": [
         "oem"
+    ],
+    "phoenix.deltachat.signin": [
+        "oem"
+    ],
+    "phoenix.deltachat.messaging": [
+        "oem"
     ]
 }

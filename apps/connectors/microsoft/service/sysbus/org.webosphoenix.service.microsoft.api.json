@@ -10,5 +10,10 @@
     "microsoft.account": [
         "org.webosphoenix.service.microsoft/providerInfo",
         "org.webosphoenix.service.microsoft/signIn"
+    ],
+    "phoenix.microsoft.signin": [
+        "org.webosphoenix.service.microsoft/providerInfo",
+        "org.webosphoenix.service.microsoft/checkCredentials",
+        "org.webosphoenix.service.microsoft/signIn"
     ]
 }
