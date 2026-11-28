@@ -1,0 +1,14 @@
+[Unit]
+Description=webOS Phoenix: settingsservice's descriptions of Phoenix's keys
+# Before the shell, which reads and may set the brightness as it starts.
+After=settings-service.service ls-hubd.service
+Wants=settings-service.service
+Before=surface-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/phoenix-settings-desc
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
