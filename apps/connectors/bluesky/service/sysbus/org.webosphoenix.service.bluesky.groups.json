@@ -10,5 +10,8 @@
     ],
     "phoenix.connector.share": [
         "oem"
+    ],
+    "phoenix.bluesky.signin": [
+        "oem"
     ]
 }

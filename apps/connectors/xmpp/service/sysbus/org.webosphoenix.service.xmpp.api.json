@@ -15,5 +15,8 @@
         "org.webosphoenix.service.xmpp/markRead",
         "org.webosphoenix.service.xmpp/chatState",
         "org.webosphoenix.service.xmpp/enablePush"
+    ],
+    "phoenix.xmpp.signin": [
+        "org.webosphoenix.service.xmpp/checkCredentials"
     ]
 }

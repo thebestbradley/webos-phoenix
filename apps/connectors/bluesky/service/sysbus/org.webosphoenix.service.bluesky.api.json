@@ -15,5 +15,10 @@
     ],
     "phoenix.connector.share": [
         "org.webosphoenix.service.bluesky/share"
+    ],
+    "phoenix.bluesky.signin": [
+        "org.webosphoenix.service.bluesky/providerInfo",
+        "org.webosphoenix.service.bluesky/checkCredentials",
+        "org.webosphoenix.service.bluesky/signIn"
     ]
 }
