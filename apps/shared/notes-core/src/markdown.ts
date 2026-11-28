@@ -156,8 +156,20 @@ export function summarize(src: string): Summary {
     const lines = textLines(src);
     return {
         title: lines[0] ?? "New Note",
-        preview: lines.slice(1).join(" ").slice(0, 200) || "No additional text",
+        preview: clip(lines.slice(1).join(" "), 200) || "No additional text",
     };
+}
+
+/** At most max characters, cut between words with "…" when cut, and never
+ *  in the middle of a character (an emoji is two UTF-16 units). Flutter
+ *  Notes' markdown.dart cuts the same way. */
+export function clip(text: string, max: number): string {
+    if (text.length <= max) return text;
+    let cut = text.slice(0, max);
+    if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+    const space = cut.lastIndexOf(" ");
+    if (space > max / 2) cut = cut.slice(0, space);
+    return cut.trimEnd() + "…";
 }
 
 /** Words in the note (for the note's info). */

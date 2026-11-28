@@ -71,6 +71,18 @@ describe("summaries", () => {
         expect(summarize("Just a title").preview).toBe("No additional text");
     });
 
+    it("cuts a long preview between words, and says so", () => {
+        const long = "Title\n\n" + "word ".repeat(39) + "and code";
+        const p = summarize(long).preview;
+        expect(p.endsWith("…")).toBe(true);
+        expect(p.length).toBeLessThanOrEqual(201);
+        expect(p).not.toMatch(/\bco…$/);
+        expect(p.slice(0, -1).trim().split(" ").every((w) => w === "word" || w === "and")).toBe(true);
+        // Never half an emoji (a UTF-16 pair cut in two).
+        const emoji = summarize("T\n\n" + "😀".repeat(150)).preview;
+        expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(emoji)).toBe(false);
+    });
+
     it("reads links, tables and code as text", () => {
         expect(inlineText("see [the site](https://x.org) &amp; more")).toBe("see the site & more");
         expect(textLines("| a | b |\n| - | - |\n| 1 | 2 |")).toEqual(["a b", "1 2"]);

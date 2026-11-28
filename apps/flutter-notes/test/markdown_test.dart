@@ -50,6 +50,9 @@ void main() {
       expect(summarize('').title, 'New Note');
       expect(summarize('').preview, 'No additional text');
       expect(summarize('Just a title').preview, 'No additional text');
+      final long = summarize('Title\n\n${'word ' * 39}and code').preview;
+      expect(long.endsWith('…'), isTrue);
+      expect(long.endsWith('co…'), isFalse);
     });
 
     test('reads links, tables and code as text', () {
