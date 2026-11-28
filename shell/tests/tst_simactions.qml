@@ -214,6 +214,32 @@ Item {
             compare(st.icon, "keyboard-show");
         }
 
+        // Device > Capture Keyboard: a check box with its chord, the switch
+        // itself phoenix-sim's (SimKeyCapture; build/simkeycapture-test);
+        // without it (here) nothing happens and it stays unchecked. On
+        // screen a moment: on, with the chord that lets go; off.
+        function test_captureKeyboard() {
+            var e = entry("captureKeyboard");
+            verify(e, "listed");
+            compare(e.menu, "device");
+            verify(e.checkable && e.run);
+            compare(e.keys, []);
+            compare(e.keyText, Qt.platform.os === "osx" ? "⌃⌥" : "Ctrl+Alt");
+            verify(e.tip.length > 0);
+            sim.item.simTrigger("captureKeyboard");
+            verify(!sim.item.simActionChecked("captureKeyboard"));
+
+            var hint = findChild(sim.item, "simKeyCaptureHint");
+            verify(hint);
+            verify(!hint.visible);
+            sim.item.simKeyboardCaptured(true, "⌃⌥");
+            verify(hint.visible);
+            compare(hint.children[0].text, "Keyboard captured: ⌃⌥ lets go");
+            sim.item.simKeyboardCaptured(false, "⌃⌥");
+            compare(hint.children[0].text, "Keyboard let go");
+            tryVerify(function () { return !hint.visible; }, 3000);
+        }
+
         // The toolbar's keyboard button: with no field in use it opens Just
         // Type and the keyboard comes up for its field; again, it goes down.
         // Not over the lock screen, which has no field to type into here.

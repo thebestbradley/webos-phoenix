@@ -197,6 +197,7 @@ it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:175,1
 it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:258-332,346,558-574,588 · shell/CMakeLists.txt:69-75,127-197",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
     ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
+    ("QT_QPA_PLATFORM=offscreen build/simkeycapture-test", "Device > Capture Keyboard: its chord, on and off"),
     ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
     ("python3 tools/get-wakeword.py && build/wakeword-test", "fetches the wake-word model first"), "build/simnet-test", ("build/useragent-test", "the user agent policy: Chrome's version on its cadence, the strings per form factor"), "build/simmarketplace-test", "build/localmodels-test",
     ("build/renderinfo-test", "which renderers count as no GPU, where the shell's blur steps down"),

@@ -843,6 +843,12 @@ The menu bar and its Window menu:
 QT_QPA_PLATFORM=offscreen build/simchrome-test
 ```
 
+Device > Capture Keyboard: its chord, on and off:
+
+```sh
+QT_QPA_PLATFORM=offscreen build/simkeycapture-test
+```
+
 The simulators' registry: Window > Simulators:
 
 ```sh

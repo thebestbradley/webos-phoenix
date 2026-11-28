@@ -333,6 +333,18 @@ bar has (CI runs it on Linux and macOS). Its icons need Qt's SVG plugin
 (`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
 show their names.
 
+**Device > Capture Keyboard** (⌃⌥ on a Mac, Ctrl+Alt elsewhere, pressed
+together and let go alone, turns it on and off) gives the device the keys
+the computer keeps for itself, as a virtual machine's window does: on a Mac
+⌘Tab, ⌘Space, ⌘H, ⌘Q and Mission Control's keys (so the shell's ⌘Tab card
+switching can be tried), under X11 the window manager's Alt+Tab and
+workspace keys. The simulator's own keys keep working, the window's title
+says "Keyboard Captured", and it lets go when another app comes to the
+front. On a Mac it needs Accessibility access for the app you started the
+simulator from (Terminal, iTerm, …; System Settings > Privacy & Security >
+Accessibility): the simulator asks the first time and says which app.
+⌘⌥Esc stays macOS's. Wayland lets no program take the keyboard.
+
 **The Marketplace's catalog.** The Marketplace reads the Phoenix catalog
 from `http://127.0.0.1:8088/`, a PHP service in `server/marketplace` that
 runs on this computer for now. Start it with **Services > Marketplace

@@ -74,7 +74,8 @@ if(PHOENIX_BUILD_SIM)
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
     add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simnova.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
-                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h sim/siminstances.cpp sim/siminstances.h)
+                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h sim/siminstances.cpp sim/siminstances.h
+                               sim/simkeycapture.cpp sim/simkeycapture.h)
     # Network: the other simulators' sockets (SimInstances, QLocalSocket).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network phoenix-pty-core)
@@ -111,10 +112,12 @@ if(PHOENIX_BUILD_SIM)
         # Its name in the menu bar's application menu and About box: an
         # Info.plist in the program itself (it is not an .app bundle).
         target_link_options(phoenix-sim PRIVATE "LINKER:-sectcreate,__TEXT,__info_plist,${CMAKE_CURRENT_SOURCE_DIR}/sim/Info.plist")
-        # What AppKit says of the menu bar, for --check-chrome (CI).
+        # What AppKit says of the menu bar, for --check-chrome (CI); Device >
+        # Capture Keyboard's event tap (ApplicationServices: CGEventTap, the
+        # Accessibility check).
         enable_language(OBJCXX)
-        target_sources(phoenix-sim PRIVATE sim/simmac.mm sim/simmac.h)
-        target_link_libraries(phoenix-sim PRIVATE "-framework AppKit")
+        target_sources(phoenix-sim PRIVATE sim/simmac.mm sim/simmac.h sim/simkeycapture_mac.mm)
+        target_link_libraries(phoenix-sim PRIVATE "-framework AppKit" "-framework ApplicationServices")
     endif()
     if(TARGET Qt6::WebEngineQuick)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
@@ -159,14 +162,21 @@ if(PHOENIX_BUILD_SIM)
     # The menu bar around the screen, its Window menu's cards, with the
     # screen off too (CI: QT_QPA_PLATFORM=offscreen build/simchrome-test).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Test)
-    add_executable(simchrome-test sim/simchrome_test.cpp sim/simchrome.cpp sim/simchrome.h sim/siminstances.cpp sim/siminstances.h)
+    add_executable(simchrome-test sim/simchrome_test.cpp sim/simchrome.cpp sim/simchrome.h sim/siminstances.cpp sim/siminstances.h
+                                  sim/simkeycapture.cpp sim/simkeycapture.h)
     target_link_libraries(simchrome-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network Qt6::Test)
     target_compile_definitions(simchrome-test PRIVATE PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}" PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # Its stand-in for sim.qml imports Phoenix.Native (UserActivity).
     add_dependencies(simchrome-test phoenix-native)
+    # Device > Capture Keyboard's chord, on and off, and letting go (CI:
+    # QT_QPA_PLATFORM=offscreen build/simkeycapture-test).
+    add_executable(simkeycapture-test sim/simkeycapture_test.cpp sim/simkeycapture.cpp sim/simkeycapture.h)
+    target_link_libraries(simkeycapture-test PRIVATE Qt6::Gui)
     if(APPLE)
-        target_sources(simchrome-test PRIVATE sim/simmac.mm sim/simmac.h)
-        target_link_libraries(simchrome-test PRIVATE "-framework AppKit")
+        target_sources(simchrome-test PRIVATE sim/simmac.mm sim/simmac.h sim/simkeycapture_mac.mm)
+        target_link_libraries(simchrome-test PRIVATE "-framework AppKit" "-framework ApplicationServices")
+        target_sources(simkeycapture-test PRIVATE sim/simkeycapture_mac.mm)
+        target_link_libraries(simkeycapture-test PRIVATE "-framework AppKit" "-framework ApplicationServices")
     endif()
     if(PHOENIX_XCB_FOUND)
         foreach(_target phoenix-sim simchrome-test)

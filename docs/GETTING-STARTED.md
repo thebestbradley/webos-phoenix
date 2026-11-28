@@ -222,6 +222,14 @@ need fn**, because macOS keeps them for itself (the menus and the shortcuts
 window say "fn F4"). You can change that in System Settings > Keyboard >
 "Use F1, F2, etc. keys as standard function keys".
 
+macOS keeps some keys for itself (⌘Tab, ⌘Space, ⌘H, Mission Control's).
+To give them to the device, for instance to try ⌘Tab between cards, choose
+**Device > Capture Keyboard** or press ⌃⌥ alone; ⌃⌥ again lets go, and so
+does bringing another app to the front. The first time, macOS asks for
+Accessibility access for the app you started the simulator from (Terminal,
+for example): turn it on in System Settings > Privacy & Security >
+Accessibility and choose Capture Keyboard again.
+
 The simulator keeps the device's data (apps' data, installed apps, media) in
 `~/Library/Application Support/webos-phoenix/phoenix-sim/` and its own
 settings (First Use done, window, Touchstone) in

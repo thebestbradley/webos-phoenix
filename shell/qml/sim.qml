@@ -930,6 +930,39 @@ Item {
         }
     }
 
+    // Device > Capture Keyboard turned on or off (phoenix-sim): said on the
+    // screen a moment, as a virtual machine's window says how to let go.
+    function simKeyboardCaptured(on, chord) {
+        keyCaptureLabel.text = on ? qsTr("Keyboard captured: %1 lets go").arg(chord) : qsTr("Keyboard let go");
+        keyCaptureHint.visible = true;
+        keyCaptureHintTimer.interval = on ? 3000 : 1500;
+        keyCaptureHintTimer.restart();
+    }
+    Rectangle {
+        id: keyCaptureHint
+        objectName: "simKeyCaptureHint"
+        visible: false
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 36
+        width: keyCaptureLabel.implicitWidth + 24
+        height: keyCaptureLabel.implicitHeight + 10
+        radius: height / 2
+        color: "#cc202020"
+        z: 10
+        Text {
+            id: keyCaptureLabel
+            anchors.centerIn: parent
+            color: "white"
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+        }
+        Timer {
+            id: keyCaptureHintTimer
+            onTriggered: keyCaptureHint.visible = false
+        }
+    }
+
     // The "Dismissing Cards" tutorial was shown: not again.
     Connections {
         target: windows
@@ -1079,6 +1112,22 @@ Item {
                   shell.startJustType("");
               }
           } },
+        { separator: true, menu: "device" },
+        // The keys the computer keeps for itself (a Mac's ⌘Tab, ⌘Space, ⌘H,
+        // Mission Control; a window manager's Alt+Tab) to the device, as a
+        // virtual machine's window takes them, until the chord again
+        // (phoenix-sim's SimKeyCapture; on a Mac it needs Accessibility
+        // access for the app the simulator was started from).
+        { id: "captureKeyboard", menu: "device", text: qsTr("Capture Keyboard"),
+          keyText: Qt.platform.os === "osx" ? "\u2303\u2325" : "Ctrl+Alt",
+          tip: Qt.platform.os === "osx"
+               ? qsTr("macOS's own shortcuts (⌘Tab, ⌘Space, ⌘H, Mission Control) go to the device; ⌃⌥ alone turns it on and off")
+               : qsTr("The window manager's shortcuts (Alt+Tab, the workspace keys) go to the device; Ctrl+Alt alone turns it on and off"),
+          run: function () {
+              if (typeof simChrome !== "undefined" && simChrome)
+                  simChrome.toggleKeyboardCapture();
+          },
+          checked: function () { return typeof simChrome !== "undefined" && !!simChrome && simChrome.keyboardCaptured(); } },
 
         // Simulate: what happens to the device. Incoming calls and messages
         // (SimWindowSource.simulateIncomingCall / Sms / Mms / Im).
