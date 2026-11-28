@@ -29,7 +29,7 @@ import { loadCommonJs } from "../../../shared/connector-kit/src/test-support";
 import * as memdb from "@phoenix/synckit/src/test/memdb.js";
 
 const require = createRequire(__filename);
-const { createFakeSftp, pipe } = require("./test/fake-sftp.cjs");
+const { createFakeSftp, demoServer, pipe } = require("./test/fake-sftp.cjs");
 const oauthLib = require("../../../../services/oauth/oauthservice.js");
 const drives = loadCommonJs(join(__dirname, "connector.js"));
 const ssh = {
@@ -123,6 +123,20 @@ describe("SSH keys", () => {
 });
 
 // ---- The transport and authentication ---------------------------------------------------------------
+
+// The simulator's demo server, files.example: each page that reaches it
+// loads its own (the sign-in page in Accounts, the page keeping the
+// drives' connections), so its key must be the same in each, as a real
+// server's is. Seen in phoenix-sim: signed in and trusted, then "the key
+// of files.example has changed" on the first folder made.
+describe("the demo server (files.example)", () => {
+    it("has the same host key every time it is made", () => {
+        const a = demoServer(), b = demoServer();
+        expect(a.hostKey.fingerprint).toMatch(/^SHA256:/);
+        expect(b.hostKey.fingerprint).toBe(a.hostKey.fingerprint);
+        a.close?.(); b.close?.();
+    });
+});
 
 describe("SSH transport and sign-in", () => {
     const T = ssh.transport;
