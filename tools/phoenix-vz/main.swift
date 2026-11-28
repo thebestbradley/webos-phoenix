@@ -14,7 +14,9 @@
 //
 // --disk     a raw disk: the A/B disk (.wic, make-vm-packages.sh raw) or,
 //            with --kernel, the kernel-boot ext4. It is written to: give
-//            it a copy (an APFS clone costs nothing: cp -c).
+//            it a copy (an APFS clone costs nothing: cp -c). Or an NBD
+//            URL (nbd://127.0.0.1:10809/phoenix): a disk served from where
+//            it was built, nothing downloaded (nbd-serve.py, beside this).
 // --efi FILE boot through EFI firmware (VZEFIBootLoader); FILE is the EFI
 //            variable store, made if missing. The default when --kernel
 //            is not given.
@@ -88,7 +90,10 @@ func parse() -> Options {
     }
     if o.disk.isEmpty { fail("--disk is required") }
     if o.cpus < 1 || o.memory < 512 { fail("bad --cpus or --memory") }
-    if o.kernel == nil && o.efi == nil { o.efi = o.disk + ".nvram" }
+    if o.kernel == nil && o.efi == nil {
+        if o.disk.hasPrefix("nbd://") { fail("an NBD disk needs --efi FILE") }
+        o.efi = o.disk + ".nvram"
+    }
     return o
 }
 
@@ -115,7 +120,16 @@ func configuration(_ o: Options) throws -> VZVirtualMachineConfiguration {
         c.bootLoader = b
     }
 
-    let disk = try VZDiskImageStorageDeviceAttachment(url: URL(fileURLWithPath: o.disk), readOnly: false)
+    let disk: VZStorageDeviceAttachment
+    if o.disk.hasPrefix("nbd://") {
+        guard let u = URL(string: o.disk) else { fail("bad NBD URL \(o.disk)") }
+        guard #available(macOS 14.0, *) else { fail("NBD disks need macOS 14") }
+        disk = try VZNetworkBlockDeviceStorageDeviceAttachment(url: u, timeout: 120,
+                                                               isForcedReadOnly: false,
+                                                               synchronizationMode: .full)
+    } else {
+        disk = try VZDiskImageStorageDeviceAttachment(url: URL(fileURLWithPath: o.disk), readOnly: false)
+    }
     c.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: disk)]
 
     let net = VZVirtioNetworkDeviceConfiguration()
