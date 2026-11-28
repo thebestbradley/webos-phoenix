@@ -18,8 +18,9 @@
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json; filemanager.operation is apps/files/service's).",
     "requiredPermissions": [
-        "filemanager.operation",
         "application.launcher",
-        "application.operation"
+        "application.operation",
+        "filemanager.operation",
+        "systemmanager.query"
     ]
 }

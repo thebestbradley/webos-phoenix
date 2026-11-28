@@ -32,6 +32,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it installs the connector's package through OSE's installer and lists the account templates from the Messaging page, as the Marketplace's service and Accounts would, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.messaging": ["applicationinstall.management", "phoenix.accounts.list"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
@@ -68,7 +71,7 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;

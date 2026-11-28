@@ -38,6 +38,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it asks the application manager for a PDF's handler, as Email does, from PDF View's page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.pdfview": ["phoenix.appmanager.query"]}};
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -78,7 +81,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     try {
         await waitForServer(`${origin}/apps.json`, 10000);
         const browser = await chromium.launch();
@@ -165,7 +168,9 @@ async function main() {
         // Handed over by other apps.
         const pdfHandlers = await luna("luna://com.webos.applicationManager/listAllHandlersForMime", { mime: "application/pdf" });
         check((pdfHandlers.resources || [])[0]?.appId === PDF, "PDF View is the app for application/pdf");
-        const info = await luna("luna://com.webos.applicationManager/getResourceInfo", { uri: `file://${DIR}/field-guide.pdf`, mime: "application/pdf" });
+        // Email asks the legacy name (palm://com.palm.applicationManager), Phoenix's
+        // application manager on a device; SAM has no getResourceInfo.
+        const info = await luna("luna://com.palm.applicationManager/getResourceInfo", { uri: `file://${DIR}/field-guide.pdf`, mime: "application/pdf" });
         check(info.appIdByExtension === PDF, "Email's getResourceInfo names PDF View for a PDF attachment");
         host.length = 0;
         await luna("luna://com.webos.applicationManager/open", { target: `${DIR}/field-guide.pdf` });

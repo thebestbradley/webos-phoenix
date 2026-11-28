@@ -42,6 +42,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it watches the temp db from the Tasks page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.tasks": ["tempdatabase.operation"]}};
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "db8-pages-tests");
@@ -74,7 +77,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     let browser;
     try {
         await waitForServer(`${origin}/apps.json`, 10000);

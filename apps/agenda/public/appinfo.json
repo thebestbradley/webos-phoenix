@@ -21,8 +21,9 @@
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",
     "requiredPermissions": [
-        "database.operation",
         "application.launcher",
-        "settings.read"
+        "database.operation",
+        "settings.read",
+        "systemsettings.query"
     ]
 }

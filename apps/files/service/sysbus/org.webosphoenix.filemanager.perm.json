@@ -1,7 +1,8 @@
 {
     "org.webosphoenix.filemanager": [
         "accounts.operation",
-        "drives.files"
+        "drives.files",
+        "phoenix.accounts.list"
     ],
     "com.webos.surfacemanager": [
         "filemanager.operation"

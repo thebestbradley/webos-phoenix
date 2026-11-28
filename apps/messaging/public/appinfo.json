@@ -4,6 +4,11 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "application.launcher",
+        "database.operation",
+        "tempdatabase.operation"
+    ],
     "title": "Messaging",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

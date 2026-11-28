@@ -30,8 +30,11 @@
     "requiredPermissions": [
         "application.launcher",
         "application.operation",
-        "mediaindexer.operation",
+        "audio.operation",
+        "audiofocus.operation",
+        "devices.keys",
         "filemanager.operation",
-        "audio.operation"
+        "mediaindexer.operation",
+        "systemsettings.query"
     ]
 }

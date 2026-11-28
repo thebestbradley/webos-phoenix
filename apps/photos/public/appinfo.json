@@ -19,7 +19,8 @@
         "application.launcher",
         "application.operation",
         "mediaindexer.operation",
-        "systemsettings.management"
+        "systemsettings.management",
+        "systemsettings.query"
     ],
     "phoenix": {
         "launchParams": ["imageList", "target", "dockMode", "windowType"]

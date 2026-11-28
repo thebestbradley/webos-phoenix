@@ -209,6 +209,7 @@ def load_phoenix(root):
             if fn.endswith(".role.json"):
                 for n in data.get("allowedNames", []):
                     e = services.setdefault(n, {"methods": {}, "outbound": [], "dir": rel(root, d)})
+                    e["role"] = True
                     for perm in data.get("permissions", []):
                         if fnmatch.fnmatchcase(n, perm.get("service", "")):
                             e["outbound"] += perm.get("outbound", [])
@@ -606,9 +607,11 @@ def compat_permissions(root):
     return {k: v for k, v in data.items() if not k.startswith("//") and isinstance(v, list)}
 
 
-def check(root):
-    SUGGEST.clear()
-    f = Findings(CHECKER)
+def model(root):
+    """The bus as the hub sees it, from the sysbus files: what check() checks
+    the code against and bus_table() gives the simulator's runtime, so the
+    two cannot disagree. {ose, ose_services, phoenix, phoenix_perms,
+    aliases, all_groups, clients, everyone, provider}."""
     ose = load_ose()
     ose_services = ose["services"]
     phoenix, phoenix_perms = load_phoenix(root)
@@ -627,11 +630,6 @@ def check(root):
 
     cl = clients(root, phoenix_perms)
     kit = kit_calls(root)
-    for svc, method, where in kit:
-        if (svc, method) not in KIT_CALLS and (svc, method) not in KIT_NOT_CALLS:
-            f.add("kit-call", "%s/%s" % (svc, method),
-                  "the connector kit calls %s/%s, which check-luna's KIT_CALLS (tools/devicecheck/luna.py) does not "
-                  "charge to the connectors" % (svc, method), where)
     shell = [c for c in cl if c.kind == "shell"][0]
     for pat, entry in ose.get("clients", {}).items():
         if fnmatch.fnmatchcase(shell.name, pat) and pat != "*" and not pat.endswith(".*"):
@@ -650,6 +648,24 @@ def check(root):
         if name in ose_services:
             return "ose", ose_services[name]
         return None, None
+
+    return {"ose": ose, "ose_services": ose_services, "phoenix": phoenix, "phoenix_perms": phoenix_perms,
+            "aliases": aliases, "all_groups": all_groups, "clients": cl, "shell": shell,
+            "everyone": everyone, "provider": provider, "kit": kit}
+
+
+def check(root):
+    SUGGEST.clear()
+    f = Findings(CHECKER)
+    m = model(root)
+    ose_services, phoenix, phoenix_perms = m["ose_services"], m["phoenix"], m["phoenix_perms"]
+    aliases, all_groups, cl, shell, provider = m["aliases"], m["all_groups"], m["clients"], m["shell"], m["provider"]
+    kit = m["kit"]
+    for svc, method, where in kit:
+        if (svc, method) not in KIT_CALLS and (svc, method) not in KIT_NOT_CALLS:
+            f.add("kit-call", "%s/%s" % (svc, method),
+                  "the connector kit calls %s/%s, which check-luna's KIT_CALLS (tools/devicecheck/luna.py) does not "
+                  "charge to the connectors" % (svc, method), where)
 
     for c in cl:
         needs = {}
@@ -731,6 +747,82 @@ def check(root):
               "the shell's permissions name the group %s, which no provider's api file defines" % g,
               "shell/sysbus")
     return f
+
+
+# ---- The simulator's table ------------------------------------------------------------
+
+def bus_table(root):
+    """What the simulator's runtime checks each call against, as ls-hubd
+    does on a device (runtime/phoenix-runtime.js, "Bus permissions";
+    docs/SIM-PARITY.md): the model check() checks the code against, as
+    data. tools/gen-bus-permissions.py writes it.
+
+      services  {name: {"methods": {method or pattern: [groups]}}}: each
+                provider's api files (Phoenix's sysbus files win over OSE's,
+                as provider() has it); a service without api files is not
+                listed (its calls are not checked)
+      apps      {id: {"groups": [...]}}: each app's groups (requiredPermissions,
+                or compat/app-permissions.json)
+      clients   {bus name: {"groups": [...], "outbound": [...]}}: each Phoenix
+                service's (its perm files, every name its role allows) with
+                its role's outbound list, and the shell's
+                (every one of both with what luna-service2.perm.json gives
+                everyone)
+      everyone  the groups of a client the table does not list (an app
+                installed later adds its appinfo's requiredPermissions)
+      aliases   the runtime's serviceAliases (the hub sees the new name)
+      allow     sim-bus-allowlist.json: refusals the simulator lets through
+                for now, {id pattern: why}; ids "missing-permission:<caller>->
+                <service>/<method>", "unknown-method:<service>/<method>",
+                "outbound:<caller>-><service>"
+    """
+    m = model(root)
+    everyone = sorted(m["everyone"])
+    services = {}
+    for name in sorted(set(m["ose_services"]) | set(m["phoenix"])):
+        _, prov = m["provider"](name)
+        methods = (prov or {}).get("methods")
+        if methods:
+            services[name] = {"methods": {k: sorted(v) for k, v in sorted(methods.items())}}
+    # Apps and services apart: on a device an app's pages are on the bus as
+    # "<id>-<n>" (its client-permissions key "<id>-*", install-rootfs.py
+    # security_files), a service under its own name, and the two may share
+    # an id (the Clipboard app and org.webosphoenix.clipboard).
+    apps, clients = {}, {}
+    for c in m["clients"]:
+        if c.groups is None or getattr(c, "frame", False):
+            continue
+        if c.kind == "app":
+            apps[c.name] = {"groups": sorted(set(apps.get(c.name, {}).get("groups", [])) | c.groups | m["everyone"])}
+            continue
+        e = clients.setdefault(c.name, {"groups": []})
+        e["groups"] = sorted(set(e["groups"]) | c.groups | m["everyone"])
+        if c.outbound is not None:
+            e["outbound"] = sorted(set(e.get("outbound", [])) | set(c.outbound))
+    # A service may take several names (its role's allowedNames): each
+    # calls with the groups the perm files give it, and the role's
+    # outbound list.
+    for name, entry in sorted(m["phoenix"].items()):
+        if name in clients or "*" in name or not entry.get("role"):
+            continue
+        groups = m["phoenix_perms"].get(name, set())
+        clients[name] = {"groups": sorted(groups | m["everyone"]), "outbound": sorted(set(entry["outbound"]))}
+    allow = {}
+    path = os.path.join(HERE, "sim-bus-allowlist.json")
+    if os.path.isfile(path):
+        allow = {k: v for k, v in read_json(path).items() if not k.startswith("//")}
+    return {
+        "//": ["Generated by tools/gen-bus-permissions.py from tools/devicecheck/luna.py's model (the sysbus "
+               "files, ose-services.json, the apps' requiredPermissions and compat/app-permissions.json). "
+               "Do not edit; regenerate it. The simulator's runtime checks each call against it "
+               "(runtime/phoenix-runtime.js, \"Bus permissions\")."],
+        "everyone": everyone,
+        "aliases": dict(sorted(m["aliases"].items())),
+        "services": services,
+        "apps": dict(sorted(apps.items())),
+        "clients": dict(sorted(clients.items())),
+        "allow": dict(sorted(allow.items())),
+    }
 
 
 def main(argv=None):

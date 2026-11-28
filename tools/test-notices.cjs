@@ -28,6 +28,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it opens and closes alerts from the Settings page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.settings": ["notification.operation", "notification.management"]}};
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -65,7 +68,7 @@ async function main() {
     fs.mkdirSync(outDir, { recursive: true });
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     const settingsUrl = (page) => `${origin}/usr/palm/applications/org.webosphoenix.settings/index.html?launchParams=` +
         encodeURIComponent(JSON.stringify({ page }));
     let browser;

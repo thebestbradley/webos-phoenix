@@ -133,6 +133,7 @@ checks() {
     check commands-doc "docs/COMMANDS.md matches tools/commands-doc.py" python3 tools/commands-doc.py --check
     check release-notes "docs/RELEASE-NOTES.md matches the release notes (tools/release-notes-doc.py)" python3 tools/release-notes-doc.py --check
     check debrand "Trademark overlays up to date" python3 tools/debrand-overlays.py --check
+    check bus-permissions "The simulator's bus permissions match the sysbus files (tools/gen-bus-permissions.py)" python3 tools/gen-bus-permissions.py --check
     check launch-contracts "App-to-app launches send what their apps read (docs/LAUNCH-CONTRACTS.md)" node tools/check-launch-contracts.cjs
     check web-tests "CI's web test shards run tools/web-tests.txt, each test once" node tools/check-web-tests.cjs
     check lockfiles "The lockfiles have every platform's packages" lockfiles

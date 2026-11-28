@@ -40,6 +40,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it makes and deletes accounts, reads the temp db, installs a connector, checks a sign-in page and opens apps from the Calculator's page and syncs an account from Accounts' page, as the services would, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"com.palm.app.calculator": ["phoenix.appservices.accounts", "applicationinstall.management", "tempdatabase.operation", "phoenix.packages.signin", "phoenix.appmanager.open"], "com.palm.app.accounts": ["accounts.transport"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 
 // A response read to its end: one left unread, its socket closed under it,
@@ -77,7 +80,8 @@ function connector() {
                                 onCreate: "palm://org.example.feeds.service/onCreate" }]
     };
     return servers.webApp("org.example.feeds", "1.0.0", {
-        title: "Example Feeds", appinfo: { phoenix: { hidden: true } },
+        // A third party's app names what its pages call (C19): listMyAccounts.
+        title: "Example Feeds", appinfo: { phoenix: { hidden: true }, requiredPermissions: ["phoenix.accounts.mine"] },
         files: [{ path: dir + "public/accounts/org.example.feeds/org.example.feeds.json", data: JSON.stringify(template) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-32.png", data: new Uint8Array(servers.png(32, [240, 140, 0])) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-48.png", data: new Uint8Array(servers.png(48, [240, 140, 0])) }]
@@ -129,7 +133,7 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     const accountsUrl = (params) => `${origin}/usr/palm/applications/com.palm.app.accounts/index.html` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;

@@ -43,6 +43,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): its checks read what the picker saved, from the Calculator's page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"com.palm.app.calculator": ["filemanager.operation"]}};
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "filepicker-tests");
@@ -76,7 +79,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     const errors = [];
     try {
         await waitForServer(`${origin}/apps.json`, 10000);

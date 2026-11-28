@@ -44,6 +44,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it asks the media indexer and opens apps from the Messaging page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.messaging": ["mediaindexer.operation", "phoenix.appmanager.open"]}};
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -69,7 +72,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     let browser;
     try {
         for (let i = 0; ; i++) {

@@ -5,6 +5,7 @@
         "accounts.operation",
         "accounts.transport",
         "phoenix.accounts.info",
-        "phoenix.accounts.read-credentials"
+        "phoenix.accounts.read-credentials",
+        "tempdatabase.operation"
     ]
 }

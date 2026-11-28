@@ -198,6 +198,14 @@ describe("nova -d sim", () => {
         try {
             const { code } = s.core.pairStart();
             expect((await run("pair", "-d", "sim", "--code", code)).out).toMatch(/Paired with webOS Phoenix simulator as "sim"/);
+            // As on a device (docs/SIM-PARITY.md, #86): the account's home is
+            // there (phoenix-pty's useradd), so pairing writes its
+            // ~/.ssh/authorized_keys, 0700 and 0600, owned by the home's owner.
+            const home = path.join(data, "home/user"), sshDir = path.join(home, ".ssh"), keysFile = path.join(sshDir, "authorized_keys");
+            expect(fs.readFileSync(keysFile, "utf8")).toMatch(/nova: paired computers[\s\S]*ssh-ed25519 /);
+            const owner = fs.statSync(home), d = fs.statSync(sshDir), f = fs.statSync(keysFile);
+            expect([d.mode & 0o777, f.mode & 0o777]).toEqual([0o700, 0o600]);
+            expect([d.uid, f.uid]).toEqual([owner.uid, owner.uid]);
             const dry = await run("push", "-d", "sim", "--repo", work, "--dry-run");
             expect(dry.out).toMatch(/2 files, 0 removed .*restarts: app:org.example.demo, shell/);
             const p = await run("push", "-d", "sim", "--repo", work, "--note", "From the worktree");

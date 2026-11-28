@@ -4,6 +4,10 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "application.launcher",
+        "database.operation"
+    ],
     "title": "Help",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

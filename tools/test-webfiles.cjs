@@ -47,6 +47,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): its checks read and list what the page wrote, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.test.webfiles": ["filemanager.operation"]}};
 const FIXTURE = path.join(__dirname, "fixtures", "webfiles");
 const APP = "org.webosphoenix.test.webfiles";
 const args = process.argv.slice(2);
@@ -78,7 +81,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--extra-rootfs", FIXTURE],
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--extra-rootfs", FIXTURE],
                          { stdio: "ignore" });
     const errors = [];
     try {

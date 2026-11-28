@@ -9,6 +9,7 @@
         "phoenix.ongoing",
         "phoenix.accounts.list",
         "phoenix.accounts.read-credentials",
-        "phoenix.accounts.info"
+        "phoenix.accounts.info",
+        "tempdatabase.operation"
     ]
 }

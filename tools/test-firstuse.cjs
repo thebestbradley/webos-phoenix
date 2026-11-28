@@ -36,6 +36,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it seeds db8 and the file system from First Use's page, as a device's earlier use would, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.firstuse": ["database.operation", "filemanager.operation"]}};
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -75,7 +78,7 @@ async function main() {
     }
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     try {
         await waitForServer(`${origin}/apps.json`, 10000);
         const browser = await chromium.launch();

@@ -507,6 +507,14 @@ int main(int argc, char *argv[])
     // apps too: org.webosphoenix.dictation (Voice Dial).
     SimPty *simPty = nullptr;
     QJsonObject hostInfo{ { QStringLiteral("dictation"), true }, { QStringLiteral("assistant"), true } };
+    // The runtime refuses the Luna calls ls-hubd would (runtime/phoenix-runtime.js,
+    // "Bus permissions"); PHOENIX_BUS_PERMISSIONS=log only warns of them, for a
+    // developer whose app is not ready (docs/SIM-PARITY.md).
+    {
+        const QString busMode = qEnvironmentVariable("PHOENIX_BUS_PERMISSIONS");
+        if (busMode == QLatin1String("enforce") || busMode == QLatin1String("log") || busMode == QLatin1String("off"))
+            hostInfo.insert(QStringLiteral("busPermissions"), busMode);
+    }
 #ifdef PHOENIX_HAVE_WEBENGINE
     // The simulator starts the catalog service when the Marketplace asks
     // (the runtime's org.webosphoenix.simulator).

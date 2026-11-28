@@ -4,6 +4,12 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "database.operation",
+        "settings.query",
+        "systemmanager.query",
+        "systemsettings.query"
+    ],
     "title": "Phone",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

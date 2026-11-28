@@ -50,6 +50,10 @@ const path = require("path");
 const zlib = require("zlib");
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it turns Developer Mode on and off from the
+// Marketplace's page, as Settings would, calls that are the test's, not the app's, so the
+// app gets that group for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.marketplace": ["phoenix.devmode.management"]}};
 // The services require("@phoenix/platform") as a device's node_modules has it.
 process.env.NODE_PATH = [path.join(REPO, "apps/node_modules")].concat((process.env.NODE_PATH || "").split(":").filter(Boolean)).join(":");
 require("module").Module._initPaths();
@@ -446,7 +450,7 @@ async function ui(P, control, servers) {
     const origin = `http://127.0.0.1:${port}`;
     // Installed apps go to a folder of their own (as a device's /media/cryptofs/apps).
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-conf-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     let browser;
     try {
         await until(async () => { try { return (await fetch(origin + "/apps.json")).ok; } catch (e) { return false; } }, 20000, "serve-rootfs");

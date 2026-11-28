@@ -6,27 +6,23 @@
   "(<checker>:<kind>:<key>, as the checkers print them); fnmatch wildcards are allowed but name each gap",
   "where you can, so a new one still fails."
  ],
+ "image:missing-path:/etc/phoenix/transcriber.json": {
+  "owner": "optional configuration (defaults apply)",
+  "row": "F9"
+ },
+ "licences:no-provenance:apps/settings/public/icons": {
+  "owner": "Settings (record where the Time exhibition icon comes from)",
+  "row": "L1"
+ },
+ "licences:recipe-licence:deltachat-rpc-server_2.63.0.bb:MPL-2.0": {
+  "owner": "the owner: may images ship Delta Chat's MPL-2.0 core? (docs/OPEN-QUESTIONS.md Q89; not installed until then, PHOENIX_DELTACHAT)",
+  "row": "L3"
+ },
  "luna:missing-permission:org.webosphoenix.agenda->com.webos.applicationManager/getAppInfo": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
  "luna:missing-permission:org.webosphoenix.agenda->com.webos.applicationManager/listApps": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/deviceInfo/query": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/getPreferenceValues": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/getPreferences": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/osInfo/query": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -42,39 +38,119 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/getDeviceLockMode": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/getLockStatus": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/matchDevicePasscode": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/controlPlayback": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/setDevicePasscode": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/getInputVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.maps->com.webos.settingsservice/getSystemSettings": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/master/getVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/master/muteVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/master/setVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/playSound": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.audio/setInputVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.systemservice/time/getSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->com.webos.service.systemservice/time/setSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->org.webosphoenix.tts/getStatus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->org.webosphoenix.tts/speak": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.assistant->org.webosphoenix.tts/stop": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.clipboard->com.palm.systemmanager/matchDevicePasscode": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.clipboard->com.palm.systemmanager/setDevicePasscode": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.applicationManager/launch": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.service.systemservice/time/getSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.dropshare->com.webos.service.systemservice/time/setSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.help->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.help->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
  "luna:missing-permission:org.webosphoenix.maps->com.webos.settingsservice/setSystemSettings": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
+ "luna:missing-permission:org.webosphoenix.messaging->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.messaging->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
  "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/controlPlayback": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/getInputVolume": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/master/getVolume": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -82,12 +158,28 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.music->com.webos.service.audiofocusmanager/releaseFocus": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.music->com.webos.service.audiofocusmanager/requestFocus": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.applicationManager/launch": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.settingsservice/resetSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.phone->com.webos.settingsservice/setSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
  "luna:missing-permission:org.webosphoenix.photos->com.webos.service.camera2/getCameraList": {
@@ -95,22 +187,6 @@
   "row": "C4"
  },
  "luna:missing-permission:org.webosphoenix.photos->com.webos.service.camera2/getInfo": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/deviceInfo/query": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/getPreferenceValues": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/getPreferences": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/osInfo/query": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -122,43 +198,23 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.audiofocusmanager/releaseFocus": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.audiofocusmanager/requestFocus": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.downloadmanager/cancelDownload": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.downloadmanager/download": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+ "luna:missing-permission:org.webosphoenix.tasks->com.palm.applicationManager/launch": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
   "row": "C4"
  },
  "luna:missing-permission:org.webosphoenix.videos->com.webos.service.systemservice/setPreferences": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
+ "luna:missing-permission:org.webosphoenix.voicedial->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.voicedial->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest): charged through what the app imports from @phoenix/luna; its requiredPermissions now hold what its calls in the web tests need (the simulator's bus permissions, docs/SIM-PARITY.md), not this",
+  "row": "C4"
+ },
  "luna:missing-permission:org.webosphoenix.weather->com.webos.service.location/setState": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/deviceInfo/query": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/getPreferenceValues": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/getPreferences": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/osInfo/query": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -170,10 +226,6 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.weather->com.webos.settingsservice/getSystemSettings": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:missing-permission:org.webosphoenix.weather->com.webos.settingsservice/resetSystemSettings": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
@@ -182,47 +234,7 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:no-permissions:org.webosphoenix.assistant": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.clipboard": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.dropshare": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.firstuse": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.help": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.messaging": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.phone": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.screenshot": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:no-permissions:org.webosphoenix.sharesheet": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.tasks": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
- "luna:no-permissions:org.webosphoenix.voicedial": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
@@ -686,67 +698,15 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "simrefs:host:appcatalog.webosarchive.org": {
-  "owner": "owner decision (Q65)",
-  "row": "Q2"
- },
- "simrefs:insecure-url:weboslives.eu": {
-  "owner": "owner decision (Q65)",
-  "row": "Q2"
- },
- "simrefs:loopback:apps/assistant:127.0.0.1": {
-  "owner": "intended: a server on the device itself (see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:apps/assistant:localhost": {
-  "owner": "intended: a server on the device itself (see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:apps/shared:127.0.0.1": {
-  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
-  "row": "Q1"
- },
- "simrefs:loopback:apps/shared:localhost": {
-  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
-  "row": "Q1"
- },
- "simrefs:loopback:apps/shared:0.0.0.0": {
-  "owner": "intended: a server on the device itself (see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:services/dropshare:0.0.0.0": {
-  "owner": "intended: DropShare's server listens on every network the device is on, for the other device's browser (see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:services/oauth:127.0.0.1": {
-  "owner": "intended: the OAuth sign-in's loopback redirect (RFC 8252 7.3), listening on 127.0.0.1 only while a sign-in waits (services/oauth/loopback.js; see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:apps/signin:localhost": {
-  "owner": "intended: the Sign In card opens a plain-http sign-in page only on the device's own loopback (a developer's test provider; see the row)",
-  "row": "N4"
- },
- "simrefs:loopback:shell/native:127.0.0.1": {
-  "owner": "intended: a server on the device itself (see the row)",
-  "row": "N4"
- },
- "simrefs:sim-service:org.webosphoenix.simulator": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "image:missing-path:/etc/phoenix/transcriber.json": {
-  "owner": "optional configuration (defaults apply)",
-  "row": "F9"
- },
  "recipes:unpinned:phoenix-apps_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"
  },
- "recipes:unpinned:phoenix-keyboard_git.bb": {
+ "recipes:unpinned:phoenix-devices_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"
  },
- "recipes:unpinned:phoenix-devices_git.bb": {
+ "recipes:unpinned:phoenix-keyboard_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"
  },
@@ -766,21 +726,49 @@
   "owner": "platform (release process)",
   "row": "B6"
  },
- "licences:no-provenance:apps/settings/public/icons": {
-  "owner": "Settings (record where the Time exhibition icon comes from)",
-  "row": "L1"
+ "simrefs:host:appcatalog.webosarchive.org": {
+  "owner": "owner decision (Q65)",
+  "row": "Q2"
  },
- "licences:recipe-licence:deltachat-rpc-server_2.63.0.bb:MPL-2.0": {
-  "owner": "the owner: may images ship Delta Chat's MPL-2.0 core? (docs/OPEN-QUESTIONS.md Q89; not installed until then, PHOENIX_DELTACHAT)",
-  "row": "L3"
+ "simrefs:insecure-url:weboslives.eu": {
+  "owner": "owner decision (Q65)",
+  "row": "Q2"
+ },
+ "simrefs:loopback:apps/assistant:127.0.0.1": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:apps/assistant:localhost": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
  },
  "simrefs:loopback:apps/marketplace:localhost": {
   "owner": "intended: packagesservice.js tells a catalog on this computer (the simulator's, a developer's) from a plain-HTTP one elsewhere (Q65); it names no server",
   "row": "Q65"
  },
+ "simrefs:loopback:apps/shared:0.0.0.0": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:apps/shared:127.0.0.1": {
+  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
+  "row": "Q1"
+ },
+ "simrefs:loopback:apps/shared:localhost": {
+  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
+  "row": "Q1"
+ },
+ "simrefs:loopback:apps/signin:localhost": {
+  "owner": "intended: the Sign In card opens a plain-http sign-in page only on the device's own loopback (a developer's test provider; see the row)",
+  "row": "N4"
+ },
  "simrefs:loopback:services/account:127.0.0.1": {
   "owner": "intended: the simulator's servers.json (this computer's servers); meta-phoenix writes an image's own over it (tools/servers-json.py, docs/PLATFORM-CLIENT.md)",
   "row": "Q1"
+ },
+ "simrefs:loopback:services/dropshare:0.0.0.0": {
+  "owner": "intended: DropShare's server listens on every network the device is on, for the other device's browser (see the row)",
+  "row": "N4"
  },
  "simrefs:loopback:services/nova:0.0.0.0": {
   "owner": "intended: novad's network listener binds every address, 0.0.0.0 where the kernel has no IPv6 for \"::\" (services/nova/lib/listeners.js, docs/DEV-PUSH.md 6.2)",
@@ -789,5 +777,17 @@
  "simrefs:loopback:services/nova:127.0.0.1": {
   "owner": "intended: the simulator's novad (sim.js) is this computer's, and nova forward reaches ports on the device's own loopback (docs/DEV-PUSH.md, DEV-HELPER.md 8)",
   "row": "G5"
+ },
+ "simrefs:loopback:services/oauth:127.0.0.1": {
+  "owner": "intended: the OAuth sign-in's loopback redirect (RFC 8252 7.3), listening on 127.0.0.1 only while a sign-in waits (services/oauth/loopback.js; see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:shell/native:127.0.0.1": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:sim-service:org.webosphoenix.simulator": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
  }
 }

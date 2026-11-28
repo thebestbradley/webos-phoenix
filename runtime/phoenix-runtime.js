@@ -1499,6 +1499,249 @@
 
     runtime.dispatch = dispatch;
 
+    // ---- Bus permissions: the simulator refuses what ls-hubd would ---------------------
+    //
+    // On a device luna-service2 checks every call: the method's api groups
+    // (the provider's *.api.json, its ACG groups) against the groups the
+    // caller holds (an app's requiredPermissions, a service's *.perm.json),
+    // and a service's role file's "outbound" list against the service it
+    // calls. The simulator's services all run in the page and would answer
+    // anything, so a permission bug showed only on an image (#94, #100,
+    // #102, #106). Here each call a page or a service in the page makes is
+    // checked against the same files, from the table
+    // tools/gen-bus-permissions.py writes from tools/devicecheck/luna.py's
+    // model (the static checker's: the two cannot disagree), served at
+    // /usr/share/phoenix/sim/bus-permissions.json. docs/SIM-PARITY.md,
+    // "Bus permissions".
+    //
+    //   - The caller is the app whose card the page is in: a frame in another
+    //     app's card (Accounts' sign-in pages, Enyo's CrossAppUI) calls with
+    //     that app's groups, as WebAppMgr gives a card's frames the card's
+    //     bridge (#116); a service in the page calls as itself (ctx.caller,
+    //     nodeServiceLuna).
+    //   - A method whose api groups the caller holds none of is refused as
+    //     luna-service2 refuses it: the provider's LSCategoryMethodCall
+    //     answers LSMessageHandlerResultPermissionDenied (luna-service2
+    //     src/libluna-service2/base.c:536-557), the transport replies
+    //     "Denied method call \"<method>\" for category \"<category>\""
+    //     (transport.c:1840-1845) and the caller's callmap makes that
+    //     {returnValue: false, errorCode: -1, errorText}
+    //     (callmap.c:540-590, _LSMessageSetFromError).
+    //   - A method the provider's api files do not name is in no group, and
+    //     _LSSecurityCheckGroup (base.c:370-388) passes no caller for it:
+    //     refused the same way.
+    //   - A call outside a service's outbound list never reaches the
+    //     provider: the hub refuses the name (LS_TRANSPORT_QUERY_NAME_
+    //     PERMISSION_DENIED) and the caller gets "Not permitted to send to
+    //     <service>." (callmap.c:940-949).
+    //   - A service with no api files in the table (the simulator's own,
+    //     what a device answers in the page) is not checked.
+    //
+    // host.json's "busPermissions" says how: "enforce" (the default) refuses,
+    // "log" only warns in the console ("[phoenix-runtime] bus: would
+    // refuse"). PHOENIX_BUS_PERMISSIONS=log in the environment of phoenix-sim
+    // or tools/serve-rootfs.py sets it; with PHOENIX_BUS_LOG=FILE
+    // serve-rootfs.py also writes every refusal pages report to FILE, one JSON
+    // line each (host.json "busPermissionsReport": true).
+    var BUS_DEFAULT_MODE = "enforce";
+    var bus = { table: undefined, mode: undefined, report: false, grants: {}, clients: {}, warned: {} };
+    // The two files are fetched as the page starts, without waiting: a
+    // synchronous request made while the page is being left (the calls sent
+    // at pagehide, above) can hang its navigation where requests are
+    // intercepted (Playwright's route; serve-rootfs.py's --host-json note).
+    // One not here yet is read synchronously, except as the page goes: then
+    // the call goes unchecked.
+    var busFiles = {};
+    function busFetch(path) {
+        try {
+            var x = new XMLHttpRequest();
+            x.open("GET", path, true);
+            x.onload = function () { if (x.status >= 200 && x.status < 300) busFiles[path] = x.responseText; else busFiles[path] = null; };
+            x.onerror = function () { busFiles[path] = null; };
+            x.send();
+        } catch (e) { /* read when needed */ }
+    }
+    function busFile(path) {
+        if (path in busFiles) return { text: busFiles[path] };
+        if (unloading) return null;
+        return { text: PalmSystem.getResource(path) };
+    }
+    busFetch("/usr/share/phoenix/host.json");
+    busFetch("/usr/share/phoenix/sim/bus-permissions.json");
+    function busHost() {
+        if (bus.mode !== undefined) return true;
+        var f = busFile("/usr/share/phoenix/host.json");
+        if (!f) return false;
+        var h = {};
+        try { h = JSON.parse(f.text || "{}") || {}; } catch (e) { h = {}; }
+        bus.mode = h.busPermissions === "enforce" || h.busPermissions === "log" || h.busPermissions === "off"
+            ? h.busPermissions : BUS_DEFAULT_MODE;
+        bus.report = !!h.busPermissionsReport;
+        // A test's own calls, made in an app's page to drive a service
+        // (page.evaluate), are not the app's: serve-rootfs.py --host-json
+        // '{"busGrants": {"<app id>": ["group", ...]}}' gives that app those
+        // groups for the test, said in the test beside its calls.
+        bus.grants = h.busGrants && typeof h.busGrants === "object" ? h.busGrants : {};
+    }
+    function busTable() {
+        if (bus.table === undefined) {
+            var f = busFile("/usr/share/phoenix/sim/bus-permissions.json");
+            if (!f) return null;
+            try { bus.table = JSON.parse(f.text || "null"); } catch (e) { bus.table = null; }
+            if (!bus.table || !bus.table.services) {
+                console.warn("[phoenix-runtime] bus: no /usr/share/phoenix/sim/bus-permissions.json; calls are not checked");
+                bus.table = null;
+            }
+        }
+        return bus.table;
+    }
+    // The app whose card this page is in: a frame's parents, up to the card.
+    function busPageCaller() {
+        var me = PalmSystem.appIdentifier, w = global;
+        try {
+            while (w.parent && w.parent !== w && w.parent.PalmSystem && w.parent.PalmSystem.appIdentifier &&
+                   w.parent.PalmSystem.appIdentifier !== "com.webos.phoenix.unknown") {
+                w = w.parent;
+                me = w.PalmSystem.appIdentifier;
+            }
+        } catch (e) { /* another origin: the frame is its own */ }
+        return me;
+    }
+    // {groups: {group: true}, outbound: [patterns] or null}. A client the
+    // table does not have (an app installed since) has what everyone has and
+    // its appinfo.json's requiredPermissions, as an installed app gets
+    // (webos_app_generate_security_files; tools/install-rootfs.py
+    // security_files).
+    function busClient(t, caller, service) {
+        var key = (service ? "service " : "app ") + caller;
+        if (bus.clients[key]) return bus.clients[key];
+        var e = ((service ? t.clients : t.apps) || {})[caller], groups = {}, outbound = null;
+        (t.everyone || []).forEach(function (g) { groups[g] = true; });
+        if (!service && Array.isArray(bus.grants[caller]))
+            bus.grants[caller].forEach(function (g) { groups[g] = true; });
+        if (e) {
+            e.groups.forEach(function (g) { groups[g] = true; });
+            if (e.outbound) outbound = e.outbound;
+        } else if (!service) {
+            if (unloading) return { groups: groups, outbound: null };
+            var info = null;
+            try { info = JSON.parse(String(PalmSystem.getResource("/usr/palm/applications/" + caller + "/appinfo.json") || "null").replace(/^﻿/, "")); } catch (x) { info = null; }
+            ((info && info.requiredPermissions) || []).forEach(function (g) { groups[g] = true; });
+        }
+        bus.clients[key] = { groups: groups, outbound: outbound };
+        return bus.clients[key];
+    }
+    // fnmatch's patterns (Python's fnmatchcase, as luna.py matches them).
+    var busGlobs = {};
+    function busGlob(pat) {
+        if (!busGlobs[pat]) {
+            var re = "";
+            for (var i = 0; i < pat.length; i++) {
+                var c = pat.charAt(i);
+                if (c === "*") re += "[\\s\\S]*";
+                else if (c === "?") re += "[\\s\\S]";
+                else if (c === "[" && pat.indexOf("]", i + 2) > 0) {
+                    var j = pat.indexOf("]", i + 2);
+                    var set = pat.slice(i + 1, j).replace(/\\/g, "\\\\");
+                    if (set.charAt(0) === "!") set = "^" + set.slice(1);
+                    re += "[" + set + "]";
+                    i = j;
+                } else re += c.replace(/[.+^${}()|\\\/\[\]-]/g, "\\$&");
+            }
+            busGlobs[pat] = new RegExp("^" + re + "$");
+        }
+        return busGlobs[pat];
+    }
+    // The groups that may call a method: every api entry that names it or a
+    // pattern of it (luna.py method_groups). null: none names it.
+    function busMethodGroups(methods, method) {
+        var found = null;
+        Object.keys(methods).forEach(function (pat) {
+            if (pat === method || busGlob(pat).test(method) || busGlob(pat).test("/" + method)) {
+                found = found || [];
+                methods[pat].forEach(function (g) { if (found.indexOf(g) < 0) found.push(g); });
+            }
+        });
+        return found;
+    }
+    // What the hub would answer instead of the provider, or null. caller:
+    // the app (a page's call) or, with service, the service making the call.
+    function busRefusal(url, caller, service, frameApp) {
+        if (!busHost()) return null;
+        if (bus.mode === "off" || !caller) return null;
+        var t = busTable();
+        if (!t) return null;
+        var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)?$/.exec(url);
+        if (!m) return null;
+        // A service the table does not have (a package installed since, a
+        // test's) brings perm files the simulator does not read, and the
+        // simulator's stand-ins of OSE's services (the installer) work in the
+        // page with calls a device's do not make: not checked.
+        if (service && !(t.clients || {})[caller]) return null;
+        var who = busClient(t, caller, service);
+        // A page's calls go through the runtime's serviceAliases on a device
+        // too (installDevice); a service's (run-js-service) do not.
+        var name = (!service && t.aliases && t.aliases[m[1]]) || m[1];
+        if (who.outbound && name !== caller && !who.outbound.some(function (o) { return busGlob(o).test(name); }))
+            return { kind: "outbound", service: name, method: "", groups: [],
+                     allowed: busAllowed(t, "outbound:" + caller + "->" + name),
+                     reply: fail(-1, "Not permitted to send to " + name + ".") };
+        var svc = t.services[name];
+        if (!svc) return null;
+        var path = (m[2] || "/").replace(/\/+$/, "").replace(/^\/+/, "");
+        var cut = path.lastIndexOf("/");
+        var category = cut < 0 ? "/" : "/" + path.slice(0, cut), method = cut < 0 ? path : path.slice(cut + 1);
+        var groups = busMethodGroups(svc.methods, path);
+        if (groups && groups.some(function (g) { return who.groups[g]; })) return null;
+        var kind = groups ? "missing-permission" : "unknown-method";
+        return { kind: kind, service: name, method: path, groups: groups || [],
+                 allowed: busAllowed(t, kind === "unknown-method" ? kind + ":" + name + "/" + path
+                                                                 : kind + ":" + caller + (frameApp ? "@" + frameApp : "") + "->" + name + "/" + path),
+                 reply: fail(-1, "Denied method call \"" + method + "\" for category \"" + category + "\"") };
+    }
+    // tools/devicecheck/sim-bus-allowlist.json (in the table as "allow"):
+    // refusals the simulator lets through for now, each with why and who
+    // fixes it. Its ids are fnmatch patterns.
+    function busAllowed(t, id) {
+        var allow = t.allow || {};
+        for (var pat in allow)
+            if (pat === id || busGlob(pat).test(id)) return allow[pat];
+        return null;
+    }
+    runtime.bus = { refusal: busRefusal, pageCaller: busPageCaller,
+                    mode: function () { busHost(); return bus.mode; } };
+    // A call's check: true when the hub would refuse it and the simulator
+    // does (reply has had the refusal), false when the call goes on.
+    function busCheck(url, caller, service, reply, stack) {
+        // A frame of another app's card: its own app, for the allowlist's
+        // "<caller>@<frame's app>" ids.
+        var own = !service && PalmSystem.appIdentifier !== caller ? PalmSystem.appIdentifier : "";
+        var r = busRefusal(url, caller, service, own);
+        if (!r) return false;
+        var key = caller + " " + url;
+        if (!bus.warned[key]) {
+            bus.warned[key] = true;
+            console.warn("[phoenix-runtime] bus: " + (r.allowed ? "allowed (tools/devicecheck/sim-bus-allowlist.json: " + r.allowed + ") "
+                                                      : bus.mode === "enforce" ? "refused " : "would refuse ") + caller + " -> " + url +
+                         (r.kind === "outbound" ? " (not in its role's outbound list)"
+                          : r.kind === "unknown-method" ? " (in no api group of " + r.service + ")"
+                          : " (needs one of " + r.groups.join(", ") + ")"));
+            if (bus.report) {
+                try {
+                    var x = new XMLHttpRequest();
+                    x.open("POST", "/__phoenix/bus-denied", true);
+                    x.setRequestHeader("Content-Type", "application/json");
+                    x.send(toJson({ caller: caller, url: url, kind: r.kind, service: r.service, method: r.method,
+                                    groups: r.groups, mode: bus.mode, allowed: r.allowed || null, asService: !!service,
+                                    stack: stack || String(new Error().stack || ""), page: String(global.location && global.location.pathname || "") }));
+                } catch (e) { /* the report is a convenience */ }
+            }
+        }
+        if (bus.mode !== "enforce" || r.allowed) return false;
+        reply(JSON.parse(toJson(r.reply)));
+        return true;
+    }
+
     global.PalmServiceBridge = function () {
         var bridge = this;
         var cancelled = false;
@@ -1507,11 +1750,13 @@
         this.call = function (url, json) {
             var params = {};
             try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
+            // Where the call was made, for a refusal's report (Bus permissions).
+            var stack = busHost() && bus.report ? String(new Error().stack || "") : null;
             // Responses are always asynchronous, as on a device.
             var id = nextUnsent++;
             var run = function () {
                 delete unsent[id];
-                dispatch(url, params, function (response) {
+                var answer = function (response) {
                     if (cancelled || !bridge.onservicecallback)
                         return;
                     // The app's own handler: what it throws is the app's
@@ -1522,7 +1767,10 @@
                     } catch (e) {
                         setTimeout(function () { throw e; }, 0);
                     }
-                }, ctx);
+                };
+                // The hub's check, as the card's app (Bus permissions, above).
+                if (busCheck(url, busPageCaller(), false, answer, stack)) return;
+                dispatch(url, params, answer, ctx);
             };
             if (unloading) {
                 run();
@@ -7505,6 +7753,18 @@
 
         register(["com.webos.settingsservice"], {
             "/getSystemSettings": function (p, reply, ctx) {
+                // Keys asked for, none of them set: OSE's settingsservice
+                // answers {returnValue: false, errorKey: [the keys]} and
+                // subscribes nothing (PrefsDb8Get::sendResultReply: a
+                // subscription only for the keys it found), so a page that
+                // waits for a later set never hears it, as on a device's
+                // first boot (#91: picture.backlight; shell/qml/Phoenix/Lsm/
+                // LsmStatus.js backlightUnset; docs/SIM-PARITY.md).
+                if (Array.isArray(p.keys) && p.keys.length && !Object.keys(settingsFor(load(), p.category, p.keys)).length) {
+                    var missing = { returnValue: false, errorKey: p.keys.slice(), method: "getSystemSettings" };
+                    if (p.category) missing.category = p.category;
+                    return reply(missing);
+                }
                 watch(p, reply, ctx, function () {
                     var r = ok({ method: "getSystemSettings", settings: settingsFor(load(), p.category, p.keys) });
                     if (p.category) r.category = p.category;
@@ -7537,7 +7797,18 @@
         }
 
         register(["com.webos.service.audio"], {
-            "/master/getVolume": function (p, reply, ctx) { watch(p, reply, ctx, volumeStatus); },
+            // Asked with no soundOutput: the active output's. audiod-pro
+            // refuses a soundOutput here (OSEMasterVolumeManager::getVolume,
+            // OSEMasterVolumeManager.cpp:1045-1057, isValidSoundDevice: error
+            // 204), though master/setVolume takes "alsa"; the device's shell
+            // read no volume until it stopped passing one (#91,
+            // shell/qml/Phoenix/Lsm/LsmStatus.js masterVolumeQuery;
+            // docs/SIM-PARITY.md).
+            "/master/getVolume": function (p, reply, ctx) {
+                if (p.soundOutput !== undefined)
+                    return reply(fail(204, "Volume control is not supported"));
+                watch(p, reply, ctx, volumeStatus);
+            },
             "/master/setVolume": function (p, reply) {
                 var s = load();
                 s.audio.volume = Math.max(0, Math.min(100, p.volume | 0));
@@ -8154,9 +8425,18 @@
 
         // ---- Developer Mode (com.webos.service.devmode, OSE's API) ------------------
         //
-        //   getDevMode {}                 -> {status: "enabled" | "disabled"}
-        //   setDevMode {status}           OSE restarts the device for it; the
+        //   getDevMode {subscribe}        -> {status: "enabled" | "disabled", enabled}
+        //   setDevMode {status} | {enabled} -> {status, enabled, restarting}:
+        //                                 OSE restarts the device for it; the
         //                                 simulator applies it at once
+        //
+        // As the device's provider answers (services/devmode/devmode.js
+        // answer() and setDevMode; docs/SIM-PARITY.md): both forms in every
+        // answer, Phoenix's {status} and OSE's {enabled}, which callers read;
+        // either form taken; a set to what it is already changes nothing,
+        // tells no watcher and says {restarting: false}. A change says
+        // {restarting: true}, as the device's does; the simulator does not
+        // restart for it (docs/SIM-PARITY.md, follow-ups).
         //
         // Settings > Developer Mode asks for the device passcode first
         // (matchDevicePasscode); with Developer Mode on, the Marketplace
@@ -8164,20 +8444,25 @@
         // Terminal's sudo and SSH become possible (docs/TERMINAL.md T4).
         // Wiping the device (erase) turns it off.
         function devMode() { return store.get("devMode", false) ? "enabled" : "disabled"; }
+        function devModeAnswer(r) { r.status = devMode(); r.enabled = r.status === "enabled"; return ok(r); }
         var devModeWatchers = [];
         register(["com.webos.service.devmode"], {
             "/getDevMode": function (p, reply, ctx) {
-                reply(ok({ status: devMode(), subscribed: !!p.subscribe }));
+                reply(devModeAnswer({ subscribed: !!p.subscribe }));
                 if (p.subscribe) devModeWatchers.push({ reply: reply, ctx: ctx });
             },
             "/setDevMode": function (p, reply) {
-                if (p.status !== "enabled" && p.status !== "disabled")
-                    return reply(fail(-1, "status: \"enabled\" or \"disabled\""));
-                store.set("devMode", p.status === "enabled");
+                var want;
+                if (p.status === "enabled" || p.status === "disabled") want = p.status === "enabled";
+                else if (typeof p.enabled === "boolean") want = p.enabled;
+                else return reply(fail("BAD_PARAMS", "status: \"enabled\" or \"disabled\""));
+                if (want === (devMode() === "enabled"))
+                    return reply(devModeAnswer({ restarting: false }));
+                store.set("devMode", want);
                 if (runtime.novaDevModeChanged) runtime.novaDevModeChanged();
-                reply(ok({ status: devMode() }));
+                reply(devModeAnswer({ restarting: true }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
-                devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
+                devModeWatchers.forEach(function (w) { w.reply(devModeAnswer({ subscribed: true })); });
                 // The developer apps come and go (launchPointChanges, and
                 // the shell's launcher: systemStatus devMode).
                 if (runtime.developerGateChanged) runtime.developerGateChanged();
@@ -13714,6 +13999,11 @@
             // A subscription: onReply for each reply until cancel().
             subscribe: function (uri, params, onReply) {
                 var stopped = false;
+                // The hub checks a service's calls as the service's
+                // (Bus permissions); without a caller, the page's own.
+                if (busCheck(uri, caller || busPageCaller(), !!caller, function (r) {
+                    setTimeout(function () { if (!stopped) onReply(r); }, 0);
+                })) return function () { stopped = true; };
                 dispatch(uri, clone(params || {}), function (r) {
                     if (!stopped) setTimeout(function () { if (!stopped) onReply(r); }, 0);
                 }, { cancelled: function () { return stopped; }, onCancel: null, caller: caller });
@@ -13722,6 +14012,10 @@
             call: function (uri, params) {
                 return new Promise(function (resolve) {
                     var done = false;
+                    if (busCheck(uri, caller || busPageCaller(), !!caller, function (r) {
+                        done = true;
+                        setTimeout(function () { resolve(r); }, 0);
+                    })) return;
                     dispatch(uri, clone(params || {}), function (r) {
                         if (done) return;
                         done = true;
@@ -14655,7 +14949,7 @@
                             try { m = hosted[service].load(); } catch (e) { return; }
                             var cap = m.def.capabilities[cp.id];
                             if (!cap || !cap.watch) return;
-                            nodeServiceLuna(PalmSystem.appIdentifier).call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
+                            nodeServiceLuna(service).call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
                         };
                         return true;
                     });
@@ -14745,7 +15039,7 @@
         var LOCK_MS = 5 * 60 * 1000;
 
         var loadModule = nodeServiceLoader(SERVICE_DIR, "DAV service");
-        var luna = nodeServiceLuna();
+        var luna = nodeServiceLuna(SERVICE);   // as itself, as on a device (Bus permissions)
         var request = proxiedRequest;
 
         var methods = null, shippedSources = null, preinstalledInfo = null;
@@ -14850,10 +15144,13 @@
         }
 
         // Calls one callback per provider, one after another; failures are logged.
+        // The accounts service makes these calls on a device (app-services'
+        // notify-created.js, modify.js), so the hub checks them as its.
+        var accountsLuna = nodeServiceLuna("com.palm.service.accounts");
         function notify(calls) {
             return calls.reduce(function (p, c) {
                 return p.then(function () {
-                    return luna.call(c.address, c.params).then(function (r) {
+                    return accountsLuna.call(c.address, c.params).then(function (r) {
                         if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + c.address + " failed: " + toJson(r));
                     });
                 });
@@ -15261,7 +15558,7 @@
     (function appInstaller() {
         var PACKAGES_DIR = "/usr/palm/services/org.webosphoenix.service.packages/";
         var loadModule = nodeServiceLoader(PACKAGES_DIR, "Packages service");
-        var luna = nodeServiceLuna();
+        var luna = nodeServiceLuna("com.webos.appInstallService");   // OSE's installer, as itself
         var ipkReader = null;
         var browserGzip = {
             gunzip: function (bytes) { return streamBytes(bytes, new DecompressionStream("gzip")); },
@@ -15861,16 +16158,11 @@
         var methods = null, shippedSources = null, preinstalledInfo = null, platformCatalog = null;
         function service() {
             if (!methods) {
-                // Its installs reach the installer as this service's (ctx.caller),
-                // which then takes a first-party connector (firstParty).
-                var asPage = nodeServiceLuna(), asService = nodeServiceLuna(SERVICE);
+                // Its calls are this service's (ctx.caller), as on a device: the
+                // installer then takes a first-party connector (firstParty), and
+                // the hub checks them against its perm files (Bus permissions).
                 methods = loadModule("packagesservice.js").createPackagesService({
-                    luna: {
-                        call: asPage.call,
-                        subscribe: function (uri, params, onReply) {
-                            return (/^luna:\/\/com\.webos\.appInstallService\//.test(uri) ? asService : asPage).subscribe(uri, params, onReply);
-                        }
-                    },
+                    luna: nodeServiceLuna(SERVICE),
                     request: proxiedRequest,
                     requestBytes: proxiedRequestBytes,
                     crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512"),
@@ -16194,7 +16486,7 @@
                     },
                     text: function (path) { return PalmSystem.getResource(SAMPLE + "licences/" + path.split("/").pop()) || null; }
                 },
-                luna: nodeServiceLuna(),
+                luna: nodeServiceLuna(SERVICE),
                 log: function (m) { console.info("[hardware] " + m); }
             });
             methods.watch(function (r) { watchers.slice().forEach(function (w) { w(r); }); });
@@ -16978,7 +17270,7 @@
                     var p = store.get("power", { percent: 76, charger: "none" });
                     return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
                 },
-                luna: nodeServiceLuna(),
+                luna: nodeServiceLuna("com.palm.update"),
                 requestBytes: requestBytes,
                 // No notices check as the service starts: the sample notices
                 // would be in every fresh simulator's screenshots. The Updates

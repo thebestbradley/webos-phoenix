@@ -456,6 +456,10 @@ def build_plan():
         # a device's come from the image's recipe, never from the tree).
         if prefix.startswith("/usr/share/phoenix/demo/") or prefix == "/etc/phoenix/connectors/":
             continue
+        # The simulator's table of the bus permissions (its runtime checks
+        # calls against it): a device has ls-hubd and the sysbus files.
+        if prefix.startswith("/usr/share/phoenix/sim/"):
+            continue
         # The shared packages the simulator's service loader finds by name:
         # a device has a copy in each service that needs one (plan_service).
         if prefix.startswith("/usr/lib/phoenix/node_modules/"):

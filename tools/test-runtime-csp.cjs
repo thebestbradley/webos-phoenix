@@ -26,6 +26,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it asks the system time and the backup service from a test page of the Flashlight's, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.flashlight": ["time.query", "backup.management"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 
 let failures = 0;
@@ -55,7 +58,7 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     let browser;
     try {
         for (let i = 0; ; i++) {

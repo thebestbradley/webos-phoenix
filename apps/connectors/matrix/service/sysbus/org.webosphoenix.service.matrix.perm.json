@@ -9,6 +9,7 @@
         "oauth.signin",
         "phoenix.accounts.list",
         "phoenix.accounts.info",
-        "phoenix.accounts.read-credentials"
+        "phoenix.accounts.read-credentials",
+        "tempdatabase.operation"
     ]
 }

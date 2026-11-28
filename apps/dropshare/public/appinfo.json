@@ -4,6 +4,10 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "phoenix.dropshare",
+        "systemsettings.query"
+    ],
     "title": "DropShare",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
