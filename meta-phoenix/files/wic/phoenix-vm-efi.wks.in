@@ -8,9 +8,12 @@
 # the same ext4 root as the kernel-boot image. The kernel finds the root
 # by its name (root=PARTLABEL=phoenix-root), whatever the disk controller
 # calls the disk, with no initramfs. Packaged for each hypervisor by
-# scripts/make-vm-packages.sh.
+# scripts/make-vm-packages.sh. --no-fstab-update: wic would otherwise add
+# "/dev/sda1 /boot vfat" to /etc/fstab, a name only SATA gives the disk;
+# on NVMe or virtio the mount never finds it and boot stops in emergency
+# mode (seen under QEMU with NVMe). Nothing needs /boot mounted.
 
-part /boot --source bootimg-partition --fstype=vfat --label PHXESP --part-name phoenix-esp --part-type C12A7328-F81F-11D2-BA4B-00A0C93EC93B --active --align 1024 --size 256M
+part /boot --source bootimg-partition --fstype=vfat --label PHXESP --part-name phoenix-esp --part-type C12A7328-F81F-11D2-BA4B-00A0C93EC93B --active --align 1024 --size 256M --no-fstab-update
 part / --source rootfs --fstype=ext4 --label phoenix-root --part-name phoenix-root --align 1024
 
 bootloader --ptable gpt

@@ -21,8 +21,9 @@ inherit deploy nopackages
 PHOENIX_VM_BOOT_ENTRIES ?= "tablet:pinetab2:1280x800 phone:pinephonepro:720x1440"
 PHOENIX_VM_BOOT_TIMEOUT ?= "3"
 # console=tty0 last, so the screen is /dev/console; the PL011 (QEMU,
-# libvirt) and the firmware's ACPI SPCR serial still get the kernel's log.
-PHOENIX_VM_BOOT_ARGS ?= "root=PARTLABEL=phoenix-root rootwait rw console=ttyAMA0 console=tty0"
+# libvirt), hvc0 (Apple Virtualization's only console) and the firmware's
+# ACPI SPCR serial still get the kernel's log.
+PHOENIX_VM_BOOT_ARGS ?= "root=PARTLABEL=phoenix-root rootwait rw console=ttyAMA0 console=hvc0 console=tty0"
 
 do_configure[noexec] = "1"
 do_install[noexec] = "1"
