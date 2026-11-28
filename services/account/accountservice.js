@@ -113,6 +113,11 @@ var CALLERS = {
 // service asks on every request and every minute), and the oldest position
 // used even if the server still has it (its own limit is 30 minutes).
 var RELAY_CACHE_MS = 15000;
+// The most a token relay call waits: the server waits 5 s to connect and
+// 15 s in all for the provider (OAuthTokenRelay), so 30 s is an answer
+// that will not come. request()'s 60 s is a time without a byte, which a
+// reply that trickles never reaches.
+var RELAY_DEADLINE_MS = 30000;
 var RELAY_MAX_AGE_S = 1800;
 
 function err(code, text, extra) {
@@ -165,6 +170,7 @@ function registration(publicKey, dev) {
 //   device() -> Promise<{name, model?, compatible?, osVersion?, build?}> (a
 //       device: deviceinfo.js; what it can't read, left out)
 //   timers {set(fn, ms) -> handle, clear(handle)} (optional)
+//   relayDeadlineMs  the most a token relay call waits (optional; RELAY_DEADLINE_MS)
 //   now(), log() (optional)
 function createAccountService(deps) {
     var log = deps.log || function () {};
@@ -614,7 +620,7 @@ function createAccountService(deps) {
             if (p.step === "exchange") {
                 if (typeof p.code !== "string" || !p.code || typeof p.codeVerifier !== "string" || !p.codeVerifier || typeof p.redirectUri !== "string")
                     throw err("BAD_PARAMS", "code, codeVerifier and redirectUri");
-                return apiJson("POST", base + "exchange", { code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri }).then(relayTokens);
+                return relayCall(base + "exchange", { code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri });
             }
             if (p.step === "redeem") {
                 if (!p.handle || !p.codeVerifier) throw err("BAD_PARAMS", "handle and codeVerifier");
@@ -622,9 +628,22 @@ function createAccountService(deps) {
             }
             if (p.step === "refresh") {
                 if (!p.refreshToken) throw err("BAD_PARAMS", "refreshToken");
-                return apiJson("POST", base + "refresh", { refresh_token: p.refreshToken }).then(relayTokens);
+                return relayCall(base + "refresh", { refresh_token: p.refreshToken });
             }
             throw err("BAD_PARAMS", "step: exchange, refresh, authorizeUrl or redeem");
+        });
+    }
+    // The relay's exchange and refresh, with a deadline (RELAY_DEADLINE_MS):
+    // a late answer is not waited for (the OAuth service keeps the key and
+    // tries again later).
+    function relayCall(path, body) {
+        var ms = deps.relayDeadlineMs || RELAY_DEADLINE_MS;
+        return new Promise(function (resolve, reject) {
+            var timer = setTimeout(function () {
+                reject(err("CONNECTION_TIMEOUT", "Phoenix's token relay did not answer in " + Math.round(ms / 1000) + " s; try again later"));
+            }, ms);
+            apiJson("POST", path, body).then(relayTokens).then(function (v) { clearTimeout(timer); resolve(v); },
+                                                             function (e) { clearTimeout(timer); reject(e); });
         });
     }
     function relayTokens(b) {

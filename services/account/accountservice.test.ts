@@ -106,6 +106,35 @@ describe("signing in with a code (RFC 8628)", () => {
         expect(calls.some((c) => c.uri.endsWith("/createToast") && /Signed in to your Phoenix Account as test@example.org/.test(c.params.message))).toBe(true);
     });
 
+    it("the token relay busy, unreachable or silent: a code to act on, Retry-After kept, and no long wait", async () => {
+        let relay: "ok" | "busy" | "down" | "silent" = "ok";
+        const svc = service({
+            relayDeadlineMs: 200,
+            request: (req: Any) => {
+                if (!/\/v1\/oauth-broker\//.test(req.url) || relay === "ok") return device.request(req);
+                if (relay === "busy") return Promise.resolve({ status: 429, headers: { "retry-after": "42" }, body: JSON.stringify({ error: "Too Many Requests", code: "RATE_LIMITED" }) });
+                if (relay === "down") return Promise.reject(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }));
+                return new Promise(() => {});   // accepts, never answers (or trickles)
+            }
+        });
+        await signedIn(svc);
+        const refresh = { provider: "box", step: "refresh", refreshToken: "provider_rt_1" };
+        expect(await svc.tokenRelay(refresh, "org.webosphoenix.service.oauth")).toMatchObject({ returnValue: true });
+        relay = "busy";
+        expect(await svc.tokenRelay(refresh, "org.webosphoenix.service.oauth")).toMatchObject({ returnValue: false, errorCode: "RATE_LIMITED", retryAfter: 42 });
+        relay = "down";
+        expect(await svc.tokenRelay(refresh, "org.webosphoenix.service.oauth")).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED" });
+        relay = "silent";
+        const started = Date.now();
+        const r = await svc.tokenRelay({ provider: "box", step: "exchange", code: "c1", codeVerifier: "v".repeat(43), redirectUri: "http://127.0.0.1/oauth/callback" },
+                                       "org.webosphoenix.service.oauth");
+        expect(r).toMatchObject({ returnValue: false, errorCode: "CONNECTION_TIMEOUT", errorText: expect.stringMatching(/token relay did not answer/) });
+        expect(Date.now() - started).toBeLessThan(2000);
+        expect(await svc.tokenRelay(refresh, "org.webosphoenix.service.oauth")).toMatchObject({ errorCode: "CONNECTION_TIMEOUT" });
+        // Still signed in: the relay's trouble is not the account's.
+        expect((await svc.getStatus({})).state).toBe("signedIn");
+    });
+
     // 26 November 2026: the 2.0 Revision 15 VM image (no RAUC, no device-tree
     // model, BUILD_ID the image's 14-digit DATETIME) and the simulator (osVersion
     // "" before an update slot has a version) were refused with 422; 1.0's images

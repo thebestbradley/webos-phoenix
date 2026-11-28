@@ -502,7 +502,7 @@ function start(opts) {
             if (x[2] !== "redeem" && ["box", "linkedin", "todoist"].indexOf(x[1]) < 0) return error(res, 404, "The relay does not sign in to this provider.", "UNKNOWN_PROVIDER");
             if (x[2] === "exchange") {
                 if (typeof b.code !== "string" || !b.code || !/^[A-Za-z0-9._~-]{43,128}$/.test(String(b.code_verifier || "")) ||
-                    !/^http:\/\/127\.0\.0\.1(:[0-9]{1,5})?\/oauth\/callback$/.test(String(b.redirect_uri || "")))
+                    !/^http:\/\/127\.0\.0\.1(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?\/oauth\/callback$/.test(String(b.redirect_uri || "")))
                     return error(res, 422, "code, code_verifier and the loopback redirect_uri are required", "VALIDATION");
                 if (b.code === "refused") return error(res, 400, "The provider refused the grant.", "PROVIDER_REFUSED");
                 return send(res, 200, { access_token: "provider_at_" + rand(4), refresh_token: "provider_rt_" + rand(4), token_type: "bearer", expires_in: 3600 });

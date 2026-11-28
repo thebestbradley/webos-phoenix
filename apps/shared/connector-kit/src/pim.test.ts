@@ -111,6 +111,13 @@ describe("registered providers", () => {
         const req = asked[asked.length - 1];
         expect(req).toEqual(["luna://org.webosphoenix.service.oauth/authorize", expect.objectContaining({ relay: "box", clientId: "id1", redirectUri: "http://127.0.0.1/oauth/callback" })]);
         expect(JSON.stringify(req)).not.toContain("must-not-leave");
+        // Nor kept: a connector that uses a secret when the registration has one (Todoist, LinkedIn,
+        // Zoom: `c.clientSecret ? c : viaRelay(c)`) still goes through the relay, and is not
+        // available without one.
+        expect((await reg(ctx))!.clientSecret).toBeUndefined();
+        const noRelay = world(false, { box: { clientId: "id1", relay: true, clientSecret: "must-not-leave" } });
+        const r = await reg(noRelay);
+        expect(r && r.clientSecret ? r : await viaRelay(noRelay, r)).toBeNull();
     });
 
     it("call REST APIs with the token", async () => {

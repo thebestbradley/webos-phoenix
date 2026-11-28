@@ -60,8 +60,10 @@ export async function registeredClient(ctx: BaseContext, file: string, provider:
     const c = all && all[provider];
     if (!c || typeof c.clientId !== "string" || !c.clientId) return null;
     const out = Object.assign({}, defaults, c) as RegisteredClient;
-    // "relay": true: the relay knows the provider by the setting's key.
-    if (c.relay === true) out.relay = provider;
+    // "relay": true: the relay knows the provider by the setting's key, and
+    // a secret left in the setting is dropped (it is the server's; never
+    // sent from here, nor taken as the registration's own).
+    if (c.relay === true) { out.relay = provider; delete out.clientSecret; }
     else delete out.relay;
     // A test server's addresses (the setting's own) may be reached.
     Object.keys(c).forEach((k) => {

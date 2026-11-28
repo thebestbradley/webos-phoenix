@@ -573,18 +573,36 @@ device ──POST /v1/oauth-broker/<provider>/refresh {refresh_token}──► r
   provider asks for the secret there too): it is deleted here. Without the
   relay in a build (the OAuth service's `redirectUri` says `relay`), or
   without a Phoenix account signed in, such a provider is "not available"
-  or fails with the account service's reason.
+  or fails with the account service's reason. A secret left in
+  `clients.json` beside `"relay": true` is dropped as it is read, never
+  sent.
+- **When it fails** (the OAuth service's `viaRelay`): a code or refresh
+  token the provider refused there (`PROVIDER_REFUSED`) is
+  `401_UNAUTHORIZED`, which puts "sign in again" on the account; the relay
+  busy (429) or resting (503) is `503_SERVICE_UNAVAILABLE` with `retryAt`
+  from its `Retry-After` (a minute without one), kept as the account's
+  backoff by the kit (`oauth.token`) and the drives; the relay or the
+  provider away, the provider misbehaving, Phoenix's own sign-in ended
+  (`SIGNED_OUT`, `DEVICE_REQUIRED`): an error with its reason, the account
+  not flagged, the key and its refresh token kept for the next try. A call
+  waits 30 s at most (`RELAY_DEADLINE_MS` in the account service; the
+  server gives the provider 15). A key forgotten (the account removed)
+  while its refresh is in flight is not written back.
 - **Server** (Phoenix-Web-Services `OAuthTokenRelayController`,
   `App\Domain\Account\OAuthTokenRelay`, its `docs/OAUTH-TOKEN-RELAY.md`):
   only a token of the account scope bound to a registered device; only the
   providers on its list, each with its token endpoint fixed in code (Box,
   Todoist, LinkedIn): the device names a provider, never an address, so it
   is no open proxy; `redirect_uri` only this device's loopback address
-  (`http://127.0.0.1[:port]/oauth/callback`) and a real RFC 7636 verifier;
-  no other field taken; redirects not followed; the provider's own error
-  text not passed on; 10 calls a minute and 200 a day per account. It
-  stores nothing and logs only the provider, the grant and the provider's
-  HTTP status. The secrets are the server's configuration
+  (`http://127.0.0.1[:1-65535]/oauth/callback`) and a real RFC 7636
+  verifier; no other field taken; a code sent to the provider once (a
+  replay or a parallel exchange refused there, without the secret);
+  redirects not followed, no more than 64 KiB of an answer read; the
+  provider's own error text not passed on, and its refusal of Phoenix's
+  own client (`invalid_client`) a 502, the operator's to fix, not the
+  device's sign-in; 10 calls a minute and 200 a day per account, 600 a
+  minute in all. It stores nothing but a used code's hash and logs only the
+  provider, the grant and the provider's HTTP status. The secrets are the server's configuration
   (`services.relay.<provider>.client_id` and `client_secret`), never in a
   repository.
 - **Slack** takes only an https redirect, so it needs the broker's own
@@ -600,7 +618,9 @@ device ──POST /v1/oauth-broker/<provider>/refresh {refresh_token}──► r
   `tests/Feature/OAuthTokenRelayTest.php`; and end to end,
   `apps/connectors/drives/service/relay-e2e.test.ts`: the drives, the OAuth
   and account services against a real Phoenix-Web-Services (`php -S`) and
-  the Box stand-in (`PWS_DIR=... npx vitest run
+  the Box stand-in, with the provider failing every way, the relay
+  unreachable and at its limit, a refresh refused, and the account removed
+  or Phoenix signed out while a refresh is in flight (`PWS_DIR=... npx vitest run
   connectors/drives/service/relay-e2e.test.ts`; skipped without it).
 
 **The registrations in an image and the simulator** (28 November 2026;

@@ -84,8 +84,11 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     const oauth = {
         token: async (keyId: string): Promise<string> => {
             if (!keyId) throw synckit.syncError("The account has no sign-in token (sign in again)", "CREDENTIALS_NOT_FOUND");
-            const r = await bus.call(OAUTH + "token", { keyId }).catch((e: Error & { errorCode?: string }) => {
-                throw synckit.syncError(e.message, e.errorCode === "NOT_FOUND" ? "401_UNAUTHORIZED" : e.errorCode || "UNKNOWN_ERROR");
+            const r = await bus.call(OAUTH + "token", { keyId }).catch((e: Error & { errorCode?: string; retryAt?: number }) => {
+                const out: Error & { errorCode?: string; retryAt?: number } = synckit.syncError(e.message, e.errorCode === "NOT_FOUND" ? "401_UNAUTHORIZED" : e.errorCode || "UNKNOWN_ERROR");
+                // 503_SERVICE_UNAVAILABLE from a busy token relay: the account's backoff until then.
+                if (e.retryAt) out.retryAt = e.retryAt;
+                throw out;
             });
             return String(r.accessToken || "");
         },

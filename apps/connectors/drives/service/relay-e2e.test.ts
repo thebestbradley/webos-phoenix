@@ -24,7 +24,7 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import * as kit from "@phoenix/connector-kit";
 import * as synckit from "@phoenix/synckit";
 import { loadCommonJs } from "../../../shared/connector-kit/src/test-support";
@@ -53,6 +53,7 @@ function freePort(): Promise<number> {
 describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and the Box stand-in", () => {
     const secret = "box-" + crypto.randomBytes(12).toString("hex");
     let tmp = "", api = "", phoenixToken = "", log = "", serversJson = "";
+    let mint: () => string = () => "";
     let php: ChildProcess | null = null;
     let fake: any;
 
@@ -64,7 +65,8 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
         api = "http://127.0.0.1:" + port + "/";
         const env = {
             ...process.env, APP_ENV: "local", APP_DEBUG: "false", APP_URL: api.replace(/\/$/, ""), LOG_CHANNEL: "stderr",
-            DB_CONNECTION: "sqlite", DB_DATABASE: path.join(tmp, "db.sqlite"), CACHE_STORE: "file", SESSION_DRIVER: "array", QUEUE_CONNECTION: "sync",
+            // The cache (the relay's limits, its used codes) in this run's own database: a file cache would outlive it.
+            DB_CONNECTION: "sqlite", DB_DATABASE: path.join(tmp, "db.sqlite"), CACHE_STORE: "database", SESSION_DRIVER: "array", QUEUE_CONNECTION: "sync",
             PHOENIX_TESTING_ROOT: path.join(tmp, "platform"),
             RELAY_BOX_CLIENT_ID: "phoenix-test-box", RELAY_BOX_CLIENT_SECRET: secret, RELAY_BOX_TOKEN_URL: fake.origin + "/oauth/box/token"
         };
@@ -77,7 +79,8 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
         run(["artisan", "migrate", "--force", "--no-interaction"]);
         run(["artisan", "platform:prepare-testing", "--url", api.replace(/\/$/, "")]);
         // A verified account, a registered device and a Phoenix token bound to it (what the device's sign-in leaves).
-        phoenixToken = JSON.parse(run([path.join(__dirname, "test", "relay-e2e-mint.php"), PWS])).token;
+        mint = () => { const out = run([path.join(__dirname, "test", "relay-e2e-mint.php"), PWS]); try { return JSON.parse(out).token; } catch (e) { throw new Error("mint: " + out.slice(0, 1500)); } };
+        phoenixToken = mint();
         php = spawn(PHP, ["-S", "127.0.0.1:" + port, path.join(PWS, "vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php")],
                     { cwd: path.join(PWS, "public"), env, stdio: ["ignore", "pipe", "pipe"] });
         php.stdout!.on("data", (d) => { log += d; });
@@ -89,13 +92,14 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
         // The image's servers.json, as the platform serves it for a test device.
         serversJson = (await request({ method: "GET", url: api + "v1/servers.json" })).body;
     }, 180000);
+    afterEach(() => { fake.boxTokenAnswer = null; fake.boxSecret = secret; });
     afterAll(async () => {
         if (php) php.kill();
         if (fake) await fake.stop();
         if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     });
 
-    function world(opts: { phoenixToken?: string } = {}) {
+    function world(opts: { phoenixToken?: string; servers?: string; clients?: any } = {}) {
         const keys: Record<string, any> = {};
         const accountKeys: Record<string, any> = { "account:tokens": { via: "code", accessToken: opts.phoenixToken ?? phoenixToken, refreshToken: null, tokenType: "Bearer", scope: "account", expiresAt: null } };
         let accountState: any = { signedIn: true };
@@ -105,7 +109,7 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
             luna: { call: async () => ({ returnValue: true }) },
             keystore: { get: async (k: string) => accountKeys[k], put: async (k: string, v: any) => { accountKeys[k] = v; }, del: async (k: string) => { delete accountKeys[k]; } },
             state: { load: () => accountState, save: (o: any) => { accountState = o; } },
-            servers: () => platform.load({ image: () => serversJson, override: () => null }),
+            servers: () => platform.load({ image: () => opts.servers ?? serversJson, override: () => null }),
             override: { read: () => null, write: () => {} },
             crypto: { sha256: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha256").update(b).digest()),
                       sha512: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest()),
@@ -145,12 +149,12 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
                 ["luna://" + SERVICE + "/*"]: (p: any, uri: string) => methods[uri.slice(uri.lastIndexOf("/") + 1)](p)
             }
         });
-        const clients = { box: { ...fake.clients().box, relay: true } };
+        const clients = opts.clients ?? { box: { ...fake.clients().box, relay: true } };
         methods = kit.createConnectorService(drives, {
             luna: bus, request, periodicSync: false, files: { size: async () => 0, read: async () => new Uint8Array(0), write: async () => {}, rename: async () => {}, remove: async () => {} },
             systemConfig: async (name: string) => (name === "drives/clients.json" ? clients : null)
         });
-        return { methods, keys, relayed, accounts, credentials };
+        return { methods, keys, relayed, accounts, credentials, account, oauth, state: () => accountState };
     }
 
     it("signs in to Box and refreshes through the relay; the secret never reaches the device", async () => {
@@ -190,13 +194,152 @@ describe.skipIf(!PWS)("Phoenix's token relay against Phoenix-Web-Services and th
         const r = await anonymous.methods.signIn({ templateId: drives.TEMPLATES.box });
         expect(r.returnValue).toBe(false);
         expect(Object.keys(anonymous.keys)).toEqual([]);
-        // The stand-in refuses Phoenix's secret: PROVIDER_REFUSED there, 401_UNAUTHORIZED here.
+        // The stand-in refuses Phoenix's own secret (invalid_client: rotated at Box): the server's to fix,
+        // so not "sign in again" (401_UNAUTHORIZED) here, and the server's log says so.
         fake.boxSecret = "rotated";
-        try {
-            const w = world();
-            expect(await w.methods.signIn({ templateId: drives.TEMPLATES.box })).toMatchObject({ returnValue: false, errorCode: "401_UNAUTHORIZED" });
-        } finally {
-            fake.boxSecret = secret;
-        }
+        const w = world();
+        expect(await w.methods.signIn({ templateId: drives.TEMPLATES.box })).toMatchObject({ returnValue: false, errorCode: "500_SERVER_ERROR" });
+        expect(Object.keys(w.keys)).toEqual([]);
+        expect(log).toContain("the provider refused Phoenix");
     });
+
+    // A signed-in Box account whose token has expired, with its own Phoenix account (the relay's limits are per account).
+    async function signedInBox(opts: { clients?: any } = {}) {
+        const w = world({ phoenixToken: mint(), ...opts });
+        const r = await w.methods.signIn({ templateId: drives.TEMPLATES.box });
+        expect(r.returnValue, JSON.stringify(r) + "\n" + log.slice(-2000)).toBe(true);
+        const accountId = "acct-" + crypto.randomBytes(4).toString("hex");
+        const t = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "accounts", drives.TEMPLATES.box, drives.TEMPLATES.box + ".json"), "utf8"));
+        w.accounts[accountId] = { _id: accountId, templateId: t.templateId, username: r.username, capabilityProviders: t.capabilityProviders };
+        w.credentials[accountId] = r.credentials;
+        expect((await w.methods.onCreate({ accountId, config: r.config })).returnValue).toBe(true);
+        const key = w.keys["key:" + r.credentials.common.oauthKey];
+        key.expiresAt = 1;
+        return { w, r, key, accountId };
+    }
+
+    it("a provider that times out, fails, answers HTML, redirects, sends too much or no token: the provider is away, not the sign-in refused", async () => {
+        const answers: Record<string, (res: any) => void> = {
+            "a 500": (res) => { res.writeHead(500, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "server_error" })); },
+            "HTML": (res) => { res.writeHead(200, { "Content-Type": "text/html" }); res.end("<html>Box is down " + secret + "</html>"); },
+            "a redirect": (res) => { res.writeHead(302, { Location: fake.origin + "/oauth/box/token-elsewhere" }); res.end(); },
+            "no access token": (res) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ refresh_token: "rt-x", token_type: "bearer" })); },
+            "4 MB": (res) => {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.write("{\"access_token\":\"at-box-huge\",\"pad\":\"");
+                let n = 0;
+                const more = () => { while (n < 4096) { n++; if (!res.write("x".repeat(1024))) return void res.once("drain", more); } res.end("\"}"); };
+                res.on("error", () => {});
+                more();
+            },
+            "no answer": (res) => { setTimeout(() => res.destroy(), 25000); }
+        };
+        const { w, key, accountId } = await signedInBox();
+        for (const [name, answer] of Object.entries(answers)) {
+            fake.boxTokenAnswer = (res: any) => { answer(res); return true; };
+            const started = Date.now();
+            const l = await w.methods.listFiles({ accountId, path: "/" });
+            expect(l, name).toMatchObject({ returnValue: false });
+            expect(l.errorCode, name).not.toBe(kit.FILE_ERRORS.AUTH);
+            expect(Date.now() - started, name).toBeLessThan(25000);
+            // The key keeps its refresh token for the next try.
+            expect(key.refreshToken, name).toMatch(/^rt-box-/);
+            expect(JSON.stringify(l), name).not.toContain(secret);
+        }
+        fake.boxTokenAnswer = null;
+        expect((await w.methods.listFiles({ accountId, path: "/" })).returnValue).toBe(true);
+        expect(log).not.toContain(secret);
+        expect(log).not.toContain("at-box-huge");
+    }, 120000);
+
+    it("a refresh the provider refuses there flags the account; a removed account stays removed though its refresh was in flight", async () => {
+        const a = await signedInBox();
+        a.key.refreshToken = "rt-revoked";
+        expect(await a.w.methods.listFiles({ accountId: a.accountId, path: "/" })).toMatchObject({ returnValue: false, errorCode: kit.FILE_ERRORS.AUTH });
+        expect(await a.w.methods.sync({ accountId: a.accountId })).toMatchObject({ returnValue: false, errorCode: "401_UNAUTHORIZED" });
+
+        const b = await signedInBox();
+        let answered: () => void = () => {};
+        const inFlight = new Promise<void>((r) => { answered = r; });
+        fake.boxTokenAnswer = (res: any) => {
+            fake.boxTokenAnswer = null;
+            // The provider answers only once the account is gone on the device.
+            inFlight.then(() => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify({ access_token: "at-box-late", refresh_token: "rt-box-late", expires_in: 3600 })); });
+            return true;
+        };
+        const keyId = b.r.credentials.common.oauthKey;
+        const listing = b.w.methods.listFiles({ accountId: b.accountId, path: "/" });
+        for (let i = 0; i < 100 && !b.w.relayed.some((x: any) => x.step === "refresh"); i++) await new Promise((r) => setTimeout(r, 20));
+        expect((await b.w.oauth.forget({ keyId }, SERVICE)).returnValue).toBe(true);
+        answered();
+        expect((await listing).returnValue).toBe(false);
+        expect(b.w.keys["key:" + keyId]).toBeUndefined();
+        expect(JSON.stringify(b.w.keys)).not.toContain("at-box-late");
+    }, 60000);
+
+    it("signed out of Phoenix while a refresh is in flight: that refresh lands, the next is refused with a reason, the account is not flagged", async () => {
+        const { w, key, accountId } = await signedInBox();
+        let release: () => void = () => {};
+        const held = new Promise<void>((r) => { release = r; });
+        fake.boxTokenAnswer = (res: any, f: URLSearchParams) => {
+            fake.boxTokenAnswer = null;
+            held.then(() => {
+                const t = { access_token: "at-box-" + crypto.randomBytes(4).toString("hex"), refresh_token: f.get("refresh_token"), token_type: "bearer", expires_in: 3600 };
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify(t));
+            });
+            return true;
+        };
+        const listing = w.methods.listFiles({ accountId, path: "/" });
+        for (let i = 0; i < 100 && !w.relayed.some((x: any) => x.step === "refresh"); i++) await new Promise((r) => setTimeout(r, 20));
+        expect((await w.account.signOut({}, "org.webosphoenix.settings")).returnValue).toBe(true);
+        release();
+        await listing;
+        expect(key.accessToken).toMatch(/^at-box-/);
+        key.expiresAt = 1;
+        const l = await w.methods.listFiles({ accountId, path: "/" });
+        expect(l).toMatchObject({ returnValue: false, errorText: expect.stringMatching(/Phoenix/) });
+        expect(l.errorCode).not.toBe(kit.FILE_ERRORS.AUTH);
+        const s = await w.methods.sync({ accountId });
+        expect(s.returnValue).toBe(false);
+        expect(s.errorCode).not.toBe("401_UNAUTHORIZED");
+        expect(key.refreshToken).toMatch(/^rt-box-/);
+    }, 60000);
+
+    it("the relay unreachable: a quick, clear failure; a secret left in clients.json is never sent", async () => {
+        const dead = "http://127.0.0.1:" + (await freePort()) + "/";
+        const w = world({ servers: JSON.stringify(JSON.parse(serversJson)).split(api).join(dead), clients: { box: { ...fake.clients().box, relay: true, clientSecret: "stray-secret-in-the-file" } } });
+        const started = Date.now();
+        const r = await w.methods.signIn({ templateId: drives.TEMPLATES.box });
+        expect(r).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED", errorText: expect.stringMatching(/token relay/) });
+        expect(Date.now() - started).toBeLessThan(10000);
+        expect(Object.keys(w.keys)).toEqual([]);
+        // And with the relay there: signed in through it, the stray secret neither sent to Box nor to the relay.
+        fake.tokenForms.length = 0;
+        const { w: w2 } = await signedInBox({ clients: { box: { ...fake.clients().box, relay: true, clientSecret: "stray-secret-in-the-file" } } });
+        expect(w2.relayed[0]).toMatchObject({ step: "exchange" });
+        expect(fake.tokenForms.length).toBeGreaterThan(0);
+        expect(JSON.stringify(fake.tokenForms) + JSON.stringify(w2.relayed) + JSON.stringify(w2.keys)).not.toContain("stray-secret-in-the-file");
+        expect(log).not.toContain("stray-secret-in-the-file");
+    }, 60000);
+
+    it("the relay's per-account limit: a clear wait with the server's Retry-After, no hang, the account not flagged", async () => {
+        const { w, key, accountId } = await signedInBox();
+        // Spend this Phoenix account's 10 calls a minute (the sign-in was one).
+        let limited: any = null;
+        for (let i = 0; i < 12 && !limited; i++) {
+            const r = await w.account.tokenRelay({ provider: "box", step: "refresh", refreshToken: "rt-not-box-s" }, OAUTH_SERVICE);
+            if (r.errorCode === "RATE_LIMITED") limited = r;
+        }
+        expect(limited).toMatchObject({ returnValue: false, errorCode: "RATE_LIMITED", retryAfter: expect.any(Number) });
+        const before = Date.now();
+        const l = await w.methods.listFiles({ accountId, path: "/" });
+        expect(l).toMatchObject({ returnValue: false, errorCode: kit.FILE_ERRORS.RATE_LIMITED, errorText: expect.stringMatching(/token relay is busy/) });
+        expect(l.retryAt).toBeGreaterThan(before);
+        expect(l.retryAt).toBeLessThanOrEqual(before + 61000);
+        expect(Date.now() - before).toBeLessThan(5000);
+        expect(key.refreshToken).toMatch(/^rt-box-/);
+        // Until then the account does not ask again.
+        expect(await w.methods.sync({ accountId })).toMatchObject({ returnValue: true, skipped: "backoff" });
+    }, 60000);
 });

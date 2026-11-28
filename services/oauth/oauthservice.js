@@ -27,7 +27,9 @@
 //       to the relay through the account service (env.relay), which adds
 //       the device's Phoenix token; tokenEndpoint is then not used and no
 //       clientSecret is sent or kept. Refreshes go the same way. Without a
-//       relay here: errorCode "NOT_AVAILABLE"
+//       relay here: errorCode "NOT_AVAILABLE"; the relay busy (429, 503):
+//       "503_SERVICE_UNAVAILABLE" with retryAt (ms since the epoch), on
+//       authorize and token alike (viaRelay below)
 //   token {keyId, refresh?} -> {accessToken, tokenType, expiresAt} (refreshed
 //                              when it has expired and a refresh token is kept;
 //                              refresh: true renews it now, when the provider
@@ -153,15 +155,26 @@ function createOAuthService(env) {
 
     // The relay's answer as a token endpoint's body; its refusals as
     // postToken's (PROVIDER_REFUSED: the code or refresh token was not
-    // accepted; UNKNOWN_PROVIDER: the server holds no secret for it).
+    // accepted, which puts the warning on the account; UNKNOWN_PROVIDER:
+    // the server holds no secret for it). A busy or resting server (429,
+    // 503) is 503_SERVICE_UNAVAILABLE with retryAt, the time its
+    // Retry-After names (a minute without one), as synckit's http.js does
+    // for a provider; nothing else flags the account (the relay or the
+    // provider away, Phoenix's own sign-in ended), and the key is kept.
     function viaRelay(provider, params) {
         return Promise.resolve(env.relay(Object.assign({ provider: provider }, params))).then(function (r) {
             if (!r || r.returnValue === false || typeof r.accessToken !== "string" || !r.accessToken) {
-                var code = r && r.errorCode;
-                var e = new Error("Phoenix's token relay: " + ((r && r.errorText) || "no access token"));
+                var code = r && r.returnValue === false ? r.errorCode : "SERVER_ERROR";
+                var e = new Error("Phoenix's token relay: " + ((r && r.returnValue === false && r.errorText) || "no access token in its answer"));
+                if (code === "RATE_LIMITED" || code === "UNAVAILABLE") {
+                    e.retryAt = now() + Math.max(1, Number(r.retryAfter) || 60) * 1000;
+                    e.errorCode = "503_SERVICE_UNAVAILABLE";
+                    e.message = "Phoenix's token relay is busy; trying again after " + new Date(e.retryAt).toISOString();
+                    throw e;
+                }
                 e.errorCode = code === "PROVIDER_REFUSED" || code === "BAD_REQUEST" ? "401_UNAUTHORIZED"
                     : code === "UNKNOWN_PROVIDER" || code === "NOT_FOUND" ? "NOT_AVAILABLE"
-                    : code === "PROVIDER_UNAVAILABLE" || code === "SERVER_ERROR" ? "500_SERVER_ERROR"
+                    : code === "PROVIDER_UNAVAILABLE" || code === "SERVER_ERROR" || code === "BAD_SERVER" ? "500_SERVER_ERROR"
                     : typeof code === "string" && code ? code : "UNKNOWN_ERROR";
                 throw e;
             }
@@ -190,9 +203,17 @@ function createOAuthService(env) {
 
     function wrap(promise) {
         return promise.then(function (r) { return r; }, function (e) {
-            return fail(e.errorCode || "UNKNOWN_ERROR", String(e && e.message || e));
+            var r = fail(e.errorCode || "UNKNOWN_ERROR", String(e && e.message || e));
+            if (e && e.retryAt) r.retryAt = e.retryAt;
+            return r;
         });
     }
+
+    // The keys forgotten while this service runs: a refresh that was in
+    // flight when its key was forgotten (the account removed) does not
+    // write the key back. Checked and set synchronously, so no write can
+    // come between.
+    var forgotten = {};
 
     return {
         redirectUri: function () {
@@ -273,6 +294,7 @@ function createOAuthService(env) {
                 return (rec.relay ? viaRelay(rec.relay, { step: "refresh", refreshToken: rec.refreshToken })
                     : postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
                                                      client_id: rec.clientId, client_secret: rec.clientSecret })).then(function (body) {
+                    if (forgotten[p.keyId]) throw Object.assign(new Error("No such key (forgotten while it was refreshed)"), { errorCode: "NOT_FOUND" });
                     keep(rec, body);
                     return Promise.resolve(env.keystore.put("key:" + p.keyId, rec)).then(function () {
                         return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
@@ -283,6 +305,7 @@ function createOAuthService(env) {
 
         forget: function (p, caller) {
             return wrap(owned(p, caller).then(function (rec) {
+                forgotten[p.keyId] = true;
                 // RFC 7009 2.1: the refresh token too, which a provider may
                 // otherwise keep valid (revoking it revokes its access tokens
                 // at most providers; the access token is revoked as well).
