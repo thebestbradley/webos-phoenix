@@ -226,6 +226,50 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.bluesky.signin": {
+  "owner": "the bluesky connector (apps/connectors/bluesky: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.deltachat.signin": {
+  "owner": "the deltachat connector (apps/connectors/deltachat: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.drives.signin": {
+  "owner": "the drives connector (apps/connectors/drives: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.google.signin": {
+  "owner": "the google connector (apps/connectors/google: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.linkedin.signin": {
+  "owner": "the linkedin connector (apps/connectors/linkedin: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.matrix.signin": {
+  "owner": "the matrix connector (apps/connectors/matrix: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.microsoft.signin": {
+  "owner": "the microsoft connector (apps/connectors/microsoft: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.slack.signin": {
+  "owner": "the slack connector (apps/connectors/slack: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.todoist.signin": {
+  "owner": "the todoist connector (apps/connectors/todoist: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.xmpp.signin": {
+  "owner": "the xmpp connector (apps/connectors/xmpp: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.palm.app.accounts:phoenix.zoom.signin": {
+  "owner": "the zoom connector (apps/connectors/zoom: Phoenix's catalog connector, preinstalled.json firstParty; installed from the catalog, its sysbus files come with it, not with the image; Accounts holds its sign-in group for its page, compat/app-permissions.json)",
+  "row": "C6"
+ },
  "luna:unknown-group:com.webos.surfacemanager:telephony.query": {
   "owner": "the app's or service's owner",
   "row": "C6"

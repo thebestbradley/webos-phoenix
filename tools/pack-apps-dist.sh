@@ -8,9 +8,11 @@
 #
 # The image's phoenix-apps recipe installs the apps with
 # tools/install-rootfs.py, which takes each React, Enact and Flutter app
-# from its dist/ and the Node services' shared packages from their built
-# lib/. BitBake may not use the network in do_compile, so the recipe does
-# not run npm: build the apps here (cd apps && npm ci && npm run build; the
+# from its dist/, the Node services' shared packages from their built lib/
+# (the SDK's framework from its dist/), and the npm packages a service
+# depends on from apps/node_modules (nova's @noble/curves:
+# install-rootfs.py --npm-packages). BitBake may not use the network in
+# do_compile, so the recipe does not run npm: build the apps here (cd apps && npm ci && npm run build; the
 # Enact and Flutter demos as their READMEs say), pack them, and point the
 # recipe at the archive in local.conf:
 #
@@ -27,10 +29,16 @@ OUT=${1:?usage: tools/pack-apps-dist.sh OUT.tar.gz}
 case "$OUT" in /*) ;; *) OUT=$PWD/$OUT ;; esac
 cd "$REPO_DIR"
 set --
-for d in apps/*/dist apps/shared/*/lib; do
+for d in apps/*/dist apps/shared/*/lib apps/shared/*/dist; do
     [ -d "$d" ] && set -- "$@" "$d"
 done
 [ $# -gt 0 ] || { echo "pack-apps-dist: nothing built (cd apps && npm run build)" >&2; exit 1; }
+# Not built but not in git either: without them do_install stops ("the npm
+# package ... is not installed").
+NPM=$(python3 tools/install-rootfs.py --npm-packages) || exit 1
+for d in $NPM; do
+    set -- "$@" "$d"
+done
 # Reproducible: sorted, no owners, the commit's time.
 MTIME=$(git log -1 --format=%cI 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="$MTIME" -czf "$OUT" "$@"
