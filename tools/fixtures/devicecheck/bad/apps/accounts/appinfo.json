@@ -1,0 +1,7 @@
+{
+    "id": "com.palm.app.accounts",
+    "type": "web",
+    "main": "index.html",
+    "title": "Accounts",
+    "requiredPermissions": ["phoenix.svc.signin"]
+}

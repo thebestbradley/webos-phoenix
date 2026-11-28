@@ -1,6 +1,7 @@
 {
     "//": "What each checker must find in this tree, and nothing else (tools/test-devicecheck.py).",
     "luna": [
+        "luna:missing-permission:com.palm.app.accounts->org.example.svc/post",
         "luna:missing-permission:org.example.demo->com.webos.service.systemservice/getPreferenceValues",
         "luna:missing-permission:org.example.demo->com.webos.service.systemservice/getPreferences",
         "luna:missing-permission:org.example.svc->com.webos.notification/createToast",

@@ -1,3 +1,5 @@
 {
-    "svc.query": ["org.example.svc/status"]
+    "svc.query": ["org.example.svc/status"],
+    "svc.account": ["org.example.svc/signIn", "org.example.svc/post"],
+    "phoenix.svc.signin": ["org.example.svc/signIn"]
 }

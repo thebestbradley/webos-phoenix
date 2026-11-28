@@ -1,0 +1,10 @@
+<!doctype html>
+<html><head><title>Sign in</title></head>
+<body>
+<script>
+// The template's sign-in page runs in Accounts' frame: its calls go out as
+// Accounts', which holds phoenix.svc.signin (signIn) and not svc.account.
+call("luna://org.example.svc/signIn", {});
+call("luna://org.example.svc/post", {});
+</script>
+</body></html>

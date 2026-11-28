@@ -23,6 +23,10 @@ services, the device shell's QML, the runtime's device half) is checked:
   unknown-group      a perm file or requiredPermissions names a group no
                      provider defines
 
+An account template's sign-in page (validator.customUI) is checked as
+Accounts (com.palm.app.accounts), whose card shows it in a frame: on a
+device the hub sees Accounts calling.
+
 Web apps' calls go through the runtime's serviceAliases first (the names
 OSE renamed: com.palm.systemservice and so on), as on a device. URIs built
 at run time from parts the checker cannot follow are not checked; a
@@ -45,6 +49,8 @@ CONST = re.compile(r"""(?:\b(?:const|var|let)\s+|readonly\s+property\s+string\s+
 METHOD_AFTER = re.compile(r"""^\s*(?:,\s*(?:\{[^{}]{0,200}?\bmethod\s*:\s*|)|[^;]{0,300}?\bmethod\s*:\s*)(["'])/?([A-Za-z0-9_./\-]+)\1""", re.S)
 QML_SECOND = re.compile(r"""^\s*,\s*(["'])(/[A-Za-z0-9_./\-]+)\1""")
 COMMENT_LINE = re.compile(r"^\s*(//|\*|/\*|#)")
+SET_METHOD = re.compile(r"""\.setMethod\(\s*(["'])([A-Za-z0-9_./\-]+)\1\s*\)""")
+PALM_COMPONENT = re.compile(r"""\{[^{}]*\bkind\s*:\s*(["'])PalmService\1[^{}]*\}""")
 SIGNAL_SEND = re.compile(r"\b(?:LSSignalSend\w*|signal)\s*\(\s*(?:[\w.\->]+\s*,\s*)?$")
 
 
@@ -100,6 +106,20 @@ def calls_in(text):
             out.append((svc, m.group(2).strip("/"), m.start()))
         for m in re.finditer(r"""\b%s\s*,\s*(["'])/([A-Za-z0-9_./\-]+)\1""" % n, text):
             out.append((svc, m.group(2).strip("/"), m.start()))
+    # Enyo's PalmService components given the service at run time from one
+    # property of the kind (SERVICE: "palm://x/" ... this.$.call.setService(this.SERVICE))
+    # and their methods beside it: setMethod("y"), or a component's own
+    # method: "y" (one with a service of its own is a literal URI above).
+    used = [name for name in consts if re.search(r"\.setService\(\s*this\.%s\s*\)" % re.escape(name), text)]
+    if len(used) == 1:
+        svc = consts[used[0]]
+        for m in SET_METHOD.finditer(text):
+            out.append((svc, m.group(2).strip("/"), m.start()))
+        for m in PALM_COMPONENT.finditer(text):
+            body = m.group(0)
+            mm = re.search(r"""\bmethod\s*:\s*(["'])([A-Za-z0-9_./\-]+)\1""", body)
+            if mm and not re.search(r"\bservice\s*:", body):
+                out.append((svc, mm.group(2).strip("/"), m.start()))
     return out
 
 
@@ -365,7 +385,77 @@ def clients(root, phoenix_perms):
         if os.path.isdir(os.path.join(root, r)):
             files += list(walk(root, r, (".qml", ".js", ".cpp", ".h")))
     out.append(Client("com.webos.surfacemanager", "shell", files, groups=set()))
+    out += frame_clients(root, out, compat_perms)
     return out
+
+
+ACCOUNTS = "com.palm.app.accounts"
+
+
+def package_dirs(root):
+    """The folders of the connector packages the image comes with
+    (runtime/rootfs.json "preinstalled": installed apps, not in
+    applicationDirs), whose account templates Accounts shows too."""
+    cfg_path = os.path.join(root, "runtime", "rootfs.json")
+    cfg = read_json(cfg_path) if os.path.isfile(cfg_path) else {}
+    path = os.path.join(root, cfg.get("preinstalled") or "")
+    if not cfg.get("preinstalled") or not os.path.isfile(path):
+        return []
+    data = read_json(path)
+    out = []
+    for e in data.get("packages") or []:
+        d = os.path.join(root, e.get("from") or "")
+        if e.get("from") and os.path.isdir(d) and d not in out:
+            out.append(d)
+    return out
+
+
+def frame_clients(root, out, compat_perms):
+    """The account templates' sign-in pages (validator.customUI {appId,
+    name}), as Accounts: Accounts shows each in a frame of its own card
+    (Enyo's CrossAppUI), and WebAppMgr's bridge gives the frame's calls
+    Accounts' name, so the hub checks them against Accounts' groups, not the
+    page's own app's (docs/DEVICE-AUDIT.md, "Accounts and their connectors
+    on Revision 22"). The page's folder is charged (a wizard's scripts sit
+    beside its page)."""
+    accounts = [c for c in out if c.kind == "app" and c.name == ACCOUNTS]
+    if accounts:
+        groups = set(accounts[0].groups or ())
+    elif ACCOUNTS in compat_perms:
+        groups = set(compat_perms[ACCOUNTS])
+    else:
+        return []
+    dirs = {}
+    for d in app_dirs(root) + package_dirs(root):
+        info, _ = app_info(d)
+        if info:
+            dirs[info.get("id") or os.path.basename(d)] = d
+    pages = {}
+    for app_id, d in sorted(dirs.items()):
+        tdir = os.path.join(d, "public", "accounts")
+        if not os.path.isdir(tdir):
+            continue
+        for t in sorted(os.listdir(tdir)):
+            path = os.path.join(tdir, t, t + ".json")
+            if not os.path.isfile(path):
+                continue
+            try:
+                ui = (read_json(path).get("validator") or {}).get("customUI") or {}
+            except (ValueError, AttributeError):
+                continue
+            if not isinstance(ui, dict) or ui.get("appId") not in dirs or not ui.get("name"):
+                continue
+            page_dir = os.path.dirname(os.path.join(dirs[ui["appId"]], str(ui["name"])))
+            if os.path.isdir(page_dir):
+                pages.setdefault(page_dir, ui["appId"])
+    res = []
+    for page_dir, app_id in sorted(pages.items()):
+        files = list(walk(root, rel(root, page_dir), SOURCE_EXTS))
+        c = Client(ACCOUNTS, "app", files, groups=set(groups), alias=True)
+        c.info_path = "%s (the sign-in page of %s, in Accounts' frame)" % (rel(root, page_dir), app_id)
+        c.frame = True
+        res.append(c)
+    return res
 
 
 def method_groups(methods, method):
@@ -486,8 +576,9 @@ def check(root):
                     continue
                 if not set(groups) & c.groups:
                     f.add("missing-permission", "%s->%s/%s" % (c.name, name, method),
-                          "%s calls %s/%s, which needs one of the groups %s; it has %s"
-                          % (c.name, name, method, ", ".join(sorted(groups)),
+                          "%s%s calls %s/%s, which needs one of the groups %s; it has %s"
+                          % (c.name, " (%s)" % c.info_path if getattr(c, "frame", False) else "",
+                             name, method, ", ".join(sorted(groups)),
                              ", ".join(sorted(c.groups)) or "none"), where)
         if needs:
             minimal = sorted({"|".join(gs) for gs in needs})
@@ -496,7 +587,7 @@ def check(root):
                   "%s declares no requiredPermissions (%s) but calls %d ACG-guarded methods; it needs at least: %s"
                   % (c.name, getattr(c, "info_path", "appinfo.json"), sum(len(v) for v in needs.values()),
                      ", ".join(minimal)), first[2])
-        if c.groups is not None and c.kind != "shell":
+        if c.groups is not None and c.kind != "shell" and not getattr(c, "frame", False):
             for g in sorted(c.groups - all_groups):
                 f.add("unknown-group", "%s:%s" % (c.name, g),
                       "%s holds the group %s, which no provider's api file defines" % (c.name, g),
