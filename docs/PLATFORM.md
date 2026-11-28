@@ -1331,9 +1331,12 @@ malicious package (it also holds the packages' SHA-256s). Two steps:
 
 ### 7.2 RAUC keys
 
-RAUC verifies bundles against a CA in the image's keyring; the image needs
-that keyring before the first device image (HARDWARE.md "OTA with A/B
-updates": "the keyring" still to do; `meta-phoenix` has no RAUC recipe yet).
+RAUC verifies bundles against a CA in the image's keyring
+(`/etc/rauc/keyring.pem`, meta-phoenix `rauc-conf`'s `PHOENIX_RAUC_KEYRING`).
+Since 28 November 2026 test images carry a **test CA whose keys are public**
+(meta-phoenix `files/rauc/test`, `scripts/rauc-test-keys.sh`), and
+`phoenix-bundle` signs with its development certificate; release images
+need the owner's CA before the first release (PRE-IMAGE-CHECKLIST.md U3).
 Proposal: an offline **root CA** (kept like the driver key), a **release
 signing certificate** issued by it and stored only on a hardware token,
 and a separate **development CA** for test images and CI. CI builds bundles
@@ -1729,7 +1732,7 @@ so nothing is forgotten. Each is small unless said.
 | Push service (C6), relay channel registration | registration: **done** (`services/account` `pushEndpoint`, `pushRegister`); the ntfy connection and decryption: `org.webosphoenix.service.push` (SYNERGY-MODERN.md 4.8) | P3 |
 | OAuth broker option | client: **done** (`services/account` `tokenRelay`); the option in `services/oauth/oauthservice.js` `authorize` | With the first confidential provider (Slack) |
 | "Phoenix" assistant provider type | `apps/assistant/service` | **Done** |
-| RAUC in the image (recipe, `system.conf`, keyring) and mark-good | meta-phoenix (mark-good: **done** in `com.palm.update`) | Before the first device image (7.2) |
+| RAUC in the image (recipe, `system.conf`, keyring) and mark-good | meta-phoenix `dynamic-layers/rauc`: **done** for `phoenix-vm-arm64` (A/B disk, GRUB's boot counter, test keyring, `phoenix-bundle`; 28 November 2026), mark-good in `com.palm.update`; the phones' and tablets' slots, and the owner's release keyring, to do | Before the first device image (7.2) |
 | Model download mirror | `apps/assistant/service/lib/models.js:45` | When GitHub releases stop being used |
 | Release simulator builds read the public catalog | `shell/sim` build setting, `sources.json` for release builds | With the first simulator download |
 | Connectivity probe and NTP vendor zone | `meta-phoenix` configuration | Before the first device image |

@@ -4,7 +4,7 @@
 SUMMARY = "webOS Phoenix system update (a RAUC bundle of webos-phoenix-image)"
 DESCRIPTION = "The system update for a machine with A/B slots (PHOENIX_RAUC): \
 webos-phoenix-image's root file system as one verity bundle, for the device \
-type phoenix-<MACHINE> (RAUC's compatible, the update feed's), with the build \
+type (RAUC's compatible, the update feed's: phoenix-<MACHINE>), with the build \
 and version of the rootfs it carries. Published to an update channel with \
 Phoenix-Web-Services' platform:publish-testing-update (test channels) or the \
 release console (docs/PLATFORM.md 6.9, 7.3)."
@@ -18,7 +18,10 @@ python __anonymous() {
         raise bb.parse.SkipRecipe("%s has no A/B slots (PHOENIX_RAUC)" % d.getVar("MACHINE"))
 }
 
-RAUC_BUNDLE_COMPATIBLE = "phoenix-${MACHINE}"
+# The device type: phoenix-<MACHINE>, or the machine's name when it starts
+# with phoenix- already (phoenix-vm-arm64), as services/account/deviceinfo.js
+# derives it and the machine's system.conf says.
+RAUC_BUNDLE_COMPATIBLE = "${@d.getVar('MACHINE') if d.getVar('MACHINE').startswith('phoenix-') else 'phoenix-' + d.getVar('MACHINE')}"
 # Each block checked as it is read (dm-verity); system.conf accepts no
 # other format (bundle-formats=-plain).
 RAUC_BUNDLE_FORMAT = "verity"
@@ -48,7 +51,7 @@ RAUC_BUNDLE_BUILD = "${@phoenix_bundle_info(d, 'build')}"
 RAUC_BUNDLE_BUILD[vardepvalue] = "the image's BUILD_ID"
 RAUC_BUNDLE_VERSION = "${@phoenix_bundle_info(d, 'version')}"
 RAUC_BUNDLE_VERSION[vardepvalue] = "the image's product version"
-RAUC_BUNDLE_DESCRIPTION = "webOS Phoenix for phoenix-${MACHINE}"
+RAUC_BUNDLE_DESCRIPTION = "webOS Phoenix for ${RAUC_BUNDLE_COMPATIBLE}"
 
 python do_configure:prepend() {
     for key in ("build", "version"):
@@ -85,5 +88,5 @@ RAUC_KEYRING_FILE = "${PHOENIX_RAUC_KEYRING}"
 do_deploy:append() {
     build=$(${STAGING_BINDIR_NATIVE}/rauc info --keyring=${RAUC_KEYRING_FILE} --output-format=shell ${B}/bundle.raucb | sed -n 's/^RAUC_MF_BUILD=//p' | tr -d "'\"")
     [ -n "$build" ] || bbfatal "phoenix-bundle: rauc info shows no build"
-    ln -sf ${BUNDLE_NAME}${BUNDLE_EXTENSION} ${DEPLOYDIR}/phoenix-${MACHINE}-$build${BUNDLE_EXTENSION}
+    ln -sf ${BUNDLE_NAME}${BUNDLE_EXTENSION} ${DEPLOYDIR}/${RAUC_BUNDLE_COMPATIBLE}-$build${BUNDLE_EXTENSION}
 }

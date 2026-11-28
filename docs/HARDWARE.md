@@ -1670,9 +1670,23 @@ The service is written: `services/updates`, `com.palm.update` (Palm's update
 daemon's name and API, which luna-systemui's update alerts still use), over
 RAUC's command line (`rauc status`, `info`, `install`, `status mark-active`).
 The feed is static JSON per device type and channel (`server/updates`). See
-[APP-RUNTIME.md](APP-RUNTIME.md#system-updates). Still to do per device: the
-slot layout in `system.conf`, the bootloader backend, the keyring, and
-`rauc-mark-good` after a good start.
+[APP-RUNTIME.md](APP-RUNTIME.md#system-updates). The service marks the
+running slot good itself once the System UI is up (not meta-rauc's
+`rauc-mark-good`, which marks it at boot).
+
+**Done for the ARM64 VM** (28 November 2026; meta-phoenix
+`dynamic-layers/rauc`, [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#system-updates)):
+meta-rauc in LuneOS's layers, an A/B disk booted with UEFI (GRUB on the EFI
+system partition, root slots A and B, a data partition), GRUB's boot counter
+(three tries a slot), `/var`, `/home` and `/media` kept on the data partition
+as overlays, the verity bundle `phoenix-bundle`, and a public test keyring.
+
+**Still to do per device**: each device's slots and boot counter.
+
+| Device | Boot | Plan |
+| --- | --- | --- |
+| PineTab2, PinePhone Pro | U-Boot or Tow-Boot in SPI flash, reading `extlinux.conf` from the FAT boot partition (`phoenix-extlinux.wks.in`) | The same four partitions as the VM, with a U-Boot `boot.scr` in place of `extlinux.conf` (distro boot runs it when there is no `extlinux.conf`): it loads the slots' state from a small text file on the boot partition (`env import -t`), takes RAUC's U-Boot variables (`BOOT_ORDER`, `BOOT_A_LEFT`, `BOOT_B_LEFT`), counts the try with `setexpr`, writes the file back (`env export -t`, `fatwrite`) and boots the slot's own `/boot/Image` and device tree with `rauc.slot=`. In Linux, RAUC's `custom` boot loader backend (a script) reads and writes the same file, so nothing depends on where the device's U-Boot keeps its own environment. Needs a U-Boot built with `fatwrite`, `setexpr` and `env import/export`: to check on each device |
+| Fairphone 6 | Android's boot loader, Android A/B slots | Not the Android slots (switching them from Linux bricks it); a chain-loaded boot loader, to design |
 
 ### Bootloader constraints
 
