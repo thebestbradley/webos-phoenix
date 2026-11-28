@@ -1,0 +1,16 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# phoenix-vm-arm64 as an EFI disk, for every hypervisor that boots from
+# firmware rather than QEMU's -kernel (docs/VIRTUALIZATION.md, X1): GPT,
+# an EFI system partition with systemd-boot, the kernel and the boot menu
+# (IMAGE_BOOT_FILES and phoenix-vm-boot, both in the machine's .conf), then
+# the same ext4 root as the kernel-boot image. The kernel finds the root
+# by its name (root=PARTLABEL=phoenix-root), whatever the disk controller
+# calls the disk, with no initramfs. Packaged for each hypervisor by
+# scripts/make-vm-packages.sh.
+
+part /boot --source bootimg-partition --fstype=vfat --label PHXESP --part-name phoenix-esp --part-type C12A7328-F81F-11D2-BA4B-00A0C93EC93B --active --align 1024 --size 256M
+part / --source rootfs --fstype=ext4 --label phoenix-root --part-name phoenix-root --align 1024
+
+bootloader --ptable gpt
