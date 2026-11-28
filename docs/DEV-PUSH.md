@@ -159,7 +159,7 @@ sent), **Pushed Changes** (the list in Settings > Developer Mode) and
 | `novacom run file:///usr/bin/luna-send -- ...` | Run a program | `nova luna-send URI JSON` (as the developer role); arbitrary commands only over SSH | Narrower |
 | `novacom -t open tty://`, `novaterm` | Root shell | `nova term`: SSH as `user` with the paired key, Developer Mode's SSH ([TERMINAL.md](TERMINAL.md) T4); no root shell | Same verb, safer |
 | `palm-package` (`ares-package`) | Make an `.ipk` | `nova package APPDIR` (an app), `nova package --system` (a dev bundle: section 8) | Same verb |
-| `palm-install [-r]` | Install / remove an app | `nova install IPK`, `nova install -r ID` (`com.webos.appInstallService`, `developerMode: true`) | Same |
+| `palm-install [-r]` | Install / remove an app | `nova install IPK` (the Marketplace's service, `sideload`, which checks the publisher: a new app or an update of one this computer installed; never a built-in app or another publisher's), later `nova install -r ID` | Same verb, Android's same-key rule |
 | `palm-launch [-c] [-i]` | Launch, close, inspect | `nova launch ID [JSON]`, `-c` close; `-i` later (WebAppMgr's inspector port) | Same |
 | `palm-log [-f]` | App and system log | `nova log [-f] [ID]` (the journal, filtered to the app or service) | Same |
 | `palm-generate` | New project | Later: `nova generate` over the SDK's templates ([APP-SDK.md](APP-SDK.md)) | Later |
@@ -519,7 +519,7 @@ device connected, else the last used.
 | `nova restart shell\|wam\|app ID\|service ID` | By hand |
 | `nova rescan` | Palm's `rescan` |
 | `nova package APPDIR` / `nova package --system [-o FILE]` | An app's `.ipk` / a dev bundle to a file (for the server channel). **Built (P1)**, with `nova verify BUNDLE` (the device's checks, on the computer) and `nova key` |
-| `nova install IPK`, `nova install -r ID` | Install, remove an app (Developer Mode's installer path) |
+| `nova install IPK` | Install an app: novad hands it to the Marketplace's service (`org.webosphoenix.service.packages/sideload`, group `phoenix.packages.sideload`, novad's only) with this computer's key, which refuses a built-in app (`BUILT_IN`) and an app another publisher installed, a catalog or another computer (`OTHER_PUBLISHER`: "This app is already installed from another publisher; remove it first"). Built 28 November 2026; `nova install -r ID` to come |
 | `nova launch ID [JSON]`, `nova launch -c ID` | Launch, close |
 | `nova log [-f] [ID]` | The journal, filtered |
 | `nova luna-send URI JSON` | One Luna call as the developer role |
@@ -1107,7 +1107,7 @@ computer able to test only the code it committed to.
   checkout that is the image's (nothing differs) reverts what the overlay
   holds (replace with nothing).
 - Not built in P2: mDNS discovery (`nova devices` probes the paired
-  devices and the USB address), `nova install`/`launch`/`send`, the
+  devices and the USB address), `nova launch`/`send` (`nova install` came later, see the table in section 12), the
   journal filter's exact units (G3), `nova forward` of JavaScript services'
   inspector ports.
 

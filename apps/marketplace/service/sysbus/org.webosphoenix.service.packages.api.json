@@ -20,5 +20,8 @@
     ],
     "phoenix.packages.signin": [
         "org.webosphoenix.service.packages/checkSignInPage"
+    ],
+    "phoenix.packages.sideload": [
+        "org.webosphoenix.service.packages/sideload"
     ]
 }

@@ -304,6 +304,21 @@ async function restart(a, out) {
     });
 }
 
+// nova install IPK: the device's Marketplace service installs it
+// (services/nova installApp -> sideload), as a new app or an update of one
+// this computer's key installed.
+async function install(a, out) {
+    if (a._.length !== 1) throw fail("USAGE", "nova install IPK");
+    if (a._[0] === "-r") throw fail("USAGE", "nova install -r ID: not built yet (remove the app on the device)");
+    const bytes = fs.readFileSync(a._[0]);
+    return withDevice(a, out, async (d) => {
+        const r = (await d.conn.request({ op: "install" }, bytes)).result;
+        out.log(`Installed ${r.appId} ${r.version} on ${d.target.name}`);
+        for (const x of r.skipped || []) out.log("  not installed: " + x);
+        return 0;
+    });
+}
+
 async function rescan(a, out) {
     return withDevice(a, out, async (d) => {
         const r = (await d.conn.request({ op: "rescan" })).result;
@@ -402,5 +417,5 @@ async function term(a, out) {
     });
 }
 
-module.exports = { pair, unpair, listDevices, push, put, get, status, revert, restart, rescan, log, lunaSend, forward, term, startForward,
+module.exports = { pair, unpair, listDevices, push, put, get, status, revert, restart, rescan, install, log, lunaSend, forward, term, startForward,
                    makeFileBundle, devicePrefix };
