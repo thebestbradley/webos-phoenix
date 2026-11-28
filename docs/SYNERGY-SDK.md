@@ -63,6 +63,18 @@ org.example.feeds/                      hidden app ("phoenix": {"hidden": true})
     test/fixture.js                     the conformance suite's fixture
 ```
 
+The `.perm.json` holds the groups the kit's own calls need, besides your
+code's: `database.operation`, `activity.operation`, and the accounts
+service's two read groups, `phoenix.accounts.info` (`getAccountInfo`) and
+`phoenix.accounts.read-credentials` (`readCredentials`), which the kit calls
+for every account it works on (`ctx.account`, `ctx.credentials`). Without
+them `ctx.credentials` is empty on a device. Which accounts the service may
+read is the template's `readPermissions`, checked per caller, so list the
+service's own name there. Never ask for the whole accounts service
+(`phoenix.appservices.accounts`, which can create, change and delete any
+account). `tools/check-luna.py` charges the kit's calls to each service that
+runs on it (`KIT_CALLS` in `tools/devicecheck/luna.py`).
+
 The whole connector (`service/connector.js`, shortened):
 
 ```js
