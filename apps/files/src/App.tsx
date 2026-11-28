@@ -42,7 +42,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    driveRootOf, DRIVES_ROOT, FILE_ERRORS, fileManager, formatSize, isDrivePath, isHidden, isInside, joinPath, kindOf, LunaError, mimeOf, openWith, opensAsText,
+    db, driveRootOf, DRIVES_ROOT, FILE_ERRORS, fileManager, formatSize, isDrivePath, isHidden, isInside, joinPath, kindOf, LunaError, mimeOf, openWith, opensAsText,
     parentOf, shareSheet, sortEntries, type FileEntry, type SortKey, type Transfer,
 } from "@phoenix/luna";
 import { useFormFactor, useLaunchParams } from "@phoenix/luna/react";
@@ -233,13 +233,19 @@ function Browser() {
     }, [path]);
 
     useEffect(() => { setEntries(null); reload(path); }, [path, reload]);
-    // The drive accounts: places beside the favourites (and again when an account is added).
+    // The drive accounts: places beside the favourites, kept as the
+    // accounts change while Files is open (an account added or removed in
+    // Accounts; a card in the card view gets no visibility change for it).
     useEffect(() => {
         fileManager.drives().then(setDrives);
         const again = () => { if (document.visibilityState === "visible") fileManager.drives().then(setDrives); };
         document.addEventListener("visibilitychange", again);
-        return () => document.removeEventListener("visibilitychange", again);
+        const accounts = db.watch({ from: "com.palm.account:1" }, () => { fileManager.drives().then(setDrives); }, () => undefined);
+        return () => { document.removeEventListener("visibilitychange", again); accounts.cancel(); };
     }, []);
+    // And when Files is launched again (the launcher, Save to Files) while open.
+    const firstLaunch = useRef(launch);
+    useEffect(() => { if (launch !== firstLaunch.current) fileManager.drives().then(setDrives); }, [launch]);
     // A drive's transfers while something is under way (or Files was opened for one).
     const watching = busy || !!launch.transfer;
     useEffect(() => {
