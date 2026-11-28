@@ -31,7 +31,7 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | --- | --- | --- | --- | --- | --- |
 | B. The image build | 7 | 4 | 4 | 0 | 15 |
 | C. Luna calls and permissions (checker rows) | 0 | 1 | 5 | 0 | 6 |
-| F. First boot | 2 | 4 | 3 | 0 | 9 |
+| F. First boot | 2 | 5 | 3 | 0 | 10 |
 | D. Display | 0 | 3 | 2 | 1 | 6 |
 | I. Input | 0 | 2 | 2 | 1 | 5 |
 | A. Audio | 0 | 1 | 2 | 0 | 3 |
@@ -45,7 +45,7 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | L. Licences | 1 | 2 | 1 | 0 | 4 |
 | Q. What the platform needs on the device (PLATFORM.md 12) | 0 | 0 | 6 | 1 | 7 |
 | H. Per device | 0 | 2 | 2 | 5 | 9 |
-| **Total** | **13** | **26** | **42** | **12** | **93** |
+| **Total** | **13** | **27** | **42** | **12** | **94** |
 
 **The few that would stop the first image outright**, all fixed here:
 phoenix-apps' `FILES` left 580 installed files unpackaged (do_package's
