@@ -303,6 +303,13 @@ function start(opts) {
             if (what === "revocations") return send(res, 200, publishRevocations(b));
             if (what === "approve") return send(res, approve(b.user_code) ? 200 : 404, { ok: true });
             if (what === "deny") return send(res, deny(b.user_code) ? 200 : 404, { ok: true });
+            // The website's "Disconnect" for a device ({deviceId}): gone, and its tokens revoked.
+            if (what === "disconnect") {
+                if (!st.devices.delete(b.deviceId)) return error(res, 404, "No such device", "NOT_FOUND");
+                for (const [t, r] of st.tokens) if (r.device === b.deviceId) st.tokens.delete(t);
+                for (const [t, r] of st.refresh) if (r.device === b.deviceId) st.refresh.delete(t);
+                return send(res, 200, { ok: true });
+            }
             if (what === "rotate") return send(res, 200, { key: rotate(b.scope) });
             if (what === "keys") return send(res, 200, { catalogRoot: keys.catalogRoot.publicKey, catalog: keys.catalog.publicKey,
                                                           updatesRoot: keys.updatesRoot.publicKey, updates: keys.updates.publicKey,
@@ -325,6 +332,12 @@ function start(opts) {
 
         // -- OpenID Connect discovery and OAuth (Passport) --
         if (p === ".well-known/openid-configuration") {
+            // state.deviceOnly: a server that offers only the device code (as
+            // Phoenix-Web-Services under its preview lock does,
+            // DiscoveryController::metadata): no authorization_endpoint.
+            if (st.deviceOnly) return send(res, 200, { issuer: issuer(), token_endpoint: apiUrl() + "oauth/token",
+                                                       device_authorization_endpoint: apiUrl() + "oauth/device/code", revocation_endpoint: apiUrl() + "oauth/revoke",
+                                                       grant_types_supported: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"] });
             return send(res, 200, { issuer: issuer(), authorization_endpoint: apiUrl() + "oauth/authorize", token_endpoint: apiUrl() + "oauth/token",
                                     device_authorization_endpoint: apiUrl() + "oauth/device/code", revocation_endpoint: apiUrl() + "oauth/revoke",
                                     userinfo_endpoint: apiUrl() + "v1/me", response_types_supported: ["code"],

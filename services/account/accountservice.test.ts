@@ -182,6 +182,335 @@ describe("signing in with a code (RFC 8628)", () => {
     });
 });
 
+// The edge cases of signing in, as Phoenix-Web-Services' live run plays them
+// against the real platform (its tests/Device/signin-live.cjs): each ends in a
+// clear state, signed in with one set of keys or signed out with none left,
+// and the copy says what happened and what to do.
+describe("signing in: the edge cases", () => {
+    const S = "org.webosphoenix.settings";
+    const tokenUrl = (req: Any) => req.method === "POST" && /\/oauth\/token$/.test(req.url);
+    const statusOf = (svc: Any) => svc.getStatus({}, S);
+    afterAll(() => { mock.state.deviceOnly = false; });
+
+    it("two Sign In taps at once are one sign-in: one device code, and the code shown is the one polled", async () => {
+        const svc = service();
+        const codes = mock.state.deviceCodes.size, devices = mock.state.devices.size;
+        const [a, b] = await Promise.all([svc.signIn({ method: "code" }, S), svc.signIn({ method: "code" }, S)]);
+        expect(a).toMatchObject({ returnValue: true, state: "signingIn" });
+        expect(b).toMatchObject({ returnValue: true, state: "signingIn" });
+        expect(b.signIn.userCode).toBe(a.signIn.userCode);
+        expect(mock.state.deviceCodes.size).toBe(codes + 1);
+        mock.approve(a.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+        expect(mock.state.devices.size).toBe(devices + 1);
+        // A tap on the other way while it starts is BUSY, not a second sign-in.
+        await svc.signOut({}, S);
+        const [c, d] = await Promise.all([svc.signIn({ method: "code" }, S), svc.signIn({ method: "browser" }, S)]);
+        expect(c.returnValue).toBe(true);
+        expect(d).toMatchObject({ returnValue: false, errorCode: "BUSY" });
+        await svc.cancelSignIn({}, S);
+    });
+
+    it("offline when Sign In is tapped: CONNECTION_FAILED that says what to do, without a socket's words", async () => {
+        const svc = service();
+        offline = true;
+        const r = await svc.signIn({ method: "code" }, S);
+        expect(r).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED" });
+        expect(r.errorText).toMatch(/Check this device's connection and try again/);
+        expect(r.errorText).not.toMatch(/offline|ECONN|127\.0\.0\.1/);
+        expect((await statusOf(svc)).state).toBe("signedOut");
+    });
+
+    it("the network drops mid-poll: it says so and keeps asking; back, the approval is seen and the note goes", async () => {
+        const svc = service();
+        const st = await svc.signIn({ method: "code" }, S);
+        offline = true;
+        await until(async () => (await statusOf(svc)).error?.errorCode === "CONNECTION_FAILED");
+        const away = await statusOf(svc);
+        expect(away.state).toBe("signingIn");
+        expect(away.signIn.userCode).toBe(st.signIn.userCode);
+        expect(away.error.errorText).toMatch(/still trying/);
+        mock.approve(st.signIn.userCode);
+        offline = false;
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+        expect((await statusOf(svc)).error).toBeNull();
+    });
+
+    it("500 and 503 from the token endpoint: still waiting, it says the server has trouble, then signs in", async () => {
+        let failing = true;
+        const svc = service({ request: (req: Any) => failing && tokenUrl(req)
+            ? Promise.resolve({ status: (Math.random() < 0.5 ? 500 : 503), headers: { "content-type": "text/html" }, body: "<html>Service Unavailable</html>" })
+            : device.request(req) });
+        const st = await svc.signIn({ method: "code" }, S);
+        await until(async () => (await statusOf(svc)).error?.errorCode === "SERVER_ERROR");
+        const s1 = await statusOf(svc);
+        expect(s1.state).toBe("signingIn");
+        expect(s1.error.errorText).toMatch(/having trouble; still trying/);
+        mock.approve(st.signIn.userCode);
+        failing = false;
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+        expect((await statusOf(svc)).error).toBeNull();
+        // Cancel takes the note away with the sign-in.
+        await svc.signOut({}, S);
+        failing = true;
+        await svc.signIn({ method: "code" }, S);
+        await until(async () => (await statusOf(svc)).error !== null);
+        expect(await svc.cancelSignIn({}, S)).toMatchObject({ state: "signedOut", error: null });
+    });
+
+    it("never waits past the code's expiry by this device's clock, however long the backoff", async () => {
+        const waits: number[] = [];
+        const svc = service({
+            request: (req: Any) => tokenUrl(req) ? Promise.reject(new Error("offline")) : device.request(req),
+            timers: { set: (fn: () => void, ms: number) => { waits.push(ms); return setTimeout(fn, 5); }, clear: (h: Any) => clearTimeout(h) },
+        });
+        await svc.signIn({ method: "code" }, S);
+        await until(async () => waits.length > 6);
+        expect(Math.max(...waits)).toBeGreaterThan(5000);   // backing off
+        clock += 9 * 60 * 1000 + 59 * 1000;                  // a second of the code left
+        const n = waits.length;
+        await until(async () => waits.length > n + 1);
+        expect(Math.max(...waits.slice(n + 1))).toBeLessThanOrEqual(1000);
+        clock += 2000;
+        await until(async () => (await statusOf(svc)).state === "signedOut");
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "EXPIRED", errorText: expect.stringMatching(/sign in again/) });
+    });
+
+    it("turned down, expired, or a code the server no longer knows: signed out, and the copy says what to do", async () => {
+        let gone = false;
+        const svc = service({ request: (req: Any) => gone && tokenUrl(req)
+            ? Promise.resolve({ status: 400, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "invalid_grant", error_description: "The provided authorization grant is invalid" }) })
+            : device.request(req) });
+        let st = await svc.signIn({}, S);
+        mock.deny(st.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedOut");
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "ACCESS_DENIED", errorText: expect.stringMatching(/turned down; sign in again/) });
+        await svc.signIn({}, S);
+        clock += 11 * 60 * 1000;
+        await until(async () => (await statusOf(svc)).state === "signedOut");
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "EXPIRED", errorText: expect.stringMatching(/expired.*sign in again/) });
+        clock = Date.now();
+        st = await svc.signIn({}, S);
+        gone = true;
+        await until(async () => (await statusOf(svc)).state === "signedOut");
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "EXPIRED", errorText: "This code no longer works; sign in again for a new one." });
+    });
+
+    it("Cancel, then the old code approved anyway: the device is not signed in and keeps no tokens", async () => {
+        const svc = service();
+        const st = await svc.signIn({ method: "code" }, S);
+        await svc.cancelSignIn({}, S);
+        mock.approve(st.signIn.userCode);
+        await new Promise((r) => setTimeout(r, 100));
+        expect((await statusOf(svc)).state).toBe("signedOut");
+        expect(keystore["account:tokens"]).toBeUndefined();
+    });
+
+    it("a sign-in that cannot finish (the account unreadable) revokes the tokens it got and keeps none", async () => {
+        const issued: Any[] = [];
+        let meDown = true;
+        const svc = service({ request: async (req: Any) => {
+            if (meDown && /\/v1\/me$/.test(req.url)) throw new Error("connection reset");
+            const res = await device.request(req);
+            if (tokenUrl(req) && res.status === 200) issued.push(JSON.parse(res.body));
+            return res;
+        } });
+        const st = await svc.signIn({ method: "code" }, S);
+        mock.approve(st.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedOut" && issued.length === 1);
+        await until(async () => !mock.state.refresh.has(issued[0].refresh_token) && !keystore["account:tokens"]);
+        const out = await statusOf(svc);
+        expect(out.error).toMatchObject({ errorCode: "CONNECTION_FAILED", errorText: expect.stringMatching(/Check this device's connection/) });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        meDown = false;
+        const again = await svc.signIn({ method: "code" }, S);
+        mock.approve(again.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+    });
+
+    // Seen live against Phoenix-Web-Services under its preview lock: its
+    // device-api limit (60 a minute from one address) answered GET /v1/me
+    // with 429 while the device finished signing in.
+    it("rate limited (429) while finishing: signed out with nothing kept, and the copy says to try again shortly", async () => {
+        let limited = true;
+        const svc = service({ request: (req: Any) => limited && /\/v1\/me$/.test(req.url)
+            ? Promise.resolve({ status: 429, headers: { "content-type": "text/html", "retry-after": "30" }, body: "<html>Too Many Requests</html>" })
+            : device.request(req) });
+        const st = await svc.signIn({ method: "code" }, S);
+        mock.approve(st.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedOut" && !keystore["account:tokens"]);
+        expect((await statusOf(svc)).error).toMatchObject({ errorCode: "RATE_LIMITED", errorText: expect.stringMatching(/busy\. Wait a minute, then sign in again/) });
+        limited = false;
+        const again = await svc.signIn({ method: "code" }, S);
+        mock.approve(again.signIn.userCode);
+        await until(async () => (await statusOf(svc)).state === "signedIn");
+    });
+
+    it("the device removed on the website: the next call signs it out, says so, and nothing is kept", async () => {
+        const svc = service();
+        const st = await signedIn(svc);
+        for (const [t, rec] of mock.state.tokens) if (rec.user === "u_test") mock.state.tokens.delete(t);
+        mock.state.refresh.clear();
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: false, errorCode: "SIGNED_OUT" });
+        const out = await statusOf(svc);
+        expect(out).toMatchObject({ state: "signedOut", account: null, device: null });
+        expect(out.error.errorText).toMatch(/signed out from the website.*Sign in again/);
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(st.device.id).toBeTruthy();
+    });
+
+    it("a refresh the server fails (503) or cannot be reached: still signed in, and the copy says to try again", async () => {
+        let down: "503" | "offline" | null = null;
+        const svc = service({ request: (req: Any) => down === "503" && tokenUrl(req)
+            ? Promise.resolve({ status: 503, headers: { "content-type": "text/html" }, body: "<html>Service Unavailable</html>" })
+            : down === "offline" ? Promise.reject(new Error("offline")) : device.request(req) });
+        await signedIn(svc);
+        clock += 2 * 3600 * 1000;   // the access token has expired
+        down = "503";
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: false, errorCode: "SERVER_ERROR", errorText: expect.stringMatching(/having trouble\. Try again/) });
+        down = "offline";
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED" });
+        expect((await statusOf(svc)).state).toBe("signedIn");
+        down = null;
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: true, state: "signedIn" });
+    });
+
+    // The browser sign-in, with the OAuth service played here (its own tests:
+    // services/oauth/oauth.test.ts).
+    function browserService(oauth: Record<string, (p: Any) => Any>, extra: Any = {}) {
+        return service(Object.assign({ luna: { call: async (uri: string, params: Any) => {
+            calls.push({ uri, params });
+            const m = /service\.oauth\/(\w+)$/.exec(uri);
+            if (m) return oauth[m[1]] ? oauth[m[1]](params) : { returnValue: true };
+            if (uri.endsWith("/getDevMode")) return { returnValue: true, status: devMode ? "enabled" : "disabled" };
+            return { returnValue: true };
+        } } }, extra));
+    }
+    function liveToken() {
+        const t = "at_live" + crypto.randomBytes(6).toString("hex");
+        mock.state.tokens.set(t, { user: "u_test", scope: "openid account backup push reviews assistant", device: null, expires: Date.now() + 3600 * 1000 });
+        return t;
+    }
+    const called = (what: string) => calls.filter((c) => c.uri.endsWith("service.oauth/" + what));
+
+    it("browser: two taps at once open one card", async () => {
+        let answer: (r: Any) => void = () => {};
+        const svc = browserService({ authorize: () => new Promise((r) => { answer = r; }) });
+        const a = svc.signIn({ method: "browser" }, S), b = svc.signIn({ method: "browser" }, S);
+        await until(async () => called("authorize").length > 0);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(called("authorize")).toHaveLength(1);
+        answer({ returnValue: false, errorCode: "CANCELED", errorText: "The sign-in was closed" });
+        expect(await a).toMatchObject({ errorCode: "CANCELED" });
+        expect(await b).toMatchObject({ errorCode: "CANCELED" });
+    });
+
+    it("browser: Cancel with the card open closes it, and what the card brings afterwards is forgotten, never signed in", async () => {
+        let answer: (r: Any) => void = () => {};
+        const svc = browserService({ authorize: () => new Promise((r) => { answer = r; }) });
+        const p = svc.signIn({ method: "browser" }, S);
+        await until(async () => (await statusOf(svc)).state === "signingIn");
+        expect(await svc.cancelSignIn({}, S)).toMatchObject({ state: "signedOut", error: null });
+        expect(called("cancel")).toHaveLength(1);
+        answer({ returnValue: true, keyId: "k-late", scope: "account" });
+        await p;
+        expect((await statusOf(svc)).state).toBe("signedOut");
+        expect(keystore["account:tokens"]).toBeUndefined();
+        expect(called("forget").map((c) => c.params.keyId)).toEqual(["k-late"]);
+    });
+
+    it.each([
+        ["CANCELED", "CANCELED", /closed before it finished; sign in again/],
+        ["TIMEOUT", "TIMEOUT", /took too long; sign in again/],
+        ["ACCESS_DENIED", "ACCESS_DENIED", /turned down; sign in again/],
+        ["CONNECTION_FAILED", "CONNECTION_FAILED", /Check this device's connection/],
+        ["500_SERVER_ERROR", "SERVER_ERROR", /having trouble\. Try again/],
+        ["401_UNAUTHORIZED", "UNAUTHORIZED", /did not accept this sign-in; sign in again/],
+    ])("browser: the OAuth service's %s is %s, with what to do", async (theirs, ours, copy) => {
+        const svc = browserService({ authorize: () => ({ returnValue: false, errorCode: theirs, errorText: "The token endpoint answered 500" }) });
+        expect(await svc.signIn({ method: "browser" }, S)).toMatchObject({ returnValue: false, errorCode: ours, errorText: expect.stringMatching(copy) });
+        expect(await statusOf(svc)).toMatchObject({ state: "signedOut", error: { errorCode: ours, errorText: expect.stringMatching(copy) } });
+    });
+
+    it("browser: a sign-in that cannot finish forgets the OAuth service's key", async () => {
+        const at = liveToken();
+        let meDown = true;
+        const svc = browserService({ authorize: () => ({ returnValue: true, keyId: "k-new", scope: "account" }), token: () => ({ returnValue: true, accessToken: at }) },
+                                   { request: (req: Any) => meDown && /\/v1\/me$/.test(req.url) ? Promise.reject(new Error("reset")) : device.request(req) });
+        expect(await svc.signIn({ method: "browser" }, S)).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED" });
+        expect(called("forget").map((c) => c.params.keyId)).toEqual(["k-new"]);
+        expect(keystore["account:tokens"]).toBeUndefined();
+        meDown = false;
+    });
+
+    it("browser: the token refused (the device removed on the website): renewed once, then signed out and its key forgotten", async () => {
+        let at = liveToken();
+        const asked: Any[] = [];
+        const svc = browserService({
+            authorize: () => ({ returnValue: true, keyId: "k1", scope: "account" }),
+            token: (p: Any) => { asked.push(p); return p.refresh ? { returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "The token endpoint answered 400 (invalid_grant)" } : { returnValue: true, accessToken: at }; },
+        });
+        expect(await svc.signIn({ method: "browser" }, S)).toMatchObject({ state: "signedIn" });
+        mock.state.tokens.delete(at);   // revoked on the server
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: false, errorCode: "SIGNED_OUT" });
+        expect(asked.some((p) => p.refresh === true)).toBe(true);
+        expect(called("forget").map((c) => c.params.keyId)).toEqual(["k1"]);
+        expect(await statusOf(svc)).toMatchObject({ state: "signedOut", error: { errorCode: "SIGNED_OUT", errorText: expect.stringMatching(/Sign in again/) } });
+        expect(keystore["account:tokens"]).toBeUndefined();
+        at = "";
+    });
+
+    it("browser: a refresh the server fails stays signed in, as SERVER_ERROR", async () => {
+        const at = liveToken();
+        let failing = false;
+        const svc = browserService({
+            authorize: () => ({ returnValue: true, keyId: "k2", scope: "account" }),
+            token: () => failing ? { returnValue: false, errorCode: "500_SERVER_ERROR", errorText: "The token endpoint answered 503" } : { returnValue: true, accessToken: at },
+        });
+        await svc.signIn({ method: "browser" }, S);
+        failing = true;
+        expect(await svc.refresh({}, S)).toMatchObject({ returnValue: false, errorCode: "SERVER_ERROR", errorText: expect.stringMatching(/having trouble/) });
+        expect((await statusOf(svc)).state).toBe("signedIn");
+        expect(called("forget")).toHaveLength(0);
+    });
+});
+
+describe("the sign-ins the server offers", () => {
+    afterAll(() => { mock.state.deviceOnly = false; });
+    it("reports code and browser from discovery, and offers browser only where the server has it", async () => {
+        mock.state.deviceOnly = false;
+        const svc = service();
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).methods).toBeNull();   // not read yet: read once, quietly
+        await until(async () => (await svc.getStatus({}, "org.webosphoenix.settings")).methods !== null);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).methods).toEqual(["code", "browser"]);
+    });
+    it("signed in already: a second sign-in is refused, and the tokens kept stay the only ones", async () => {
+        mock.state.deviceOnly = false;
+        const svc = service();
+        await signedIn(svc);
+        const before = JSON.stringify(keystore);
+        for (const method of ["code", "browser"]) {
+            const r = await svc.signIn({ method }, "org.webosphoenix.settings");
+            expect(r).toMatchObject({ returnValue: false, errorCode: "SIGNED_IN" });
+        }
+        expect(calls.some((c) => c.uri.includes("service.oauth/authorize"))).toBe(false);
+        expect(JSON.stringify(keystore)).toBe(before);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).state).toBe("signedIn");
+    });
+    it("a server that signs in with a code only (Phoenix-Web-Services' preview): no browser, and signIn browser says so at once", async () => {
+        mock.state.deviceOnly = true;
+        const svc = service();
+        await svc.getStatus({}, "org.webosphoenix.settings");
+        await until(async () => (await svc.getStatus({}, "org.webosphoenix.settings")).methods !== null);
+        const st = await svc.getStatus({}, "org.webosphoenix.settings");
+        expect(st.methods).toEqual(["code"]);
+        const r = await svc.signIn({ method: "browser" }, "org.webosphoenix.settings");
+        expect(r).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });
+        expect(calls.some((c) => c.uri.includes("service.oauth/authorize"))).toBe(false);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).state).toBe("signedOut");
+    });
+});
+
 describe("entitlements", () => {
     it("a wrong signature is refused; offline, the kept copy holds through the grace days", async () => {
         const svc = service();

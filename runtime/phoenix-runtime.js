@@ -13947,6 +13947,8 @@
                     sheet: function (url, redirectUri, pending) {
                         return useCard() ? signInCard().show(url, redirectUri, pending) : sheet(url, redirectUri);
                     },
+                    // cancel {}: the card closes (the sheet's own Cancel closes the sheet).
+                    closeSheet: function () { if (useCard() && card) card.cancel(); },
                     // The card's page is another page: what it asks is in the store.
                     card: {
                         pending: function (p, caller) {
@@ -13983,7 +13985,7 @@
             return methods;
         }
         var serviceMethods = {};
-        ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe"].forEach(function (name) {
+        ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe", "cancel"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }

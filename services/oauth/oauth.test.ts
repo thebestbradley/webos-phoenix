@@ -203,6 +203,40 @@ describe("the sign-in through the Sign In card", () => {
         expect((await world.m.pending({ session: world.launches[0].session }, SIGNIN_APP)).errorCode).toBe("NOT_FOUND");
     });
 
+    // Settings' Cancel while the card is open (the Phoenix Account's browser
+    // sign-in: accountservice.js cancelSignIn): it ends now, the card closes,
+    // and an Allow pressed in it afterwards reaches nothing.
+    it("cancel ends the caller's sign-in as CANCELED and closes its card; another caller's is not touched", async () => {
+        world.auto = false;
+        const p = world.m.authorize(authorizeParams(), OWNER);
+        await new Promise((r) => setTimeout(r, 30));
+        expect(await world.m.cancel({}, "org.webosphoenix.someoneelse")).toEqual({ returnValue: true, canceled: false });
+        const pending = await world.m.pending({ session: world.launches[0].session }, SIGNIN_APP);
+        expect(pending.returnValue).toBe(true);
+        expect(await world.m.cancel({}, OWNER)).toEqual({ returnValue: true, canceled: true });
+        const r = await p;
+        expect(r.errorCode).toBe("CANCELED");
+        expect(world.closes).toHaveLength(1);
+        const port = Number(new URL(new URL(pending.url).searchParams.get("redirect_uri")!).port);
+        expect(await portOpen(port)).toBe(false);
+        expect((await world.m.pending({ session: world.launches[0].session }, SIGNIN_APP)).errorCode).toBe("NOT_FOUND");
+        expect(provider.state().tokenRequests).toHaveLength(0);
+        expect(await world.m.cancel({}, OWNER)).toEqual({ returnValue: true, canceled: false });
+    });
+
+    // The network gone when the code is exchanged: said as such, not as an
+    // unknown error with a socket's words.
+    it("CONNECTION_FAILED when the token endpoint cannot be reached", async () => {
+        const tokenEndpoint = provider.tokenEndpoint;
+        world = makeWorld();
+        const real = world.device.methods;
+        await provider.stop();
+        provider = await createFakeProvider({ redirectUris: ["http://127.0.0.1/oauth/callback"] }).start(0);
+        const r = await real.authorize(authorizeParams({ tokenEndpoint }), OWNER);
+        expect(r).toMatchObject({ returnValue: false, errorCode: "CONNECTION_FAILED" });
+        expect(r.errorText).toMatch(/^Cannot reach 127\.0\.0\.1:\d+/);
+    });
+
     it("TIMEOUT when nothing comes back, and the card is closed", async () => {
         world = makeWorld({ timeoutMs: 60 });
         world.auto = false;
@@ -268,6 +302,16 @@ describe("the loopback listener", () => {
         expect(await l.result).toBe("/oauth/callback?code=abc&state=s1");
         await new Promise((r) => setTimeout(r, 20));
         expect(await portOpen(l.port)).toBe(false);
+    });
+
+    it("an error from the provider (RFC 6749 4.1.2.1) ends the wait too, and the page does not say signed in", async () => {
+        const lb = createLoopback({ http });
+        const l = await lb.open({ state: "s2" });
+        const answer = await get(l.redirectUri + "?error=unauthorized_client&error_description=No&state=s2");
+        expect(answer.status).toBe(200);
+        expect(answer.body).not.toContain("Signed in");
+        expect(answer.body).toContain("did not finish");
+        expect(await l.result).toBe("/oauth/callback?error=unauthorized_client&error_description=No&state=s2");
     });
 
     it("close() ends it with null; a busy fixed port is BUSY", async () => {

@@ -14,8 +14,9 @@
 //       docs/DEVELOPER-APPS.md). redirectUri is
 //       http://127.0.0.1:<port><path>. `result` resolves with the address
 //       the provider's redirect reached (path and query) once a request
-//       comes to `path` with this sign-in's `state`; the answer is a short
-//       page saying the sign-in is over. Requests to other paths get 404,
+//       comes to `path` with this sign-in's `state` (a code, or an error:
+//       RFC 6749 4.1.2.1); the answer is a short page saying the sign-in is
+//       over, or that it did not finish. Requests to other paths get 404,
 //       and a request with another state 400, and are otherwise ignored: a
 //       local program guessing the port cannot end the sign-in (and a code
 //       it might see is useless without the PKCE verifier, RFC 7636 1).
@@ -77,7 +78,11 @@ function createLoopback(opts) {
                 }
                 settled = true;
                 res.writeHead(200, headers);
-                res.end(page("Signed in", "Signed in. Back to Phoenix…"), function () { stop(); });
+                // An error back (RFC 6749 4.1.2.1: access_denied, unauthorized_client)
+                // ends the sign-in too, and the page says it did not finish.
+                var failed = /[?&]error=/.test(url.replace(/#.*$/, ""));
+                res.end(failed ? page("Not signed in", "The sign-in did not finish. Back to Phoenix…")
+                               : page("Signed in", "Signed in. Back to Phoenix…"), function () { stop(); });
                 resolveResult(url);
             });
             // Stops listening at once (the port is free for anyone); the

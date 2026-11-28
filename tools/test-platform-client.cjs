@@ -487,6 +487,10 @@ async function ui(P, control, servers) {
 
         await page.goto(settings({ page: "account" }));
         await page.waitForSelector("[data-testid=account-sign-in]", { timeout: 15000 });
+        // Offered once the server's discovery says it has a sign-in page for
+        // this device (getStatus methods): the mock platform has.
+        await page.waitForSelector("[data-testid=account-sign-in-browser]", { timeout: 15000 }).catch(() => null);
+        check(await page.locator("[data-testid=account-sign-in-browser]").count() === 1, "Settings > Phoenix Account: Sign In on This Device, where the server offers it");
         await shot("5-account-signed-out");
         await page.click("[data-testid=account-sign-in]");
         await page.waitForSelector("[data-testid=account-code]", { timeout: 15000 });
@@ -515,6 +519,22 @@ async function ui(P, control, servers) {
         if (made.returnValue) await firstUseUi(browser, origin, control, servers, errors, made.name);
         check(errors.length === 0, "no page errors", errors.join("; "));
         await marketplaceUi(browser, origin, control, servers, errors);
+        // The device removed on the website (the mock's control stands in for
+        // its Disconnect): Settings, opened again, does not say "signed in";
+        // it says the device was signed out, and to sign in again.
+        if (!arg("--api")) {
+            await page.goto(settings({ page: "account" }));
+            await page.waitForSelector("[data-testid=account-email]", { timeout: 15000 });
+            const was = await luna("luna://org.webosphoenix.service.account/getStatus", {});
+            const d = await control("disconnect", { deviceId: was.device && was.device.id });
+            check(d.status === 200, "control: this device disconnected, as on the website");
+            await page.goto(settings({ page: "account" }));
+            await page.waitForSelector("[data-testid=account-signed-out]", { timeout: 20000 }).catch(() => null);
+            const note = await page.locator("[data-testid=account-error]").textContent().catch(() => "");
+            check(await page.locator("[data-testid=account-signed-out]").count() === 1 && /signed out from the website.*Sign in again/.test(note || ""),
+                  "Settings > Phoenix Account, opened after the device was removed on the website: signed out, and says why and what to do", note);
+            await shot("9-account-removed-on-the-website");
+        }
     } finally {
         if (browser) await browser.close();
         rootfs.kill();

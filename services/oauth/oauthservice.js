@@ -17,7 +17,12 @@
 //       closed the sheet or the card), "ACCESS_DENIED" (refused on the
 //       provider's page), "401_UNAUTHORIZED" (the code was not accepted),
 //       "TIMEOUT" (nothing came back for ten minutes), "BAD_PARAMS" (a
-//       redirect this device cannot receive)
+//       redirect this device cannot receive), "CONNECTION_FAILED" (the token
+//       endpoint could not be reached), "500_SERVER_ERROR"
+//   cancel {owner?}         ends the caller's sign-in that is waiting in the
+//                           sheet or card: its authorize answers CANCELED and
+//                           the card closes (Settings' Cancel; the account
+//                           service forgets what a sign-in canceled brings)
 //   token {keyId, refresh?} -> {accessToken, tokenType, expiresAt} (refreshed
 //                              when it has expired and a refresh token is kept;
 //                              refresh: true renews it now, when the provider
@@ -65,6 +70,7 @@
 //       shows the provider's page (the simulator's sheet; on a device the
 //       Sign In card, signincard.js, which also ends on pending.result);
 //       may reject with errorCode "TIMEOUT"
+//   closeSheet()  optional: closes the sheet or card shown (cancel)
 //   card {pending(p, caller)}  optional: the Sign In card's question
 //   crypto {randomBytes(n) -> Uint8Array, sha256(bytes) -> Promise<Uint8Array>}
 //   redirectUri, fixedRedirectUri  the addresses above
@@ -104,12 +110,13 @@ function queryOf(url) {
 function fail(code, text) { return { returnValue: false, errorCode: code, errorText: text }; }
 function ok(extra) { return Object.assign({ returnValue: true }, extra || {}); }
 
-var METHODS = ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe"];
+var METHODS = ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe", "cancel"];
 
 function createOAuthService(env) {
     var log = env.log || function () {};
     var now = env.now || function () { return Date.now(); };
     var mayActFor = env.mayActFor || function (caller, owner) { return caller === owner; };
+    var waiting = {};   // owner -> cancel(): the sign-in each owner has in the sheet
 
     function ownerOf(p, caller) {
         var owner = p.owner || caller;
@@ -123,7 +130,10 @@ function createOAuthService(env) {
             method: "POST", url: endpoint,
             headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
             body: form(params)
-        })).then(function (res) {
+        })).then(null, function (e) {
+            throw Object.assign(new Error("Cannot reach " + String(endpoint).replace(/^[a-z]+:\/\/([^\/?#]*).*$/i, "$1") + " (" + (e && e.message) + ")"),
+                                { errorCode: "CONNECTION_FAILED" });
+        }).then(function (res) {
             var body = null;
             try { body = JSON.parse(res.body || "null"); } catch (e) { body = null; }
             if (res.status !== 200 || !body || !body.access_token) {
@@ -200,7 +210,13 @@ function createOAuthService(env) {
                         state: state, code_challenge: b64url(digest), code_challenge_method: "S256"
                     }, p.params || {}));
                     log("sign-in for " + owner + " at " + url.replace(/\?.*$/, ""));
-                    return env.sheet(url, redirectUri, pending);
+                    // cancel {} ends it as a closed sheet does.
+                    var canceled = new Promise(function (resolve) {
+                        var me = function () { resolve(null); if (env.closeSheet) env.closeSheet(); };
+                        waiting[owner] = me;
+                        done = (function (d) { return function () { if (waiting[owner] === me) delete waiting[owner]; d(); }; })(done);
+                    });
+                    return Promise.race([env.sheet(url, redirectUri, pending), canceled]);
                 }).then(function (back) { done(); return back; }, function (e) { done(); throw e; }).then(function (back) {
                     if (!back) throw Object.assign(new Error("The sign-in was closed"), { errorCode: "CANCELED" });
                     var q = queryOf(back);
@@ -234,6 +250,16 @@ function createOAuthService(env) {
                         return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
                     });
                 });
+            }));
+        },
+
+        cancel: function (p, caller) {
+            return wrap(Promise.resolve().then(function () {
+                var owner = ownerOf(p || {}, caller);
+                if (!waiting[owner]) return ok({ canceled: false });
+                log("sign-in for " + owner + " canceled");
+                waiting[owner]();
+                return ok({ canceled: true });
             }));
         },
 

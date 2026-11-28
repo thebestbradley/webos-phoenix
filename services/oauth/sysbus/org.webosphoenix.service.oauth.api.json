@@ -4,7 +4,8 @@
         "org.webosphoenix.service.oauth/token",
         "org.webosphoenix.service.oauth/forget",
         "org.webosphoenix.service.oauth/client",
-        "org.webosphoenix.service.oauth/redirectUri"
+        "org.webosphoenix.service.oauth/redirectUri",
+        "org.webosphoenix.service.oauth/cancel"
     ],
     "oauth.card": [
         "org.webosphoenix.service.oauth/pending"

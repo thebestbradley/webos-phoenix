@@ -15,7 +15,7 @@
 //
 // Launch params {page: "account"} (the "Signed in" notification opens it).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { phoenixAccount, accountErrorCode, type AccountStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, ErrorText, Group, Note, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
@@ -26,6 +26,16 @@ export function AccountPage() {
     const st = useLuna<AccountStatus>((cb, err) => phoenixAccount.watchStatus(cb, err), []).value;
     const [error, setError] = useState<string | null>(null);
     const name = st?.accountName ?? "Phoenix Account";
+    // Opened signed in: the account is read again, once, so a device removed
+    // on the website (or an account closed) shows signed out and why (the
+    // service ends the sign-in and says so in st.error), never a stale
+    // "signed in". Offline or the server away, the page stays as it was.
+    const checked = useRef(false);
+    useEffect(() => {
+        if (st?.state !== "signedIn" || checked.current) return;
+        checked.current = true;
+        phoenixAccount.refresh().catch(() => {});
+    }, [st?.state]);
 
     async function run(fn: () => Promise<unknown>) {
         setError(null);
@@ -57,9 +67,14 @@ export function AccountPage() {
                     <Group>
                         <div className="account-status" data-testid="account-signed-out">Sign in to your {name} (optional).</div>
                         <Button onClick={() => void run(() => phoenixAccount.signIn("code"))} data-testid="account-sign-in">Sign In</Button>
-                        <Button variant="dark" onClick={() => void run(() => phoenixAccount.signIn("browser"))} data-testid="account-sign-in-browser">
-                            Sign In on This Device
-                        </Button>
+                        {/* Only where the server offers it (getStatus methods): a
+                            server that signs in with a code only (Phoenix-Web-Services'
+                            preview) has no page for this device to show. */}
+                        {st.methods?.includes("browser") && (
+                            <Button variant="dark" onClick={() => void run(() => phoenixAccount.signIn("browser"))} data-testid="account-sign-in-browser">
+                                Sign In on This Device
+                            </Button>
+                        )}
                     </Group>
                     <Note>
                         Your {name} keeps encrypted backups of this device and lets you restore them on another. No account is
