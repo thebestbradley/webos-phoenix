@@ -46,6 +46,19 @@ IMAGE_INSTALL:append = " phoenix-devmode"
 IMAGE_INSTALL:append = "${@' phoenix-devmode-ssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 inherit phoenix-devpush
 
+# System updates (docs/PLATFORM-CLIENT.md, "System updates"): on a machine
+# with A/B slots (PHOENIX_RAUC = "1", from its .conf, where meta-rauc is in
+# the build), RAUC (its D-Bus service, which com.palm.update's `rauc`
+# commands talk to), the slots and keyring (rauc-conf, the machine's), the
+# data partition's mounts (phoenix-slots) and resize2fs (a slot grows to
+# its partition after an install). Not meta-rauc's rauc-mark-good: it marks
+# the slot good as soon as the system starts, while com.palm.update does
+# when the System UI is up, so a new system that never gets there goes back
+# (the boot counter, phoenix-ab-grub.cfg).
+PHOENIX_RAUC ??= "0"
+IMAGE_INSTALL:append = "${@' rauc rauc-service rauc-conf phoenix-slots e2fsprogs-resize2fs' if d.getVar('PHOENIX_RAUC') == '1' else ''}"
+BAD_RECOMMENDATIONS:append = "${@' rauc-mark-good' if d.getVar('PHOENIX_RAUC') == '1' else ''}"
+
 # The web apps' user agent: Chrome on Android at the current Chrome stable
 # major, set in WebAppMgr at each start (/etc/wam/plugins/conf.sh;
 # docs/APP-RUNTIME.md, "The user agent").
