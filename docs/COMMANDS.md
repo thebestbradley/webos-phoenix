@@ -44,7 +44,7 @@ phoenix-ember-glass-ui is webos-phoenix with the 2.0 shell: it takes 1.0's chang
 Run in `parent folder` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:123`
 
 ```sh
-git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git && cd webos-phoenix
+git clone --recurse-submodules --branch main https://github.com/thebestbradley/webos-phoenix.git && cd webos-phoenix
 ```
 
 ### Clone the private repos beside it

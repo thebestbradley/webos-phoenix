@@ -120,12 +120,15 @@ resizes.
 ## Get the code
 
 ```sh
-git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git
+git clone --recurse-submodules --branch main https://github.com/thebestbradley/webos-phoenix.git
 cd webos-phoenix
 ```
 
-`main` has the current work. In a checkout from before October 2026, which
-used the `tbb/nice-maxwell-ps69wb` branch, switch back with
+`main` has the current work. Name it (`--branch main`): GitHub's default
+branch for this repository is still the old `tbb/nice-maxwell-ps69wb`, so a
+plain `git clone` checks out that branch, more than a hundred commits behind
+(`git branch` says which one you have). In such a checkout, or one from
+before October 2026, switch with
 `git checkout main && git pull && git submodule update --init`.
 
 ## On a Mac
