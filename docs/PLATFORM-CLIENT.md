@@ -236,7 +236,24 @@ alerts.
    (found on Revision 39's A/B disk, 28 November 2026). A system that never
    gets to the System UI is not marked good, so the boot loader's counter
    takes the device back, and the service then says "The update to X did
-   not start".
+   not start". The wake never holds up the start (`Type=exec`, so
+   multi-user.target and "Startup finished" do not wait for it) and gives
+   up by itself: the System UI is asked for up to an hour, then
+   `com.palm.update` three times.
+
+**A boot without an update slot** (no `rauc.slot=` on the kernel's command
+line: a VM started straight from the image's ext4 with `-kernel`, as UTM
+and the regression suite do, or a device without A/B slots): RAUC finds no
+booted slot there, so nothing asks it anything. `rauc.service` does not
+start (`ConditionKernelCommandLine=rauc.slot`, meta-phoenix's
+`rauc_%.bbappend`), nor does `phoenix-update-wake.service`.
+`com.palm.update` answers at once: `getStatus` with the running version
+and `error` `NOT_AVAILABLE` ("System updates are not available on this
+boot", `configured: false`), every other method with that error, and it
+schedules nothing. Before
+this, each call waited 25 s for D-Bus to give up on the RAUC daemon and
+the wake held up the start for an hour (Revision 42's regression VM, 28
+November 2026).
 
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime

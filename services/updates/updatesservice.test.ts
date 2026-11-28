@@ -72,6 +72,8 @@ function device(booted = { version: "1.0.0", build: 100 }) {
         slots: { "rootfs.0": booted, "rootfs.1": null },
     }));
     fs.rmSync(path.join(dir, "rauc.json.calls"), { force: true });
+    // The A/B disk's GRUB names the slot it started (phoenix-ab-grub.cfg).
+    fs.writeFileSync(path.join(dir, "cmdline"), "BOOT_IMAGE=(hd0,gpt2)/boot/Image root=PARTLABEL=phoenix-root-a rw panic=10 rauc.slot=A\n");
     osRelease(booted);
     battery(80, false);
 }
@@ -114,7 +116,8 @@ let systemNotes: Any = null;
 function service() {
     const downloads = path.join(dir, "downloads");
     return updates.createUpdatesService({
-        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), product: path.join(dir, "product.json") }),
+        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), product: path.join(dir, "product.json"),
+                               cmdline: path.join(dir, "cmdline") }),
         request: node.request,
         // Its pauses between tries, short.
         download: (url: string, file: string, onProgress: Any, opts: Any) =>
@@ -585,9 +588,34 @@ describe("signed feeds, rollout, resume and the boot check", () => {
         expect((await svc.check({})).available).toMatchObject({ build: 121 });
     });
 
+    it("on a boot without an update slot says so at once, and asks RAUC nothing", async () => {
+        // A VM started straight from the image's ext4 (-kernel): no rauc.slot=.
+        fs.writeFileSync(path.join(dir, "cmdline"), "root=/dev/vda rw rootwait console=ttyAMA0\n");
+        const svc = service();
+        const t0 = Date.now();
+        // The status: the running version, and why there are no updates.
+        expect(await svc.getStatus({})).toMatchObject({
+            returnValue: true, state: "idle", current: { version: "1.0.0", build: 100 }, available: null, configured: false,
+            error: { errorCode: "NOT_AVAILABLE", errorText: expect.stringContaining("not available on this boot") } });
+        expect(await svc.GetStatus({})).toEqual({ returnValue: true });
+        for (const m of ["check", "download", "installNow", "InstallNow", "setPreferences", "scheduled", "charging", "checkNotices"]) {
+            expect(await svc[m]({}), m).toMatchObject({ returnValue: false, errorCode: "NOT_AVAILABLE",
+                                                        errorText: expect.stringContaining("not available on this boot") });
+        }
+        expect(Date.now() - t0).toBeLessThan(2000);
+        expect(raucState().calls).toEqual([]);
+        // Nothing scheduled: no daily check, no notices after boot.
+        expect(called("/create")).toEqual([]);
+        // The slot comes from the kernel's command line.
+        expect(node.bootSlot(path.join(dir, "cmdline"))).toBe(null);
+        fs.writeFileSync(path.join(dir, "cmdline"), "root=PARTLABEL=phoenix-root-b rauc.slot=B panic=10\n");
+        expect(node.bootSlot(path.join(dir, "cmdline"))).toBe("B");
+        expect(node.bootSlot(path.join(dir, "no-such-cmdline"))).toBe(null);
+    });
+
     it("says when no update server is set up", async () => {
         const svc = updates.createUpdatesService(Object.assign({}, {
-            rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release") }),
+            rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), cmdline: path.join(dir, "cmdline") }),
             power: async () => null, luna: { call: async () => ({ returnValue: true }) },
             state: { load: () => null, save: () => {} },
             servers: async () => platform.servers.resolve({ feeds: null }, null, false),
