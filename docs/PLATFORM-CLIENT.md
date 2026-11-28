@@ -212,7 +212,14 @@ alerts.
 3. **Download**: to `/var/lib/phoenix/updates/phoenix-<build>.raucb`; a
    stopped download is kept and continued with `Range: bytes=<n>-` (206
    appends, 200 restarts, 416 = complete); the whole is checked against
-   `size` and `sha256` (`lib/node.js` `download`).
+   `size` and `sha256` (`lib/node.js` `download`). A response cut off, a
+   connection that stalls for a minute or fails and a 5xx answer are taken
+   up again by themselves after a pause (5 s, doubling to a minute), until
+   five tries in a row bring nothing (`DOWNLOAD_FAILED`, the part kept): a
+   bundle is a few GB and staging ended every response at about 1 GiB
+   (28 November 2026). What the file holds is hashed before the request,
+   in chunks, so the service keeps answering (hashed inside the response,
+   a 2 GB part held it for over a minute and its socket timed out).
 4. **Prepare**: `rauc info` (RAUC verifies the bundle's signature against
    the image's keyring), `compatible`, newer build, the feed's build; `rauc
    install` writes the other slot; the running slot stays primary.
