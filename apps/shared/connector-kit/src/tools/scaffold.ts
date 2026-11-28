@@ -144,7 +144,11 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
         permissions: [{ service, outbound: [service, "com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts"] }] });
     files[sysbus + ".api.json"] = js(Object.assign({ "accounts.transport": ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"]
         .map((m) => service + "/" + m) }, share ? { [shareGroup]: [service + "/share"], [SYSTEM_SHARE_GROUP]: [service + "/share"] } : {}));
-    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.operation", "accounts.transport"] });
+    // The kit reads each account and its credentials (service.ts
+    // accountContext): the accounts service's two read groups, not the whole
+    // service; the template's readPermissions still decide which accounts.
+    files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.operation", "accounts.transport",
+        "phoenix.accounts.info", "phoenix.accounts.read-credentials"] });
     files[sysbus + ".groups.json"] = js(Object.assign({ allowedNames: [service], "accounts.transport": ["oem"] }, share ? { [shareGroup]: ["oem"], [SYSTEM_SHARE_GROUP]: ["oem"] } : {}));
     files[sysbus + ".manifest.json"] = js({ id: service, version: "0.1.0",
         roleFiles: ["/usr/share/luna-service2/roles.d/" + service + ".role.json"],

@@ -45,6 +45,13 @@ python phoenix_firmware_policy () {
     for p in sorted(installed):
         if p.startswith("packagegroup-") or not any(fnmatch.fnmatchcase(p, pat) for pat in patterns):
             continue
+        # A licence package (linux-firmware-rockchip-license, ...) holds only
+        # licence text, no firmware; its files are listed under the firmware
+        # that depends on it. Its LICENSE is not checked: when a recipe gives
+        # one no LICENSE of its own (linux-firmware 20260410 leaves
+        # rockchip-license out), it gets the whole recipe's.
+        if p.endswith("-license") or p.endswith("-licence"):
+            continue
         data = pkgdata(p)
         lic = data.get("LICENSE", "")
         tokens = [t for t in re.split(r"[\s&|()]+", lic) if t]

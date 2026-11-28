@@ -65,7 +65,10 @@ python do_configure:prepend() {
         try:
             if os.path.lexists(dst):
                 os.remove(dst)
-            os.link(src, dst)
+            # The deployed name is a symlink, and os.link on Linux links the
+            # symlink itself (link(2)), which in the bundle directory points
+            # nowhere: link the file it names (Revision 39's do_configure).
+            os.link(os.path.realpath(src), dst)
             return dst
         except OSError:
             return phoenix_copy(src, dst, *args, **kwargs)

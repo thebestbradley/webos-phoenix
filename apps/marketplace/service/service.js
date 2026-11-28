@@ -27,6 +27,13 @@ var SOURCES = "/etc/palm/marketplace/sources.json";
 // them in /media/cryptofs/apps, the apps the user may remove).
 var PREINSTALLED = "/etc/palm/marketplace/preinstalled.json";
 var INSTALLED_APPS = "/media/cryptofs/apps/usr/palm/applications/";
+// The account templates of the system image, as the accounts service reads
+// them (app-services com.palm.service.accounts accounts.js TEMPLATE_ROOTS,
+// its first root): every *.json in each folder.
+var SYSTEM_TEMPLATES = "/usr/palm/public/accounts/";
+// nova install's packages: novad (services/nova, root only) writes each here
+// and names it in sideload {file}; read once, then removed.
+var SIDELOAD = "/var/lib/phoenix/sideload";
 
 var service = new Service(packages.SERVICE);
 
@@ -75,6 +82,16 @@ var methods = packages.createPackagesService({
         },
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
     },
+    sideload: {
+        read: function (name, max) {
+            var file = path.join(SIDELOAD, path.basename(name));
+            var st = fs.lstatSync(file);
+            if (!st.isFile()) throw new Error("not a file");
+            if (st.size > max) throw new Error("The package is too big");
+            return new Uint8Array(fs.readFileSync(file));
+        },
+        remove: function (name) { try { fs.unlinkSync(path.join(SIDELOAD, path.basename(name))); } catch (e) { /* gone */ } }
+    },
     defaultSources: function () { return (readJson(SOURCES) || {}).sources || []; },
     // The Phoenix catalog and the revocation list: /etc/palm/phoenix/servers.json.
     servers: function () {
@@ -85,10 +102,29 @@ var methods = packages.createPackagesService({
     preinstalled: function () {
         return ((readJson(PREINSTALLED) || {}).packages || []).map(function (p) {
             var info = readJson(INSTALLED_APPS + p.id + "/appinfo.json") || {};
-            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id,
+                     templates: p.templates || [] };
         });
     },
     firstParty: function () { return (readJson(PREINSTALLED) || {}).firstParty || []; },
+    systemTemplates: function () {
+        var out = [];
+        var dirs = [];
+        try { dirs = fs.readdirSync(SYSTEM_TEMPLATES); } catch (e) { return out; }
+        dirs.forEach(function (dir) {
+            var files = [];
+            try { files = fs.readdirSync(SYSTEM_TEMPLATES + dir); } catch (e) { return; }
+            files.filter(function (f) { return /\.json$/i.test(f); }).forEach(function (f) {
+                var parsed = readJson(SYSTEM_TEMPLATES + dir + "/" + f);
+                (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId) return;
+                    var v = t.validator && typeof t.validator === "object" ? t.validator : null;
+                    out.push({ templateId: String(t.templateId), appId: v && v.customUI && v.customUI.appId ? String(v.customUI.appId) : null });
+                });
+            });
+        });
+        return out;
+    },
     log: function (msg) { console.log("[marketplace] " + msg); }
 });
 

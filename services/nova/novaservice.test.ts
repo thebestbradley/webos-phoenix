@@ -535,6 +535,52 @@ describe("Trusted Developers: the extra layer on granted keys (9.1)", () => {
     });
 });
 
+// nova install: the package goes to the Marketplace's service (sideload), the
+// device's one way to OSE's installer, named with the paired computer's key,
+// which decides whose update it is (packagesservice.js "Who may update an
+// installed app"; its tests: apps/marketplace/service/service.test.ts).
+describe("nova install (the Marketplace's sideload)", () => {
+    const SIDE = "var/lib/phoenix/sideload";
+    function withPackages(reply: (params: Any, bytes: Buffer | null) => Any) {
+        const seen: Any[] = [];
+        make({ luna: { call: async (uri: string, params: Any) => {
+            lunaCalls.push([uri.replace("luna://", ""), params]);
+            const file = path.join(dev.root, SIDE, String(params.file || ""));
+            const bytes = fs.existsSync(file) ? fs.readFileSync(file) : null;
+            seen.push({ params, bytes, mode: bytes ? fs.statSync(file).mode & 0o777 : 0 });
+            return reply(params, bytes);
+        } } });
+        return seen;
+    }
+
+    it("hands the package to the Marketplace's service with this computer's key, and removes its copy", async () => {
+        const seen = withPackages(() => ({ returnValue: true, appId: "com.example.mine", version: "1.0.0" }));
+        const r = await core.installApp(Buffer.from("IPK"), from());
+        expect(r).toEqual({ appId: "com.example.mine", version: "1.0.0", skipped: [] });
+        expect(lunaCalls.map((c) => c[0])).toEqual(["org.webosphoenix.service.packages/sideload"]);
+        expect(seen[0].params).toMatchObject({ signer: computer.publicKey, signerName: "Laptop" });
+        expect(seen[0].params.file).toMatch(/^[0-9a-f]{24}\.ipk$/);
+        expect(seen[0].bytes.toString()).toBe("IPK");
+        expect(seen[0].mode).toBe(0o600);
+        expect(fs.readdirSync(path.join(dev.root, SIDE))).toEqual([]);
+        expect(JSON.parse(dev.read("/var/lib/phoenix/nova/log.json")).at(-1)).toMatchObject({ event: "install", appId: "com.example.mine", by: computer.publicKey });
+    });
+
+    it("says the service's refusal (another publisher's app, a built-in one), and removes its copy", async () => {
+        withPackages(() => ({ returnValue: false, errorCode: "OTHER_PUBLISHER", errorText: "This app is already installed from another publisher; remove it first" }));
+        await expect(core.installApp(Buffer.from("IPK"), from())).rejects.toMatchObject({ code: "OTHER_PUBLISHER", message: "This app is already installed from another publisher; remove it first" });
+        expect(fs.readdirSync(path.join(dev.root, SIDE))).toEqual([]);
+    });
+
+    it("only for a paired computer, with Developer Mode on", async () => {
+        withPackages(() => ({ returnValue: true, appId: "x", version: "1" }));
+        await expect(core.installApp(Buffer.from("IPK"), from(keys.generate("nova")))).rejects.toMatchObject({ code: "NOT_PAIRED" });
+        fs.rmSync(path.join(dev.root, "var/luna/preferences/devmode_enabled"));
+        await expect(core.installApp(Buffer.from("IPK"), from())).rejects.toMatchObject({ code: "NEEDS_DEVMODE" });
+        expect(lunaCalls).toEqual([]);
+    });
+});
+
 describe("Pair a Computer and the status", () => {
     it("shows a six-digit code and the device's fingerprint for two minutes", async () => {
         const r = await core.methods.pairStart({});

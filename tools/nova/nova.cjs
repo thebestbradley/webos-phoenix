@@ -10,8 +10,8 @@
 //
 // Built: package, verify, key (P1); pair, unpair, devices, push, put, get,
 // status, revert, restart, rescan, log, luna-send, forward, term (P2,
-// lib/remote.cjs, talking to the device's novad: services/nova). To come
-// (docs/DEV-PUSH.md 12): install, launch, send, generate, inspect.
+// lib/remote.cjs, talking to the device's novad: services/nova); install.
+// To come (docs/DEV-PUSH.md 12): install -r, launch, send, generate, inspect.
 
 "use strict";
 
@@ -77,6 +77,10 @@ With a device (Developer Mode on; TLS on port 6965, both keys pinned):
                                   Revert to Image (the device restarts)
   nova restart shell|wam|app ID|service ID
   nova rescan                     Pick up new or changed apps (Palm's rescan)
+  nova install IPK                Install an app's .ipk (nova package): a new
+                                  app, or an update of one this computer
+                                  installed; never a built-in app or one
+                                  from another publisher (remove it first)
   nova log [-f] [ID]              The device's journal, for an app, service or unit
   nova luna-send URI [JSON]       One Luna call on the device
   nova forward PORT [--local N]   A local port reaching the device's 9998
@@ -87,9 +91,9 @@ With a device (Developer Mode on; TLS on port 6965, both keys pinned):
       only one paired, else the last used)
   Every command: --key FILE (default ~/.config/nova/key), -h/--help
 
-Still to come (docs/DEV-PUSH.md 12): install, launch, send, generate, inspect.`;
+Still to come (docs/DEV-PUSH.md 12): install -r, launch, send, generate, inspect.`;
 
-const LATER = ["install", "launch", "send", "generate", "inspect"];
+const LATER = ["launch", "send", "generate", "inspect"];
 
 class UsageError extends Error {}
 
@@ -216,6 +220,7 @@ const REMOTE = {
     revert: ["revert", {}],
     restart: ["restart", {}],
     rescan: ["rescan", {}],
+    install: ["install", {}],
     log: ["log", { follow: "bool" }],
     "luna-send": ["lunaSend", {}],
     forward: ["forward", { local: "value", once: "bool" }],

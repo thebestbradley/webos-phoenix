@@ -1,4 +1,6 @@
 {
     "allowedNames": ["org.webosphoenix.service.packages"],
-    "marketplace.management": ["oem"]
+    "marketplace.management": ["oem"],
+    "phoenix.packages.signin": ["oem"],
+    "phoenix.packages.sideload": ["oem"]
 }
