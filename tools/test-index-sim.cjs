@@ -215,10 +215,17 @@ async function main() {
         console.log("FAIL " + (e && e.stack || e));
     } finally {
         console.log(simLog.split("\n").filter((l) => /\[index\]|index|llama|Error|error/i.test(l)).slice(-40).join("\n"));
-        sim.kill("SIGTERM");
-        await sleep(800);
-        try { sim.kill("SIGKILL"); } catch (e) { /* gone */ }
-        fs.rmSync(home, { recursive: true, force: true });
+        // Its own way out first, so its web engine's processes go with it:
+        // killed at once, phoenix-sim leaves them running, writing to the
+        // HOME being removed (ENOTEMPTY on .cache); then forced. As
+        // tools/test-useragent-sim.cjs.
+        if (sim.exitCode === null && sim.signalCode === null) {
+            const exited = new Promise((resolve) => sim.once("exit", resolve));
+            sim.kill("SIGTERM");
+            if (!(await Promise.race([exited.then(() => true), sleep(10000).then(() => false)])))
+                sim.kill("SIGKILL");
+        }
+        fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 1000 });
     }
     console.log(failures ? failures + " failed" : "all passed");
     process.exit(failures ? 1 : 0);
