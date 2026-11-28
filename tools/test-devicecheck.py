@@ -146,6 +146,37 @@ def main():
         ok(p.returncode == 0 and made.endswith(".tar.gz") and os.path.isfile(made),
            "phoenix-diag makes its archive (%s)" % (made or p.stderr.strip()[-200:]))
 
+    # The connectors' sign-in pages run in Accounts' frame, so their calls go
+    # out as Accounts' (check-luna charges each page to Accounts, the fixture's
+    # apps/connector above). Accounts holds each page's methods and none of
+    # the connectors' others: posting, sending, syncing, files (the owner's
+    # decision, 27 November 2026: narrow sign-in groups, least privilege).
+    with open(os.path.join(REPO, "compat", "app-permissions.json"), encoding="utf-8") as f:
+        accounts = set(json.load(f)["com.palm.app.accounts"])
+    pages = {
+        "apps/dav/service/sysbus/org.webosphoenix.service.dav":
+            (["checkCredentials", "accountSettings"], ["onCreate", "onDelete", "sync"]),
+        "apps/fediverse/service/sysbus/org.webosphoenix.service.fediverse":
+            (["signIn"], ["share", "outbox", "sync", "onDelete"]),
+        "apps/telegram/service/sysbus/org.webosphoenix.service.telegram":
+            (["available", "signIn", "checkCredentials"], ["markRead", "setPresence", "outbox", "connect", "sync"]),
+        "apps/connectors/drives/service/sysbus/org.webosphoenix.service.drives":
+            (["providerInfo", "checkCredentials", "signIn", "loginFlowStart", "loginFlowPoll", "sftpHostKey",
+              "sftpMakeKey", "sftpImportKey", "sftpForgetKey", "sftpPublicKey"],
+             ["listFiles", "uploadFile", "removeFile", "driveQuota", "sync", "onDelete"]),
+    }
+    for base, (signin, others) in sorted(pages.items()):
+        with open(os.path.join(REPO, base + ".api.json"), encoding="utf-8") as f:
+            api = json.load(f)
+        svc = os.path.basename(base)
+
+        def held(method):
+            return sorted(g for g, ms in api.items() if svc + "/" + method in ms and g in accounts)
+        for m in signin:
+            ok(held(m), "Accounts may call %s/%s (its sign-in page)" % (svc, m))
+        for m in others:
+            ok(not held(m), "Accounts may not call %s/%s (%s)" % (svc, m, ", ".join(held(m)) or "refused"))
+
     # This repository, with its allowlist, as CI runs it.
     for c in CHECKERS:
         status, out = run(c, REPO)

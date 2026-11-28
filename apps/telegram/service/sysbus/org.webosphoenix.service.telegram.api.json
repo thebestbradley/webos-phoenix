@@ -15,5 +15,10 @@
         "org.webosphoenix.service.telegram/signIn",
         "org.webosphoenix.service.telegram/markRead",
         "org.webosphoenix.service.telegram/setPresence"
+    ],
+    "phoenix.telegram.signin": [
+        "org.webosphoenix.service.telegram/available",
+        "org.webosphoenix.service.telegram/signIn",
+        "org.webosphoenix.service.telegram/checkCredentials"
     ]
 }

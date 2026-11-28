@@ -1,0 +1,7 @@
+{
+    "id": "org.example.connector",
+    "type": "web",
+    "main": "index.html",
+    "title": "Connector",
+    "requiredPermissions": ["svc.account"]
+}

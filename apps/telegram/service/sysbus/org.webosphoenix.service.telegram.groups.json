@@ -7,5 +7,8 @@
     ],
     "telegram.account": [
         "oem"
+    ],
+    "phoenix.telegram.signin": [
+        "oem"
     ]
 }
