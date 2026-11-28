@@ -201,8 +201,8 @@ Item {
             width: row.width - Theme.px(4)
             height: menu.rowHeight - Theme.px(4)
             radius: Theme.px(6)
-            color: "#302c8ce0"
-            border.color: "#2c8ce0"
+            color: Theme.focusFill
+            border.color: Theme.focusRing
             border.width: Theme.px(2)
             z: 10
         }
@@ -368,6 +368,7 @@ Item {
 
         DashboardItem {
             id: content
+            spokenByParent: true
             width: row.width
             height: row.height
             source: menu.source
@@ -503,19 +504,32 @@ Item {
                 onClicked: (m) => {
                     if (mode !== 0 || content.x !== 0 || content.layerX !== 0)
                         return;
+                    tap(m.x, m.y);
+                }
+                function tap(x, y) {
                     if (menu.drawer && menu.drawer.selecting) {
                         if (row.selectable)
                             menu.drawer.toggleSelected(row.key);
                         return;
                     }
                     if (row.windowKey !== "") {
-                        content.pointer("tap", m.x, m.y);
+                        content.pointer("tap", x, y);
                         return;
                     }
                     menu.activated(row.appId, row.params);
                     if (!row.persistent)
                         menu.dismissRequested(row.index);
                 }
+                // For a screen reader, as the phone's rows
+                // (Notifications.qml's swipe).
+                Accessible.role: Accessible.Button
+                Accessible.name: content.spoken
+                Accessible.description: row.persistent ? qsTr("Notification %1 of %2").arg(row.index + 1).arg(menu.count)
+                    : qsTr("Notification %1 of %2. Scroll left to clear it").arg(row.index + 1).arg(menu.count)
+                Accessible.focusable: true
+                Accessible.focused: !!menu.drawer && menu.drawer.keyRow === row.index
+                Accessible.onPressAction: tap(Theme.dashboardBadgeWidth / 2, height / 2)
+                Accessible.onScrollLeftAction: if (!row.persistent && !remove.running) remove.start()
             }
             SelectMark {
                 visible: row.selectable
@@ -557,7 +571,7 @@ Item {
         source: Theme.asset("menu-dropdown-bg.png")
         border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
-        MouseArea { anchors.fill: parent }  // taps on the menu stay in it
+        MouseArea { anchors.fill: parent; Accessible.ignored: true }  // taps on the menu stay in it
 
         // The scene behind, blurred faintly within the art's shape.
         BackdropBlur {
@@ -597,6 +611,7 @@ Item {
         width: parent.width - 2 * Theme.dashboardMenuSideMargin
         height: menuBorder.height - menu.headerHeight - Theme.dashboardMenuBottomMargin - Theme.drawerHandleHeight
         clip: true
+        ContrastOutline { z: 5 }
 
         Flickable {
             id: flick
@@ -655,6 +670,7 @@ Item {
     // all, within its ends. A mouse wheel scrolls it (Phoenix).
     TrackpadSwipe {
         objectName: "dashboardMenuWheel"
+        Accessible.ignored: true
         anchors.fill: clipRect
         z: 5
         enabled: menu.open

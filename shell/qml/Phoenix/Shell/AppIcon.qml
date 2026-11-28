@@ -41,6 +41,18 @@ Item {
 
     signal clicked
 
+    // For a screen reader: a button named for its app (its press is
+    // clicked()); its label is not read twice. decorative: drawn inside a
+    // control that speaks for it (a banner, a dashboard row, a launcher
+    // cell): not read at all. By default an icon that takes no touches of
+    // its own is decorative.
+    property bool decorative: !interactive
+    Accessible.role: Accessible.Button
+    Accessible.name: title
+    Accessible.focusable: !decorative
+    Accessible.ignored: decorative
+    Accessible.onPressAction: if (!decorative) icon.clicked()
+
     width: size
     height: size + (showLabel ? label.height + Theme.px(4) : 0)
 
@@ -196,6 +208,18 @@ Item {
         }
     }
 
+    // High contrast: the label on a dark plate, so it reads over any
+    // wallpaper (white on 75% black: at least 10:1).
+    Rectangle {
+        objectName: "labelPlate"
+        visible: Theme.highContrast && label.visible && icon.title !== ""
+        x: label.x + (label.width - width) / 2
+        y: label.y - Theme.px(1)
+        width: Math.min(label.width, label.contentWidth) + Theme.px(8)
+        height: label.contentHeight + Theme.px(2)
+        radius: Theme.px(4)
+        color: "#BF000000"
+    }
     Text {
         id: label
         visible: icon.showLabel
@@ -208,16 +232,18 @@ Item {
         maximumLineCount: 2
         wrapMode: Text.WordWrap
         text: icon.title
+        Accessible.ignored: true
         color: Theme.text
         font.family: Theme.fontFamily
         font.pixelSize: Theme.launcherLabelFontSize
-        font.bold: Theme.launcherLabelBold
+        font.weight: Theme.launcherLabelBold ? Font.Bold : Theme.textWeight
         style: Text.Raised
         styleColor: "#000000"
     }
 
     MouseArea {
         id: mouse
+        Accessible.ignored: true   // the icon speaks for it
         anchors.fill: tile
         enabled: icon.interactive
         onClicked: icon.clicked()

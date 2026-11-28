@@ -10,12 +10,16 @@
 //                 the runtime reports)
 //   highContrast  Phoenix apps draw darker text and stronger outlines (the
 //                 runtime puts phoenix-high-contrast on every page's <html>;
-//                 @phoenix/ui styles.css)
+//                 @phoenix/ui styles.css); the shell lighter text, stronger
+//                 rules and outlines (Theme.highContrast)
+//   boldText      semibold text where it was regular: the shell's
+//                 (Theme.boldText) and @phoenix/ui's (phoenix-bold-text)
 //   captions      Videos shows a video's subtitles even when turned off there
 //   textSize      text size in the apps, a percentage (100 the default): the
 //                 runtime sets every page's root font size from it, which
 //                 Ember Glass's rem sizes follow (@phoenix/ui's px do not)
-//                 (phoenix-runtime.js applyAccessibilityToPage)
+//                 (phoenix-runtime.js applyAccessibilityToPage); the shell's
+//                 text too (Theme.textSize, its rows growing with it)
 //   monoAudio     stored for the audio service; nothing reads it yet (the note)
 //   stickyKeys, slowKeys, bounceKeys, keyRepeatDelay, keyRepeatInterval
 //                 a hardware keyboard's accessibility, as iOS's (GAPS V8 (4)):
@@ -58,7 +62,8 @@ export function AccessibilityPage() {
             <Group label="Vision">
                 <ListSelector<string> title="Text size" value={String(prefs?.textSize ?? 100)} testId="a11y-textSize"
                     options={TEXT_SIZES} onChange={(v) => set({ textSize: Number(v) })} />
-                {toggle("highContrast", "High contrast", "Darker text and stronger outlines in the apps")}
+                {toggle("boldText", "Bold text", "Heavier text in the system and the apps")}
+                {toggle("highContrast", "High contrast", "Stronger text and outlines in the system and the apps")}
                 {toggle("reduceMotion", "Reduce motion", "Cards, the launcher and the lock screen appear without animating")}
             </Group>
             <Group label="Hearing">

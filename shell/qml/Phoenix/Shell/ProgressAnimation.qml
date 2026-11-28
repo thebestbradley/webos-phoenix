@@ -113,7 +113,7 @@ Item {
                 color: "white"
                 font.family: Theme.fontFamily
                 font.bold: true
-                font.pixelSize: Theme.px(18)
+                font.pixelSize: Theme.fontPx(18)
             }
             Text {
                 objectName: "progressDescription"
@@ -126,7 +126,8 @@ Item {
                 text: qsTr("Next time, please unmount the drive from the desktop.")
                 color: "white"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(18)
+                font.weight: Theme.textWeight
+                font.pixelSize: Theme.fontPx(18)
             }
         }
     }

@@ -39,10 +39,11 @@ Item {
         text: actionButton.caption
         color: actionButton.captionColor
         font.bold: true
-        font.pixelSize: Theme.px(16)
+        font.pixelSize: Theme.fontPx(16)
         font.family: Theme.fontFamily
         opacity: actionButton.active ? 1.0 : actionButton.inactiveOpacity
     }
+    ContrastOutline { radius: Theme.px(8) }
     Rectangle {
         objectName: "actionButtonKeyFocus"
         visible: actionButton.keyFocused
@@ -50,7 +51,7 @@ Item {
         anchors.margins: -Theme.px(3)
         radius: Theme.px(10)
         color: "transparent"
-        border.color: "#2c8ce0"
+        border.color: Theme.focusRing
         border.width: Theme.px(3)
     }
     MouseArea {

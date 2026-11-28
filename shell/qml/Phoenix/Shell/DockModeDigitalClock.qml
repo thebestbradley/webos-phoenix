@@ -83,6 +83,7 @@ Item {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: Theme.px(flipper.big ? digitalclock.timeOffset : digitalclock.dateOffset)
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: digitalclock.pt(flipper.big ? (digitalclock.landscape ? digitalclock.timeLandSize : digitalclock.timePortSize)
                                                          : (digitalclock.landscape ? digitalclock.dateLandSize : digitalclock.datePortSize))
             color: "#e1e1e1"
@@ -112,6 +113,7 @@ Item {
                 anchors.verticalCenterOffset: Theme.px(digitalclock.landscape ? -95 : -80)
                 anchors.horizontalCenterOffset: Theme.px(digitalclock.landscape ? -42 : -38)
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: digitalclock.pt(digitalclock.landscape ? 20 : 15)
                 color: "#e1e1e1"
             }

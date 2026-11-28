@@ -2235,8 +2235,9 @@
         var v = a && typeof a.textSize === "number" && isFinite(a.textSize) ? Math.round(a.textSize) : 100;
         return Math.max(50, Math.min(200, v));
     }
-    // The accessibility preference on this page's <html>: its text size and
-    // high contrast (phoenix-high-contrast; @phoenix/ui styles.css).
+    // The accessibility preference on this page's <html>: its text size,
+    // high contrast (phoenix-high-contrast) and bold text
+    // (phoenix-bold-text; @phoenix/ui styles.css).
     function applyAccessibilityToPage(a) {
         try {
             var root = global.document && global.document.documentElement;
@@ -2244,6 +2245,7 @@
             var pct = textSizePercent(a || {});
             if (root.style) root.style.fontSize = pct === 100 ? "" : pct + "%";
             if (root.classList) root.classList.toggle("phoenix-high-contrast", !!(a && a.highContrast));
+            if (root.classList) root.classList.toggle("phoenix-bold-text", !!(a && a.boldText));
         } catch (e) { /* no document */ }
     }
 
@@ -6998,6 +7000,12 @@
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
+                // ... its text size (a percentage, textSizePercent), bold
+                // text and high contrast: the shell's text and colours
+                // (Theme.textSize, boldText, highContrast).
+                textSize: textSizePercent(p.accessibility || {}),
+                boldText: !!(p.accessibility && p.accessibility.boldText),
+                highContrast: !!(p.accessibility && p.accessibility.highContrast),
                 // ... and the hardware keyboard's sticky, slow and bounce
                 // keys and key repeat (the shell's KeyboardAccess).
                 keyboardAccess: keyboardAccess(p.accessibility || {}),
@@ -21457,7 +21465,7 @@
     //                      medications, notes, organDonor, contacts: [{personId,
     //                      name, number, relation}], showWhenLocked}
     //   accessibility      Settings > Accessibility: {reduceMotion,
-    //                      highContrast, monoAudio, captions, textSize (a
+    //                      highContrast, boldText, monoAudio, captions, textSize (a
     //                      percentage, 100 the default: every page's root
     //                      font size, applyAccessibilityToPage); the hardware
     //                      keyboard's stickyKeys, slowKeys (ms, 0 off),
@@ -21523,7 +21531,7 @@
 
         defaultPrefs.firstUseComplete = false;
         defaultPrefs.emergencyInfo = {};
-        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, monoAudio: false, captions: false, textSize: 100 };
+        defaultPrefs.accessibility = { reduceMotion: false, highContrast: false, boldText: false, monoAudio: false, captions: false, textSize: 100 };
 
         var nobody = { cancelled: function () { return false; } };
         function setPreferences(p) { setPrefs(p, function () {}, nobody); }

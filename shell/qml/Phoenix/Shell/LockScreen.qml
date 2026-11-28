@@ -562,7 +562,7 @@ Item {
     readonly property date shownTime: system && system.fixedTime ? system.fixedTime : now
 
     // Swallow input to everything underneath.
-    MouseArea { anchors.fill: parent }
+    MouseArea { anchors.fill: parent; Accessible.ignored: true }
 
     // The lock screen hides the cards: just the wallpaper behind the clock.
     Wallpaper {
@@ -677,7 +677,7 @@ Item {
         y: lock.incomingCall ? Theme.statusBarHeight - Theme.px(10) : (lock.height - height) / 2
         source: Theme.asset("popup-bg.png")
         border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source); top: Theme.artBorder(20, source); bottom: Theme.artBorder(20, source) }
-        MouseArea { anchors.fill: parent }
+        MouseArea { anchors.fill: parent; Accessible.ignored: true }
         Item {
             id: alertHost
             anchors.fill: parent
@@ -758,6 +758,7 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 z: 2
+                                Accessible.ignored: true   // the row speaks (DashboardItem)
                                 enabled: !(row.entry.clickableWhenLocked && row.entry.windowKey !== "" && !lock.helpShown)
                             }
                         }
@@ -789,6 +790,8 @@ Item {
     ArtBorderImage {
         id: lockBanner
         objectName: "lockBanner"
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: lockBannerText.text
         visible: opacity > 0
         opacity: lock.bannerShown ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
@@ -808,6 +811,7 @@ Item {
             opacity: lock.bannerOpacity
             AppIcon {
                 id: lockBannerIcon
+                decorative: true
                 size: Theme.px(22)
                 showLabel: false
                 color: lock.bannerColor
@@ -815,13 +819,16 @@ Item {
                 source: lock.bannerIcon
             }
             Text {
+                id: lockBannerText
                 objectName: "lockBannerText"
+                Accessible.ignored: true
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - lockBannerIcon.width - parent.spacing
                 elide: Text.ElideRight
                 text: lock.privatePreviews ? lock.privateText(lock.bannerAppId) : lock.bannerText
                 color: Theme.text
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Theme.bannerFontSize
             }
         }
@@ -887,6 +894,14 @@ Item {
             id: drag
             anchors.fill: parent
             preventStealing: true
+            // For a screen reader: the padlock is the unlock button (its
+            // press is the drag out of the saucer), as iOS's lock screen
+            // offers "Unlock".
+            Accessible.role: Accessible.Button
+            Accessible.name: lock.incomingCall ? qsTr("Answer") : qsTr("Unlock")
+            Accessible.description: lock.incomingCall ? qsTr("Drag the handle up to answer") : qsTr("Drag the padlock up to unlock")
+            Accessible.focusable: true
+            Accessible.onPressAction: lock.requestUnlock()
             onPressed: { hideHelp.stop(); lock.helpShown = true; }
             onPositionChanged: (m) => {
                 var p = mapToItem(lock, m.x, m.y);

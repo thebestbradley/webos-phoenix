@@ -71,7 +71,8 @@ Item {
         text: qsTr("Full Erase")
         color: "white"
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(26)
+        font.weight: Theme.textWeight
+        font.pixelSize: Theme.fontPx(26)
     }
     Image {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -90,7 +91,8 @@ Item {
                                       : qsTr("Continue holding for %1 seconds...").arg(erase.secondsLeft)
         color: "white"
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(20)
+        font.weight: Theme.textWeight
+        font.pixelSize: Theme.fontPx(20)
     }
     Text {
         width: parent.width
@@ -100,6 +102,7 @@ Item {
         text: qsTr("Erases applications you installed and all your files on the USB drive.")
         color: "white"
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(16)
+        font.weight: Theme.textWeight
+        font.pixelSize: Theme.fontPx(16)
     }
 }

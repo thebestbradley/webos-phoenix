@@ -20,7 +20,9 @@
 //   com.webos.service.systemservice the preferences: the tones, system and
 //                                   keyboard sounds, the time format, alerts
 //                                   when locked, airplane mode, the rotation
-//                                   lock, Settings > Advanced (the tweaks)
+//                                   lock, Settings > Advanced (the tweaks),
+//                                   Settings > Accessibility (reduce motion,
+//                                   text size, bold text, high contrast)
 //   com.palm.display (phoenix-devices) the orientation sensor; com.palm.keys
 //                                   and com.palm.ambientLightSensor, the
 //                                   switches and the light
@@ -109,6 +111,13 @@ QtObject {
     // timeFormat "HH24" (luna-sysservice's TimePrefsHandler).
     property bool twentyFourHour: false
     property bool showAlertsWhenLocked: true
+    // Settings > Accessibility (LsmStatus.accessibility): the shell's
+    // animations, text size, bold text and contrast (Theme, via Shell.qml),
+    // as SimSystemStatus's.
+    property bool reduceMotion: false
+    property int textSize: 100
+    property bool boldText: false
+    property bool highContrast: false
     // The user's brightness, 0.10-1 (Theme.minimumBrightness up): the system
     // menu's slider and the control center's set it, an app's com.palm.display
     // setProperty {maximumBrightness} too (DeviceServices.setProperties), and
@@ -548,7 +557,7 @@ QtObject {
         _readStartup();
         var prefKeys = LsmStatus.tweakKeys.concat(["rotationLock", "airplaneMode", "muteSound", "ringtone", "alerttone",
                                                    "notificationtone", "systemSounds", "x_palm_virtualkeyboard_prefs",
-                                                   "timeFormat", "showAlertsWhenLocked", "show3GForEvdo"]);
+                                                   "timeFormat", "showAlertsWhenLocked", "show3GForEvdo", "accessibility"]);
         _call("luna://com.webos.service.systemservice/getPreferences", { keys: prefKeys }, function(r) {
             if (!r || r.returnValue === false)
                 return;
@@ -572,6 +581,10 @@ QtObject {
                 status.twentyFourHour = r.timeFormat === "HH24";
             if (typeof r.showAlertsWhenLocked === "boolean")
                 status.showAlertsWhenLocked = r.showAlertsWhenLocked;
+            var a11y = LsmStatus.accessibility(r);
+            if (a11y)
+                for (var ak in a11y)
+                    status[ak] = a11y[ak];
             if (typeof r.show3GForEvdo === "boolean")
                 status.show3GForEvdo = r.show3GForEvdo;
         }, true);

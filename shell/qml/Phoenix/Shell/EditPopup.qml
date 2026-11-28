@@ -121,7 +121,8 @@ Item {
                         text: popup._labels[modelData]
                         color: Theme.text
                         font.family: Theme.fontFamily
-                        font.pixelSize: 16 * Theme.u
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(16)
                     }
                     MouseArea {
                         id: area

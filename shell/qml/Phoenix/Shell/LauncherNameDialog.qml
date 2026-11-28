@@ -83,7 +83,8 @@ Item {
             text: dialog.heading
             color: "#C8C8C8"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(17)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(17)
         }
 
         // The trash can, at the heading's right (a tab the user added).
@@ -145,7 +146,7 @@ Item {
                 color: "#FFFFFF"
                 selectionColor: "#2C8CE0"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 24 : 20)
+                font.pixelSize: Theme.fontPx(Theme.tablet ? 24 : 20)
                 font.bold: true
                 maximumLength: 24
                 clip: true

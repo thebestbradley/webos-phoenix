@@ -385,6 +385,7 @@ Item {
                 : strip.category === "pinned" ? qsTr("Hold a clip to pin it") : qsTr("Hold a clip to save it here")
             color: "#a0a0a0"
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Math.round(strip.tabHeight * 0.38)
         }
     }
@@ -460,6 +461,7 @@ Item {
                             text: faceRoot.clipData.text || ""
                             color: faceRoot.clipData.type === "link" ? "#1f5fa8" : "#303030"
                             font.family: Theme.fontFamily
+                            font.weight: Theme.textWeight
                             font.pixelSize: Math.round(14 * strip.unit)
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             elide: Text.ElideRight
@@ -487,6 +489,7 @@ Item {
                             text: "•".repeat(Math.max(4, Math.min(8, faceRoot.clipData.length || 8)))
                             color: "#ffffff"
                             font.family: Theme.fontFamily
+                            font.weight: Theme.textWeight
                             font.pixelSize: Math.round(20 * strip.unit)
                         }
                         Text {
@@ -495,6 +498,7 @@ Item {
                             text: strip.kindName(faceRoot.clipData)
                             color: "#b8b8b8"
                             font.family: Theme.fontFamily
+                            font.weight: Theme.textWeight
                             font.pixelSize: Math.round(12 * strip.unit)
                             wrapMode: Text.Wrap
                             maximumLineCount: 2
@@ -531,6 +535,7 @@ Item {
                 color: "#c8c8c8"
                 opacity: 1 - 0.5 * Math.min(1, Math.abs(faceRoot.d))
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Math.round(12 * strip.unit)
                 elide: Text.ElideRight
             }
@@ -691,6 +696,7 @@ Item {
             text: strip.keyboard.clipsMessage
             color: "#ffffff"
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Math.round(13 * strip.unit)
         }
     }
@@ -807,6 +813,7 @@ Item {
                                 text: entry.modelData.label
                                 color: Theme.text
                                 font.family: Theme.fontFamily
+                                font.weight: Theme.textWeight
                                 font.pixelSize: Math.round(16 * strip.unit)
                             }
                             MouseArea {

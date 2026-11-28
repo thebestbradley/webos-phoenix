@@ -51,6 +51,18 @@ Item {
     }
     signal actionTapped(string actionId)
 
+    // For a screen reader: the row's words (its title and text, a stack's
+    // count, an activity's progress). spokenByParent: the row that holds
+    // it (the dashboard's swipe area) says them, with its actions.
+    readonly property string spoken: [title, body,
+        layerCount > 1 ? qsTr("%n notifications", "", layerCount) : "",
+        progress >= 0 ? qsTr("%1 percent").arg(Math.round(progress)) : ""]
+        .filter(function (s) { return s !== ""; }).join(", ")
+    property bool spokenByParent: false
+    Accessible.role: Accessible.StaticText
+    Accessible.name: spoken
+    Accessible.ignored: spokenByParent
+
     // A stack: how many layers, and their JSON ([{title, body, ...}],
     // oldest first; title and body above are the top one's). Without the
     // JSON (the lock screen's private previews) the layers peek out empty.
@@ -139,6 +151,7 @@ Item {
 
     AppIcon {
         id: dIcon
+        decorative: true   // the row speaks (spoken)
         visible: item._own
         x: Theme.px(10)
         anchors.verticalCenter: parent.verticalCenter
@@ -179,7 +192,7 @@ Item {
             text: String(item.layerCount)
             color: "#ffffff"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
+            font.pixelSize: Theme.fontPx(16)
             font.bold: true
         }
     }
@@ -216,7 +229,7 @@ Item {
                 text: item.underLayer ? item.underLayer.title : ""
                 color: Theme.text
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(16)
+                font.pixelSize: Theme.fontPx(16)
                 font.bold: true
             }
             Text {
@@ -225,7 +238,8 @@ Item {
                 text: item.underLayer ? item.underLayer.body : ""
                 color: Theme.textDim
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(14)
+                font.weight: Theme.textWeight
+                font.pixelSize: Theme.fontPx(14)
             }
         }
     }
@@ -255,7 +269,7 @@ Item {
             text: item.title
             color: Theme.text
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
+            font.pixelSize: Theme.fontPx(16)
             font.bold: true
         }
         Text {
@@ -265,7 +279,8 @@ Item {
             text: item.body
             color: Theme.textDim
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(14)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(14)
         }
         // Room for the answers (actionRow, over the row's own tap area).
         Item {
@@ -309,25 +324,29 @@ Item {
                 id: pill
                 required property var modelData
                 objectName: "dashboardAction_" + modelData.id
-                height: Theme.px(22)
+                height: Theme.textBox(22, 13)
                 width: pillLabel.implicitWidth + Theme.px(18)
                 radius: height / 2
                 color: pillArea.pressed ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.12)
-                border.width: Math.max(1, Theme.px(1))
-                border.color: Qt.rgba(1, 1, 1, 0.35)
+                border.width: Math.max(1, Theme.px(Theme.highContrast ? 2 : 1))
+                border.color: Qt.rgba(1, 1, 1, Theme.highContrast ? 0.9 : 0.35)
                 Text {
                     id: pillLabel
                     anchors.centerIn: parent
                     text: pill.modelData.label
                     color: Theme.text
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(13)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(13)
                 }
                 MouseArea {
                     id: pillArea
                     anchors.fill: parent
                     preventStealing: true
                     onClicked: item.actionTapped(String(pill.modelData.id))
+                    Accessible.role: Accessible.Button
+                    Accessible.name: pill.modelData.label
+                    Accessible.onPressAction: item.actionTapped(String(pill.modelData.id))
                 }
             }
         }

@@ -165,6 +165,17 @@ Item {
         id: mouse
         objectName: "gestureMouse"
         anchors.fill: parent
+        // For a screen reader: the gesture area's swipes as actions (press:
+        // up, to card view or the launcher; scroll left / right: back and
+        // forward), as iOS's home indicator offers "Home".
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Gesture area")
+        Accessible.description: qsTr("Swipe up for card view and the launcher, left to go back")
+        Accessible.onPressAction: area.up()
+        Accessible.onScrollUpAction: area.up()
+        Accessible.onScrollDownAction: area.down()
+        Accessible.onScrollLeftAction: area.back()
+        Accessible.onScrollRightAction: area.forward()
         // Gestures often start in the gesture area and travel onto the screen.
         preventStealing: true
         property real sx

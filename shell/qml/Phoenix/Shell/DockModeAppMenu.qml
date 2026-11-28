@@ -116,7 +116,7 @@ Item {
                             text: row.modelData.title
                             color: "#ffffff"
                             font.family: Theme.fontFamily
-                            font.pixelSize: Theme.px(18)
+                            font.pixelSize: Theme.fontPx(18)
                             font.bold: true
                         }
                         Image {

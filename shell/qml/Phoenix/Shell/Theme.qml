@@ -40,6 +40,57 @@ QtObject {
         return half(parentSize) - half(size);
     }
 
+    // ---- Settings > Accessibility (set by Shell.qml from the system status) ----
+    // Text size (accessibility.textSize, a percentage, 100 the default):
+    // the shell's text, as the runtime scales every web page's root font
+    // (runtime/phoenix-runtime.js textSizePercent). Every size goes through
+    // fontPx(); boxes that hold text grow with it (textBox), so rows reflow
+    // instead of clipping. At 100 every size is px()'s, the original's.
+    // Settings offers 85 to 150; the shell's bars hold 150 at most.
+    // Legacy webOS had no system text size; a Phoenix addition (iOS's
+    // Dynamic Type).
+    property int textSize: 100
+    readonly property real textScale: Math.max(0.85, Math.min(1.5, (textSize > 0 ? textSize : 100) / 100))
+    function fontPx(v) { return Math.round(v * u * textScale) }
+    // Text in a bar of fixed height (the status bar, the notification
+    // bar): it grows as far as its line still fits the bar.
+    function barFontPx(v, bar) { return Math.max(px(v), Math.min(fontPx(v), Math.floor(bar / 1.4))) }
+    // A box `box` legacy px tall holding text of the given sizes, one per
+    // line: it grows by what the text grows.
+    function textBox(box, sizes) {
+        var grow = 0;
+        var list = typeof sizes === "number" ? [sizes] : (sizes || []);
+        for (var i = 0; i < list.length; ++i)
+            grow += Math.max(0, fontPx(list[i]) - px(list[i]));
+        return px(box) + grow;
+    }
+    // Bold text (accessibility.boldText): text the original drew regular is
+    // drawn semibold (Open Sans Semibold, bundled); bold stays bold.
+    property bool boldText: false
+    readonly property int textWeight: boldText ? Font.DemiBold : Font.Normal
+    // High contrast (accessibility.highContrast): dim text drawn near
+    // white, rules and outlines stronger, a solid outline round the
+    // surfaces that float over the wallpaper or an app (the dashboard, the
+    // menus, banners, Just Type, the launcher's labels). Every pairing is
+    // WCAG 2.x AA at least (4.5:1 for text; tst_accessibility checks it).
+    property bool highContrast: false
+    readonly property int contrastBorderWidth: highContrast ? Math.max(1, px(2)) : 0
+    readonly property color contrastBorder: "#FFFFFF"
+    // The keyboard focus ring (ActionButton, the launcher, the dashboard).
+    readonly property color focusRing: highContrast ? "#7FC4FF" : "#2c8ce0"
+    readonly property color focusFill: highContrast ? "#602c8ce0" : "#302c8ce0"
+    // WCAG 2.x relative luminance and contrast ratio, for the tests and
+    // for picking a label's backing.
+    function luminance(c) {
+        c = Qt.lighter(c, 1.0);   // a colour, from a name too
+        function ch(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+    function contrastRatio(a, b) {
+        var la = luminance(a), lb = luminance(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+    }
+
     // Settings > Accessibility > Reduce motion (set by Shell.qml from
     // system.reduceMotion): cards, the launcher, the lock screen, the status
     // bar and its menus, the dashboard, banners, alerts and rotation appear
@@ -140,7 +191,7 @@ QtObject {
                 return i;
         return batteryChargeLevels.length - 1;
     }
-    readonly property int statusBarFontSize: px(14)                  // StatusBarTitle.cpp:36
+    readonly property int statusBarFontSize: barFontPx(14, px(28))                  // StatusBarTitle.cpp:36
     // The title: 14 px bold, letters at 90% (StatusBarTitle.cpp:55-63,
     // StatusBar.h:37); on phones, apps get appname-background.png with
     // 13 / 20 px caps, the text 9 px in, else 7 px in (:28-34, 188-218);
@@ -186,9 +237,9 @@ QtObject {
     // icon on both sides.
     readonly property int statusBarTabCap: px(11)
     readonly property int statusBarTabPadding: px(4)
-    readonly property int statusBarClockFontSize: px(15)             // StatusBarClock.cpp:34
+    readonly property int statusBarClockFontSize: barFontPx(15, px(28))             // StatusBarClock.cpp:34
     // Phones: solid black (StatusBar.cpp:767). Tablet: tiled art over #515558 (StatusBar.cpp:47).
-    readonly property color statusBarFill: tablet ? "#515558" : "#000000"
+    readonly property color statusBarFill: tablet && !highContrast ? "#515558" : "#000000"
 
     // ---- System menu (uiComponents/SystemMenu, Src/lunaui/status-bar/SystemMenu.cpp)
 
@@ -205,19 +256,19 @@ QtObject {
     readonly property int systemMenuSideMargin: px(7)
     readonly property int systemMenuBottomMargin: px(14)
     readonly property int systemMenuDividerInset: px(7)
-    readonly property int systemMenuRowHeight: px(42)                // MenuListEntry.qml:6
+    readonly property int systemMenuRowHeight: textBox(42, 18)               // MenuListEntry.qml:6
     // Text starts 14 px in; rows inside a drawer 16 px further (SystemMenu.qml:7-8).
     readonly property int systemMenuIndent: px(14)
     readonly property int systemMenuSubIndent: px(16)
     // Prelude 18 for rows, 16 for list entries, 13 caps for a drawer's
     // state, 10 caps under a list entry (DateElement.qml:17, WifiEntry.qml:24,
     // WiFiElement.qml:161-163, WifiEntry.qml:34-36).
-    readonly property int systemMenuFontSize: px(18)
-    readonly property int systemMenuEntryFontSize: px(16)
-    readonly property int systemMenuStateFontSize: px(13)
-    readonly property int systemMenuStatusFontSize: px(10)
+    readonly property int systemMenuFontSize: fontPx(18)
+    readonly property int systemMenuEntryFontSize: fontPx(16)
+    readonly property int systemMenuStateFontSize: fontPx(13)
+    readonly property int systemMenuStatusFontSize: fontPx(10)
     readonly property color systemMenuText: "#FFFFFF"                // AirplaneModeElement.qml:21
-    readonly property color systemMenuTextDim: "#AAAAAA"             // DateElement.qml:15, BatteryElement.qml:19
+    readonly property color systemMenuTextDim: highContrast ? "#E6E6E6" : "#AAAAAA"            // DateElement.qml:15, BatteryElement.qml:19
     // Opening and closing fade: 200 ms, curve 0 = Linear
     // (conf/lunaAnimations.conf:124-125, StatusBarItemGroup.cpp:252-306).
     readonly property int systemMenuFadeDuration: motion(200)
@@ -333,9 +384,9 @@ QtObject {
     readonly property int launcherIconSize: px(64)                   // images/launcher3/launcher-icon-64.png
     readonly property int launcherTabHeight: px(50)                  // images/launcher3/tab-bg.png
     // layoutsettings.cpp:67-74: 16 px bold in both states, white / #C8C8C8.
-    readonly property int launcherTabFontSize: px(16)
+    readonly property int launcherTabFontSize: fontPx(16)
     readonly property color launcherTabSelectedColor: "#FFFFFF"
-    readonly property color launcherTabColor: "#C8C8C8"
+    readonly property color launcherTabColor: highContrast ? "#FFFFFF" : "#C8C8C8"
     readonly property int launcherTabMaxWidth: px(150)               // pagetabbar.cpp:85
     // Tablet: launcher3's grid (launcher_icon_layoutsettings.conf,
     // icongeometrysettings.cpp:180-207, launcher_icon_geom_settings.conf):
@@ -351,7 +402,7 @@ QtObject {
     readonly property int launcherIconOffsetY: px(-11)
     readonly property int launcherLabelWidth: px(100)
     readonly property int launcherLabelSpacing: px(2)
-    readonly property int launcherLabelFontSize: px(tablet ? 14 : 13)
+    readonly property int launcherLabelFontSize: fontPx(tablet ? 14 : 13)
     readonly property bool launcherLabelBold: tablet
 
     // ---- Lock screen ---------------------------------------------------------
@@ -363,18 +414,18 @@ QtObject {
     readonly property real lockClockCenterRatio: 0.15                // LockWindow.cpp:427 (-0.35 H from centre)
     readonly property real lockHandleOffsetRatio: 0.10               // LockWindow.cpp:81 LOCK_BUTTON_OFFSET
     readonly property int lockUnlockDistance: px(146)                // LockWindow.cpp:89
-    readonly property int lockHelpFontSize: px(20)                   // LockWindow.cpp:91
+    readonly property int lockHelpFontSize: fontPx(20)                   // LockWindow.cpp:91
     readonly property int lockHideHelpDelay: 1000                    // LockWindow.cpp:91 kHideHelpTimeoutInMS
     readonly property int lockWindowFadeDuration: motion(150)                // conf/lunaAnimations.conf:104 (curve 1, InQuad)
 
     // ---- Notifications -------------------------------------------------------
 
     readonly property int bannerHeight: positiveSpaceBottomPadding   // BannerMessageHandler.cpp:201
-    readonly property int bannerFontSize: px(16)                     // BannerMessageHandler.cpp:67
+    readonly property int bannerFontSize: barFontPx(16, px(28))                     // BannerMessageHandler.cpp:67
     readonly property int bannerSlideDuration: motion(1000)                  // BannerMessageHandler.cpp:122-130
     readonly property int bannerShowTime: 5000                       // BannerMessageHandler.cpp:69
     readonly property int bannerShowTimeQueued: 2000                 // BannerMessageHandler.cpp:70
-    readonly property int dashboardItemHeight: px(52)                // DashboardWindowContainer.cpp:48
+    readonly property int dashboardItemHeight: textBox(52, [16, 14])                // DashboardWindowContainer.cpp:48
     readonly property real maximumNegativeSpaceRatio: 0.55           // Settings.cpp MaximumNegativeSpaceHeightRatio
     // BackdropBlur: a faint blur behind translucent surfaces (Phoenix addition).
     readonly property int backdropBlurRadius: 12
@@ -453,8 +504,8 @@ QtObject {
     readonly property int drawerHandleHeight: px(24)
     readonly property int drawerHandleWidth: px(36)
     readonly property int drawerHandleThickness: px(4)
-    readonly property int drawerHeaderHeight: px(40)
-    readonly property int drawerHeaderFontSize: px(16)
+    readonly property int drawerHeaderHeight: textBox(40, 16)
+    readonly property int drawerHeaderFontSize: fontPx(16)
     // Clear All's second tap: how long it waits, and its colour meanwhile.
     readonly property int drawerConfirmTimeout: 3000
     // How long a capture's thumbnail stays in the corner (iOS: about 5 s).
@@ -463,7 +514,7 @@ QtObject {
     // How far the handle must travel to expand or collapse.
     readonly property int drawerPullThreshold: px(40)
     readonly property int drawerDuration: motion(250)
-    readonly property color drawerRule: Qt.rgba(1, 1, 1, 0.18)
+    readonly property color drawerRule: Qt.rgba(1, 1, 1, highContrast ? 0.6 : 0.18)
     readonly property int drawerRuleGap: px(6)
     readonly property int drawerCheckSize: px(22)
 
@@ -499,7 +550,7 @@ QtObject {
 
     readonly property color black: "#000000"
     readonly property color text: "#ffffff"
-    readonly property color textDim: "#a0a0a0"
+    readonly property color textDim: highContrast ? "#e6e6e6" : "#a0a0a0"
     readonly property color highlight: "#3a8bd9"                     // (inferred)
 
     // ---- Animation (conf/lunaAnimations.conf [Cards]) -----------------------

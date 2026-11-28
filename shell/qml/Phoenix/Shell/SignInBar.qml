@@ -60,7 +60,7 @@ Rectangle {
         elide: Text.ElideLeft
         color: "#ffffff"
         font.bold: true
-        font.pixelSize: Theme.px(15)
+        font.pixelSize: Theme.fontPx(15)
         font.family: Theme.fontFamily
     }
 
@@ -80,8 +80,9 @@ Rectangle {
             anchors.centerIn: parent
             text: qsTr("Cancel")
             color: "#ffffff"
-            font.pixelSize: Theme.px(14)
+            font.pixelSize: Theme.fontPx(14)
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
         }
         MouseArea {
             id: cancelArea

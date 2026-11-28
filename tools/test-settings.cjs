@@ -558,6 +558,23 @@ async function main() {
         await page.waitForTimeout(200);
         check(last().keyboardAccess.customRepeat === false, "back to the keyboard's own repeat");
         await shot("accessibility-keyboard");
+        // ---- Accessibility > Vision: text size, bold text and high contrast reach the shell ----
+        check(last().textSize === 100 && last().boldText === false && last().highContrast === false,
+              `the shell's text at its own size, regular, normal contrast by default (${last().textSize}, ${last().boldText}, ${last().highContrast})`);
+        await page.click("[data-testid='a11y-textSize']");
+        await page.click("role=option[name='Largest']");
+        await page.click("[data-testid='a11y-boldText']");
+        await page.click("[data-testid='a11y-highContrast']");
+        await page.waitForTimeout(200);
+        check(last().textSize === 150 && last().boldText === true && last().highContrast === true,
+              `Largest, Bold text and High contrast reach the shell (${last().textSize}, ${last().boldText}, ${last().highContrast})`);
+        check(await page.evaluate(() => document.documentElement.classList.contains("phoenix-bold-text")), "and bold text this page");
+        await page.click("[data-testid='a11y-textSize']");
+        await page.click("role=option[name='Default']");
+        await page.click("[data-testid='a11y-boldText']");
+        await page.click("[data-testid='a11y-highContrast']");
+        await page.waitForTimeout(200);
+        check(last().textSize === 100 && last().boldText === false && last().highContrast === false, "and back");
         // ---- Just Type: com.palm.universalsearch, what Just Type reads ------------------
         const usList = () => svc("luna://com.palm.universalsearch/getUniversalSearchList", {});
         await open("justtype");

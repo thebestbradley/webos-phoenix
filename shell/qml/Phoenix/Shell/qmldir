@@ -2,6 +2,7 @@ module Phoenix.Shell
 singleton Theme 1.0 Theme.qml
 Shell 1.0 Shell.qml
 ActionButton 1.0 ActionButton.qml
+ContrastOutline 1.0 ContrastOutline.qml
 MemoryAlert 1.0 MemoryAlert.qml
 EarbudsArt 1.0 EarbudsArt.qml
 EarbudsAlert 1.0 EarbudsAlert.qml

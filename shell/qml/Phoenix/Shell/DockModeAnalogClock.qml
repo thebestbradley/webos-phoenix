@@ -76,6 +76,7 @@ Item {
             anchors.horizontalCenterOffset: analogclock.glass ? 0 : Theme.px(108)
             anchors.verticalCenterOffset: analogclock.glass ? Theme.px(300) : Theme.px(-2)
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: analogclock.pt(30)
             color: "#e1e1e1"
         }
@@ -89,6 +90,7 @@ Item {
             anchors.horizontalCenterOffset: analogclock.glass ? 0 : Theme.px(-108)
             anchors.verticalCenterOffset: analogclock.glass ? Theme.px(260) : Theme.px(-2)
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: analogclock.pt(analogclock.glass ? 16 : 30)
             color: "#e1e1e1"
         }

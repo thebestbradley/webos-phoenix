@@ -106,7 +106,8 @@ Column {
                         text: qsTr("+%1 more").arg((part.shown.total || 0) - (part.shown.items || []).length)
                         color: "#D0FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(14)
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(14)
                     }
                 }
             }
@@ -123,7 +124,7 @@ Column {
                         font.family: Theme.fontFamily
                         font.bold: true
                         font.capitalization: Font.AllUppercase
-                        font.pixelSize: Theme.px(12)
+                        font.pixelSize: Theme.fontPx(12)
                     }
                     Flow {
                         width: parent.width
@@ -186,7 +187,7 @@ Column {
                                     color: "#FFFFFF"
                                     font.family: Theme.fontFamily
                                     font.bold: true
-                                    font.pixelSize: Theme.px(Theme.tablet ? 16 : 14)
+                                    font.pixelSize: Theme.fontPx(Theme.tablet ? 16 : 14)
                                 }
                                 Text {
                                     width: parent.width
@@ -195,7 +196,8 @@ Column {
                                     elide: Text.ElideRight
                                     color: "#D0FFFFFF"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.px(13)
+                                    font.weight: Theme.textWeight
+                                    font.pixelSize: Theme.fontPx(13)
                                 }
                                 Text {
                                     width: parent.width
@@ -206,7 +208,8 @@ Column {
                                     elide: Text.ElideRight
                                     color: "#B0FFFFFF"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.px(13)
+                                    font.weight: Theme.textWeight
+                                    font.pixelSize: Theme.fontPx(13)
                                     textFormat: Text.PlainText
                                 }
                             }

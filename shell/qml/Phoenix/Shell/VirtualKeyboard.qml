@@ -1447,7 +1447,7 @@ Item {
     // ---- Key caps (drawKeyCap) ---------------------------------------------------------
     // use: 0 unpressed, 1 pressed, 2 preview (phone popup), 3 extended.
 
-    TextMetrics { id: metrics; font.family: Theme.fontFamily }
+    TextMetrics { id: metrics; font.family: Theme.fontFamily; font.weight: Theme.textWeight }
     function _textWidth(text, size, bold) {
         metrics.font.pixelSize = size;
         metrics.font.bold = bold;
@@ -2447,6 +2447,7 @@ Item {
         text: "…"
         color: kb.cActiveColor
         font.family: Theme.fontFamily
+        font.weight: Theme.textWeight
         font.pixelSize: kb.cElipsisFontSize
         horizontalAlignment: Text.AlignRight
         verticalAlignment: Text.AlignBottom

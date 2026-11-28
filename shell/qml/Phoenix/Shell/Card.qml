@@ -190,6 +190,9 @@ Item {
         // than the UI's.
         Item {
             id: appHost
+            // The app's own accessibility (a web page's, from Chromium)
+            // is under here; tst_accessibility leaves it to the app.
+            objectName: "cardAppHost"
             readonly property bool sideways: card.adjustmentAngle === 90 || card.adjustmentAngle === -90
             anchors.centerIn: parent
             width: sideways ? parent.height : parent.width

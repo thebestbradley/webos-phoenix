@@ -160,6 +160,7 @@ Item {
             text: qsTr("Emoji you use show up here")
             color: "#a0a0a0"
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Math.round(panel.tabHeight * 0.4)
         }
     }
@@ -191,6 +192,7 @@ Item {
                 anchors.centerIn: parent
                 color: "#e2e2e2"
                 font.family: Theme.fontFamily
+                font.weight: Theme.textWeight
                 font.pixelSize: Math.round(bar.height * 0.38)
             }
             MouseArea {

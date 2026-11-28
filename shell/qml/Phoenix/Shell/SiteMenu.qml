@@ -117,6 +117,7 @@ Item {
             color: Theme.systemMenuText
             opacity: entry.available ? 1 : 0.4
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Theme.systemMenuFontSize
         }
         MouseArea {

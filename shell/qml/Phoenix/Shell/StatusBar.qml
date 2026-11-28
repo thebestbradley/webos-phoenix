@@ -78,6 +78,33 @@ Item {
         onTriggered: bar.now = new Date()
     }
     readonly property date shownTime: system && system.fixedTime ? system.fixedTime : now
+    // ---- For a screen reader -------------------------------------------------------
+    // What each indicator says (its Accessible.name), and all of it as the
+    // system menu button's description: what the bar shows, in words, as
+    // iOS's status bar reads its battery, signal and time. A Phoenix
+    // addition (the original had no screen reader).
+    readonly property string spokenBattery: !system ? ""
+        : system.batteryPercent < 0 ? qsTr("Battery level unknown")
+        : system.charging ? qsTr("Battery, %1 percent, charging").arg(system.batteryPercent)
+        : qsTr("Battery, %1 percent").arg(system.batteryPercent)
+    readonly property string spokenWifi: !system || system.airplaneMode || system.wifiBars < 0 ? ""
+        : system.wifiBars === 0 ? qsTr("Wi-Fi, not connected") : qsTr("Wi-Fi, %1 of 3 bars").arg(system.wifiBars)
+    readonly property string spokenSignal: !system || system.airplaneMode || system.signalBars < 0 ? ""
+        : qsTr("Signal, %1 of 5 bars").arg(Math.max(0, system.signalBars))
+    readonly property string spokenStatus: {
+        var parts = [];
+        if (system && system.airplaneMode) parts.push(qsTr("Airplane mode"));
+        if (spokenSignal !== "") parts.push(spokenSignal);
+        if (spokenWifi !== "") parts.push(spokenWifi);
+        if (system && system.bluetoothOn) parts.push(qsTr("Bluetooth on"));
+        if (system && system.muted) parts.push(qsTr("Muted"));
+        if (system && system.rotationLocked) parts.push(qsTr("Rotation locked"));
+        if (system && system.vpnProfile) parts.push(qsTr("VPN connected"));
+        if (microphone !== "") parts.push(microphone === "on" ? qsTr("Microphone in use") : qsTr("Listening for the wake word"));
+        if (spokenBattery !== "") parts.push(spokenBattery);
+        parts.push(clockText);
+        return parts.join(", ");
+    }
     readonly property string clockText: {
         // StatusBarClock::setDisplayDate: the locale's short date.
         if (lockScreen)
@@ -118,6 +145,12 @@ Item {
         family: Theme.fontFamily, pixelSize: Theme.statusBarFontSize, bold: true
     }), Theme.statusBarTitleSpacingPercent)
 
+    // The title's room: the original's 140 px; with larger text (Settings >
+    // Accessibility > Text size) no further than the centred clock, so the
+    // two never run into each other.
+    readonly property real _titleMaxWidth: Theme.textScale > 1 && !Theme.tablet
+        ? Math.min(Theme.statusBarTitleMaxWidth, Theme.centred(bar.width, centreClock.width) - _clockGap - bar.cornerInset)
+        : Theme.statusBarTitleMaxWidth
     // The title shown, and the one fading out (animateTitleTransition).
     property string _shownTitle: title
     property bool _shownBorder: _border
@@ -165,7 +198,7 @@ Item {
             anchors.verticalCenterOffset: Theme.statusBarTitleBaselineOffset
             // Elided to the 140 px title less its caps or padding
             // (setTitleString, :131-135).
-            width: Math.min(implicitWidth, Theme.statusBarTitleMaxWidth
+            width: Math.min(implicitWidth, bar._titleMaxWidth
                 - (t.border ? Theme.px(Theme.statusBarTitleCapLeft + Theme.statusBarTitleCapRight - 4)
                             : Theme.statusBarTitlePadding))
             elide: Text.ElideRight
@@ -228,6 +261,10 @@ Item {
         width: parent.width / 3
         enabled: bar.titleActionable && !bar.lockScreen
         onClicked: bar.appMenuRequested()
+        Accessible.role: Accessible.ButtonMenu
+        Accessible.name: qsTr("%1 menu").arg(bar.title)
+        Accessible.description: qsTr("The app's menu")
+        Accessible.onPressAction: if (enabled) bar.appMenuRequested()
     }
 
     // ---- Centre: clock -----------------------------------------------------------
@@ -260,13 +297,17 @@ Item {
         return leftOverlap <= rightOverlap ? left : right;
     }
     Text {
+        id: centreClock
         objectName: "centreClock"
         visible: !Theme.tablet || bar.lockScreen
+        Accessible.role: Accessible.StaticText
+        Accessible.name: qsTr("Time, %1").arg(text)
         anchors.verticalCenter: parent.verticalCenter
         x: bar._clockX(width)
         text: bar.clockText
         color: Theme.text
         font.family: Theme.fontFamily
+        font.weight: Theme.textWeight
         font.pixelSize: Theme.statusBarClockFontSize
     }
 
@@ -374,6 +415,9 @@ Item {
         Item {
             id: micIndicator
             objectName: "microphoneIcon"
+            Accessible.role: Accessible.Graphic
+            Accessible.name: recording ? qsTr("Microphone in use") : qsTr("Listening for the wake word")
+            Accessible.ignored: !shown
             readonly property bool shown: bar.microphone !== ""
             readonly property bool recording: bar.microphone === "on"
             property real progress: shown ? 1 : 0
@@ -395,16 +439,19 @@ Item {
         }
         Indicator {
             objectName: "airplaneIcon"
+            spoken: qsTr("Airplane mode")
             shown: bar.system !== null && bar.system !== undefined && bar.system.airplaneMode
             source: Theme.asset("statusBar/icon-airplane.png")
         }
         Indicator {
             objectName: "muteIcon"
+            spoken: qsTr("Muted")
             shown: bar.system !== null && bar.system !== undefined && bar.system.muted
             source: Theme.asset("statusBar/icon-mute.png")
         }
         Indicator {
             objectName: "rotationLockIcon"
+            spoken: qsTr("Rotation locked")
             shown: bar.system !== null && bar.system !== undefined && bar.system.rotationLocked
             source: Theme.asset("statusBar/icon-rotation-lock.png")
         }
@@ -412,6 +459,7 @@ Item {
         // profile list; here the system menu's VPN profiles).
         Indicator {
             objectName: "vpnIcon"
+            spoken: qsTr("VPN connected")
             shown: !!bar.system && !!bar.system.vpnProfile
             source: Theme.asset("statusBar/vpn-status-icon.png")
         }
@@ -420,6 +468,7 @@ Item {
         // StatusBarServicesConnector::handleNetworkStatus, :1079-1086).
         Indicator {
             objectName: "roamingIcon"
+            spoken: qsTr("Roaming")
             shown: !!bar.system && !bar.system.airplaneMode && bar.system.roaming === true
             source: Theme.asset("statusBar/network-roaming.png")
         }
@@ -427,6 +476,7 @@ Item {
         // from com.palm.telephony forwardQuery; off with the radio).
         Indicator {
             objectName: "callForwardIcon"
+            spoken: qsTr("Calls forwarded")
             shown: !!bar.system && !bar.system.airplaneMode && !!bar.system.callForwarding
             source: Theme.asset("statusBar/call-forward.png")
         }
@@ -434,11 +484,13 @@ Item {
         // setTTY, :236-246; telephony hacQuery / ttyQuery).
         Indicator {
             objectName: "hacIcon"
+            spoken: qsTr("Hearing aid mode")
             shown: !!bar.system && bar.system.hac === true
             source: Theme.asset("statusBar/hac.png")
         }
         Indicator {
             objectName: "ttyIcon"
+            spoken: qsTr("TTY")
             shown: !!bar.system && bar.system.tty === true
             source: Theme.asset("statusBar/tty.png")
         }
@@ -448,6 +500,7 @@ Item {
         // StatusBarServicesConnector::wifiEventsCallback, :2921-2925).
         Indicator {
             objectName: "wifiIcon"
+            spoken: bar.spokenWifi
             readonly property bool connecting: !!bar.system && bar.system.wifiBars === 0 && !!bar.system.wifiNetworks
                                                && bar.system.wifiNetworks.some(function(n) { return n.state === "connecting"; })
             shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
@@ -458,6 +511,7 @@ Item {
         // (StatusBarServicesConnector::updateBluetoothIcon, :2304-2321).
         Indicator {
             objectName: "bluetoothIcon"
+            spoken: btState === "connected" ? qsTr("Bluetooth, connected") : btState === "connecting" ? qsTr("Bluetooth, connecting") : qsTr("Bluetooth on")
             readonly property var devices: bar.system && bar.system.bluetoothDevices ? bar.system.bluetoothDevices : []
             readonly property string btState: devices.some(function(d) { return d.state === "connected"; }) ? "connected"
                                             : devices.some(function(d) { return d.state === "connecting"; }) ? "connecting" : "on"
@@ -470,6 +524,7 @@ Item {
         // the show3GForEvdo preference says so (system.show3GForEvdo).
         Indicator {
             objectName: "wanIcon"
+            spoken: qsTr("Mobile data, %1").arg(type.toUpperCase())
             readonly property string type: bar.system && typeof bar.system.wanType === "string" ? bar.system.wanType : ""
             readonly property bool dormant: !!bar.system && bar.system.wanDormant === true
             readonly property string art: {
@@ -489,6 +544,7 @@ Item {
         // updateRSSIIcon(false, RSSI_FLIGHT_MODE)); it showed a second plane.
         Indicator {
             objectName: "rssiIcon"
+            spoken: bar.spokenSignal
             shown: !!bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0
             source: !bar.system ? "" : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
         }
@@ -497,6 +553,7 @@ Item {
         // 12% and under), amber to 20%, else white; green while charging.
         Text {
             objectName: "batteryPercent"
+            Accessible.ignored: true   // the battery icon says it
             readonly property int pct: bar.system ? bar.system.batteryPercent : -1
             visible: bar.batteryPercent && pct >= 0
             anchors.verticalCenter: parent.verticalCenter
@@ -509,6 +566,8 @@ Item {
         }
         Image {
             objectName: "battery"
+            Accessible.role: Accessible.Graphic
+            Accessible.name: bar.spokenBattery
             readonly property int step: bar.system ? Theme.batteryState(bar.system.batteryPercent) : 0
             // States 0-11 are battery-N; the full one reuses battery-11, or
             // battery-charged while charging (StatusBarBattery.cpp:150-172).
@@ -525,10 +584,13 @@ Item {
         Text {
             objectName: "tabletClock"
             visible: Theme.tablet && !bar.lockScreen
+            Accessible.role: Accessible.StaticText
+            Accessible.name: qsTr("Time, %1").arg(text)
             anchors.verticalCenter: parent.verticalCenter
             text: bar.clockText
             color: Theme.text
             font.family: Theme.fontFamily
+            font.weight: Theme.textWeight
             font.pixelSize: Theme.statusBarClockFontSize
         }
     }
@@ -540,6 +602,10 @@ Item {
         width: Math.max(indicators.width + indicators.anchors.rightMargin + Theme.px(6), parent.width / 3)
         enabled: !bar.lockScreen
         onClicked: bar.systemMenuRequested()
+        Accessible.role: Accessible.ButtonMenu
+        Accessible.name: qsTr("System menu")
+        Accessible.description: bar.spokenStatus
+        Accessible.onPressAction: if (enabled) bar.systemMenuRequested()
     }
 
     // A status icon that slides in and out: over 1000 ms its width opens
@@ -552,6 +618,11 @@ Item {
         id: ind
         property bool shown: false
         property alias source: img.source
+        // What a screen reader says for it.
+        property string spoken: ""
+        Accessible.role: Accessible.Graphic
+        Accessible.name: spoken
+        Accessible.ignored: !shown
         property real progress: shown ? 1 : 0
         Behavior on progress { NumberAnimation { duration: Theme.statusBarItemSlideDuration } }
         readonly property real widthFactor: {

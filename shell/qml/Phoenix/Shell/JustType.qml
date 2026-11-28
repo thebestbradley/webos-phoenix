@@ -130,6 +130,9 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: jt.closeRequested()
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Close Just Type")
+        Accessible.onPressAction: jt.closeRequested()
     }
 
     Item {
@@ -146,13 +149,18 @@ Item {
         x: Theme.px(8)
         y: Theme.statusBarHeight + Theme.px(8)
         width: parent.width - Theme.px(16)
-        height: Theme.px(36)
+        height: Theme.textBox(36, 17)
         source: Theme.asset("search-pill.png")
         border { left: Theme.artBorder(36, source); right: Theme.artBorder(18, source); top: 0; bottom: 0 }
+        ContrastOutline { radius: height / 2 }
 
         TextInput {
             id: input
             objectName: "justTypeInput"
+            Accessible.role: Accessible.EditableText
+            Accessible.name: qsTr("Just Type")
+            Accessible.description: results.count > 0 ? qsTr("%n results", "", results.count) : qsTr("Type to search")
+            Accessible.focusable: true
             anchors.left: parent.left
             anchors.leftMargin: Theme.px(36)
             anchors.right: parent.right
@@ -160,7 +168,8 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.text
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(17)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(17)
             Keys.onEscapePressed: jt.closeRequested()
             onAccepted: if (results.count > 0) jt.launchRequested(results.get(0).appId)
 
@@ -248,8 +257,14 @@ Item {
                 id: result
                 required property var model
                 width: parent.width
-                height: Theme.px(44)
+                height: Theme.textBox(44, 17)
                 color: resultMouse.pressed ? "#33ffffff" : "transparent"
+                border.width: Theme.highContrast ? Theme.px(1) : 0
+                border.color: Theme.drawerRule
+                Accessible.role: Accessible.Button
+                Accessible.name: result.model.title
+                Accessible.description: qsTr("Result %1 of %2").arg(result.model.index + 1).arg(results.count)
+                Accessible.onPressAction: jt.launchRequested(result.model.appId)
                 AppIcon {
                     id: rIcon
                     anchors.verticalCenter: parent.verticalCenter
@@ -259,6 +274,7 @@ Item {
                     glyph: result.model.glyph
                     source: result.model.icon
                     largeSource: result.model.largeIcon
+                    decorative: true
                 }
                 Text {
                     anchors.left: rIcon.right
@@ -267,7 +283,8 @@ Item {
                     text: result.model.title
                     color: Theme.text
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(17)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(17)
                 }
                 MouseArea {
                     id: resultMouse
@@ -283,7 +300,8 @@ Item {
             text: "Actions: New Email · New Message · New Memo · Search the Web"
             color: Theme.textDim
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(13)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(13)
         }
     }
 }

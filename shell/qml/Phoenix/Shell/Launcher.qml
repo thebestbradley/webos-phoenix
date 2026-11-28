@@ -29,6 +29,30 @@ Item {
     readonly property bool dragging: draggedId !== ""
 
     signal launchRequested(string appId)
+    // What a tap on an icon does (pageMouse's onClicked), for a screen
+    // reader's press: a folder opens; in edit mode the delete decorator's
+    // action (which asks first); an app still installing says so; else it
+    // launches.
+    function activateEntry(item) {
+        if (!item)
+            return;
+        if (item.isGroup) {
+            if (!editMode)
+                openGroup(item.appId);
+            return;
+        }
+        if (editMode) {
+            if ((item.removable || item.shortcut) && item.installState === "")
+                deleteRequested(item.appId);
+            return;
+        }
+        if (item.installState !== "") {
+            pendingTapped(item.appId);
+            return;
+        }
+        feedbackId = item.appId;
+        launchRequested(item.appId);
+    }
     signal closeRequested
     signal deleteRequested(string appId)
     // A tap on an app still being installed, or whose install failed (the
@@ -287,7 +311,7 @@ Item {
     }
 
     // Swallow touches so they don't reach the cards underneath.
-    MouseArea { anchors.fill: parent }
+    MouseArea { anchors.fill: parent; Accessible.ignored: true }
 
     // ---- Tab strip ---------------------------------------------------------
 
@@ -345,6 +369,12 @@ Item {
                     MouseArea {
                         objectName: "launcherTab_" + index
                         anchors.fill: parent
+                        Accessible.role: Accessible.PageTab
+                        Accessible.name: modelData
+                        Accessible.description: qsTr("Tab %1 of %2").arg(index + 1).arg(launcher.tabs.length)
+                        Accessible.selected: pages.currentIndex === index
+                        Accessible.focusable: true
+                        Accessible.onPressAction: { launcher.addTabShown = false; launcher.showPage(index); }
                         pressAndHoldInterval: Theme.iconMenuHoldInterval
                         onClicked: { launcher.addTabShown = false; launcher.showPage(index); }
                         onPressAndHold: launcher.askRenameTab(index)
@@ -377,6 +407,9 @@ Item {
                 MouseArea {
                     id: addMouse
                     anchors.fill: parent
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("New tab")
+                    Accessible.onPressAction: launcher.askNewTab()
                     onClicked: launcher.askNewTab()
                 }
             }
@@ -384,6 +417,7 @@ Item {
         // Press and hold on the strip past the tabs: the "+".
         MouseArea {
             objectName: "launcherTabStripEmpty"
+            Accessible.ignored: true   // its hold is the "+", which speaks
             x: launcher.tabWidth * launcher.tabs.length + launcher.addTabWidth
             width: Math.max(0, parent.width - x)
             height: parent.height
@@ -418,12 +452,16 @@ Item {
             text: qsTr("Done")
             color: Theme.text
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
+            font.pixelSize: Theme.fontPx(16)
             font.bold: true
         }
         MouseArea {
             id: doneMouse
             anchors.fill: parent
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Done")
+            Accessible.description: qsTr("Leave edit mode")
+            Accessible.onPressAction: launcher.editMode = false
             onClicked: launcher.editMode = false
         }
     }
@@ -896,7 +934,7 @@ Item {
                     text: qsTr("Tap and hold any app to drag it to this page.")
                     color: "#FFFFFF"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(24)
+                    font.pixelSize: Theme.fontPx(24)
                     font.bold: true
                 }
             }
@@ -922,6 +960,20 @@ Item {
                     // its label at half opacity under the status decorator
                     // (IconBase::paint, iconInstallModeOpacity 0.5).
                     readonly property bool notReady: installState !== ""
+                    // For a screen reader: the app's name (a folder, an app
+                    // being installed say so); a press does what a tap does
+                    // (pageMouse's onClicked; in edit mode, delete).
+                    Accessible.role: Accessible.Button
+                    Accessible.name: isGroup ? qsTr("%1, folder").arg(title)
+                                   : installState === "installing" ? qsTr("%1, installing, %2 percent").arg(title).arg(Math.round(progress))
+                                   : installState === "failed" ? qsTr("%1, install failed").arg(title)
+                                   : title
+                    Accessible.description: launcher.editMode && (removable || shortcut) && !notReady
+                                            ? (shortcut ? qsTr("Edit mode: press to remove") : qsTr("Edit mode: press to delete"))
+                                            : qsTr("App %1 of %2 on this page").arg(index + 1).arg(page.model ? page.model.count : 0)
+                    Accessible.focusable: true
+                    Accessible.focused: launcher.keyIndex === index && page.index === launcher.currentPage
+                    Accessible.onPressAction: launcher.activateEntry(page.model.get(index))
                     width: Theme.tablet ? launcher.cellSize : launcher.cellWidth
                     height: launcher.cellHeight
                     x: launcher.rowLeft + (index % launcher.columns) * launcher.cellWidth
@@ -941,8 +993,8 @@ Item {
                         width: Math.min(parent.width - Theme.px(4), Theme.launcherIconSize + Theme.px(36))
                         height: iconItem.height + Theme.px(10)
                         radius: Theme.px(10)
-                        color: "#302c8ce0"
-                        border.color: "#2c8ce0"
+                        color: Theme.focusFill
+                        border.color: Theme.focusRing
                         border.width: Theme.px(2)
                     }
 
@@ -1046,6 +1098,7 @@ Item {
             // picks the icon up at once.
             MouseArea {
                 id: pageMouse
+                Accessible.ignored: true   // each icon speaks for itself (cell)
                 width: page.contentWidth
                 height: Math.max(page.contentHeight, page.height)
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -1196,6 +1249,7 @@ Item {
     TrackpadSwipe {
         id: wheel
         objectName: "launcherWheel"
+        Accessible.ignored: true
         anchors.top: tabBar.top
         anchors.bottom: pages.bottom
         width: parent.width

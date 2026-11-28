@@ -1126,7 +1126,7 @@ Item {
             text: qsTr("Assistant")
             color: "#B0FFFFFF"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(14)
+            font.pixelSize: Theme.fontPx(14)
             font.bold: true
             MouseArea { anchors.fill: parent; onClicked: ov.openApp() }
         }
@@ -1139,7 +1139,8 @@ Item {
             text: qsTr("New")
             color: "#B0FFFFFF"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(14)
+            font.weight: Theme.textWeight
+            font.pixelSize: Theme.fontPx(14)
             MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(10); onClicked: ov.newConversation() }
         }
 
@@ -1309,7 +1310,8 @@ Item {
                         wrapMode: Text.Wrap
                         color: row.mine ? "#202428" : "#FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(Theme.tablet ? 18 : 16)
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(Theme.tablet ? 18 : 16)
                         textFormat: Text.PlainText
                     }
                     Text {
@@ -1320,7 +1322,8 @@ Item {
                         text: row.modelData.source || ""
                         color: "#90FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(11)
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(11)
                     }
                     // Thinking: three dots rising in turn.
                     Row {
@@ -1364,7 +1367,8 @@ Item {
                     wrapMode: Text.Wrap
                     color: "#B0FFFFFF"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(12)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(12)
                 }
                 // What it found (photos, events, contacts): a tap opens its app on it.
                 AssistantAttachments {
@@ -1417,7 +1421,7 @@ Item {
                             readonly property real appear: actions.shareOf(index)
                             opacity: appear
                             scale: 0.85 + 0.15 * appear
-                            Text { id: label; visible: false; text: parent.caption; font.pixelSize: Theme.px(16); font.bold: true; font.family: Theme.fontFamily }
+                            Text { id: label; visible: false; text: parent.caption; font.pixelSize: Theme.fontPx(16); font.bold: true; font.family: Theme.fontFamily }
                         }
                     }
                     Repeater {
@@ -1479,7 +1483,8 @@ Item {
                     text: qsTr("Try asking")
                     color: "#A0FFFFFF"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(Theme.tablet ? 15 : 13)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(Theme.tablet ? 15 : 13)
                 }
                 // In a line where they fit, else one under another; centred.
                 Grid {
@@ -1542,7 +1547,8 @@ Item {
                 elide: Text.ElideRight
                 color: "#D0FFFFFF"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(13)
+                font.weight: Theme.textWeight
+                font.pixelSize: Theme.fontPx(13)
             }
         }
 
@@ -1569,7 +1575,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 color: "#202428"
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(17)
+                font.pixelSize: Theme.fontPx(17)
                 clip: true
                 // Requests are sentences: the keyboard starts them with a
                 // capital (GAPS V1; Shell._editorStateFor).
@@ -1726,7 +1732,7 @@ Item {
                         text: qsTr("Connect a model")
                         color: "#FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(Theme.tablet ? 19 : 17)
+                        font.pixelSize: Theme.fontPx(Theme.tablet ? 19 : 17)
                         font.bold: true
                     }
                     Text {
@@ -1736,7 +1742,8 @@ Item {
                         text: qsTr("For questions and requests the phone's own commands don't know.")
                         color: "#B0FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(13)
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(13)
                     }
                     Repeater {
                         model: [
@@ -1764,7 +1771,7 @@ Item {
                                     text: modelData.title
                                     color: "#FFFFFF"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.px(Theme.tablet ? 17 : 15)
+                                    font.pixelSize: Theme.fontPx(Theme.tablet ? 17 : 15)
                                     font.bold: true
                                 }
                                 Text {
@@ -1773,7 +1780,8 @@ Item {
                                     text: modelData.detail
                                     color: "#C0FFFFFF"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.px(Theme.tablet ? 14 : 12)
+                                    font.weight: Theme.textWeight
+                                    font.pixelSize: Theme.fontPx(Theme.tablet ? 14 : 12)
                                 }
                             }
                             MouseArea {
@@ -1791,7 +1799,8 @@ Item {
                         text: qsTr("Cancel")
                         color: "#D0FFFFFF"
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(15)
+                        font.weight: Theme.textWeight
+                        font.pixelSize: Theme.fontPx(15)
                         MouseArea { anchors.fill: parent; anchors.margins: -Theme.px(6); onClicked: ov.connecting = null }
                     }
                 }

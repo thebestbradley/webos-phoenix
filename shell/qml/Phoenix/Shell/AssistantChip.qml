@@ -30,7 +30,8 @@ Rectangle {
         elide: Text.ElideRight
         color: "#FFFFFF"
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.px(Theme.tablet ? 16 : 14)
+        font.weight: Theme.textWeight
+        font.pixelSize: Theme.fontPx(Theme.tablet ? 16 : 14)
     }
     MouseArea {
         id: area

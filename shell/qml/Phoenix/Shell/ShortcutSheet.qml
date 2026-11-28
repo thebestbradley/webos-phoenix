@@ -40,7 +40,7 @@ ArtBorderImage {
             text: qsTr("Keyboard Shortcuts")
             color: "#FFFFFF"
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(18)
+            font.pixelSize: Theme.fontPx(18)
             font.bold: true
             bottomPadding: Theme.px(4)
         }
@@ -54,7 +54,8 @@ ArtBorderImage {
                     text: modelData.label
                     color: "#FFFFFF"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(15)
+                    font.weight: Theme.textWeight
+                    font.pixelSize: Theme.fontPx(15)
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
@@ -63,7 +64,7 @@ ArtBorderImage {
                     text: modelData.text !== undefined ? modelData.text : KS.keyText(modelData, sheet.mac)
                     color: "#BFC4C8"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(15)
+                    font.pixelSize: Theme.fontPx(15)
                     font.bold: true
                 }
             }
