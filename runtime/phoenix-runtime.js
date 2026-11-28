@@ -1499,6 +1499,206 @@
 
     runtime.dispatch = dispatch;
 
+    // ---- Bus permissions: the simulator refuses what ls-hubd would ---------------------
+    //
+    // On a device luna-service2 checks every call: the method's api groups
+    // (the provider's *.api.json, its ACG groups) against the groups the
+    // caller holds (an app's requiredPermissions, a service's *.perm.json),
+    // and a service's role file's "outbound" list against the service it
+    // calls. The simulator's services all run in the page and would answer
+    // anything, so a permission bug showed only on an image (#94, #100,
+    // #102, #106). Here each call a page or a service in the page makes is
+    // checked against the same files, from the table
+    // tools/gen-bus-permissions.py writes from tools/devicecheck/luna.py's
+    // model (the static checker's: the two cannot disagree), served at
+    // /usr/share/phoenix/sim/bus-permissions.json. docs/SIM-PARITY.md,
+    // "Bus permissions".
+    //
+    //   - The caller is the app whose card the page is in: a frame in another
+    //     app's card (Accounts' sign-in pages, Enyo's CrossAppUI) calls with
+    //     that app's groups, as WebAppMgr gives a card's frames the card's
+    //     bridge (#116); a service in the page calls as itself (ctx.caller,
+    //     nodeServiceLuna).
+    //   - A method whose api groups the caller holds none of is refused as
+    //     luna-service2 refuses it: the provider's LSCategoryMethodCall
+    //     answers LSMessageHandlerResultPermissionDenied (luna-service2
+    //     src/libluna-service2/base.c:536-557), the transport replies
+    //     "Denied method call \"<method>\" for category \"<category>\""
+    //     (transport.c:1840-1845) and the caller's callmap makes that
+    //     {returnValue: false, errorCode: -1, errorText}
+    //     (callmap.c:540-590, _LSMessageSetFromError).
+    //   - A method the provider's api files do not name is in no group, and
+    //     _LSSecurityCheckGroup (base.c:370-388) passes no caller for it:
+    //     refused the same way.
+    //   - A call outside a service's outbound list never reaches the
+    //     provider: the hub refuses the name (LS_TRANSPORT_QUERY_NAME_
+    //     PERMISSION_DENIED) and the caller gets "Not permitted to send to
+    //     <service>." (callmap.c:940-949).
+    //   - A service with no api files in the table (the simulator's own,
+    //     what a device answers in the page) is not checked.
+    //
+    // host.json's "busPermissions" says how: "enforce" refuses, "log" (the
+    // default while the apps' refusals are found) only warns in the console ("[phoenix-runtime] bus: would
+    // refuse"). PHOENIX_BUS_PERMISSIONS=log in the environment of phoenix-sim
+    // or tools/serve-rootfs.py sets it; with PHOENIX_BUS_LOG=FILE
+    // serve-rootfs.py also writes every refusal pages report to FILE, one JSON
+    // line each (host.json "busPermissionsReport": true).
+    var BUS_DEFAULT_MODE = "log";
+    var bus = { table: undefined, mode: undefined, report: false, clients: {}, warned: {} };
+    function busHost() {
+        if (bus.mode !== undefined) return;
+        var h = {};
+        try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; } catch (e) { h = {}; }
+        bus.mode = h.busPermissions === "enforce" || h.busPermissions === "log" || h.busPermissions === "off"
+            ? h.busPermissions : BUS_DEFAULT_MODE;
+        bus.report = !!h.busPermissionsReport;
+    }
+    function busTable() {
+        if (bus.table === undefined) {
+            try { bus.table = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/sim/bus-permissions.json") || "null"); } catch (e) { bus.table = null; }
+            if (!bus.table || !bus.table.services) {
+                console.warn("[phoenix-runtime] bus: no /usr/share/phoenix/sim/bus-permissions.json; calls are not checked");
+                bus.table = null;
+            }
+        }
+        return bus.table;
+    }
+    // The app whose card this page is in: a frame's parents, up to the card.
+    function busPageCaller() {
+        var me = PalmSystem.appIdentifier, w = global;
+        try {
+            while (w.parent && w.parent !== w && w.parent.PalmSystem && w.parent.PalmSystem.appIdentifier &&
+                   w.parent.PalmSystem.appIdentifier !== "com.webos.phoenix.unknown") {
+                w = w.parent;
+                me = w.PalmSystem.appIdentifier;
+            }
+        } catch (e) { /* another origin: the frame is its own */ }
+        return me;
+    }
+    // {groups: {group: true}, outbound: [patterns] or null}. A client the
+    // table does not have (an app installed since) has what everyone has and
+    // its appinfo.json's requiredPermissions, as an installed app gets
+    // (webos_app_generate_security_files; tools/install-rootfs.py
+    // security_files).
+    function busClient(t, caller, service) {
+        var key = (service ? "service " : "app ") + caller;
+        if (bus.clients[key]) return bus.clients[key];
+        var e = ((service ? t.clients : t.apps) || {})[caller], groups = {}, outbound = null;
+        (t.everyone || []).forEach(function (g) { groups[g] = true; });
+        if (e) {
+            e.groups.forEach(function (g) { groups[g] = true; });
+            if (e.outbound) outbound = e.outbound;
+        } else if (!service) {
+            var info = null;
+            try { info = JSON.parse(String(PalmSystem.getResource("/usr/palm/applications/" + caller + "/appinfo.json") || "null").replace(/^﻿/, "")); } catch (x) { info = null; }
+            ((info && info.requiredPermissions) || []).forEach(function (g) { groups[g] = true; });
+        }
+        bus.clients[key] = { groups: groups, outbound: outbound };
+        return bus.clients[key];
+    }
+    // fnmatch's patterns (Python's fnmatchcase, as luna.py matches them).
+    var busGlobs = {};
+    function busGlob(pat) {
+        if (!busGlobs[pat]) {
+            var re = "";
+            for (var i = 0; i < pat.length; i++) {
+                var c = pat.charAt(i);
+                if (c === "*") re += "[\\s\\S]*";
+                else if (c === "?") re += "[\\s\\S]";
+                else if (c === "[" && pat.indexOf("]", i + 2) > 0) {
+                    var j = pat.indexOf("]", i + 2);
+                    var set = pat.slice(i + 1, j).replace(/\\/g, "\\\\");
+                    if (set.charAt(0) === "!") set = "^" + set.slice(1);
+                    re += "[" + set + "]";
+                    i = j;
+                } else re += c.replace(/[.+^${}()|\\\/\[\]-]/g, "\\$&");
+            }
+            busGlobs[pat] = new RegExp("^" + re + "$");
+        }
+        return busGlobs[pat];
+    }
+    // The groups that may call a method: every api entry that names it or a
+    // pattern of it (luna.py method_groups). null: none names it.
+    function busMethodGroups(methods, method) {
+        var found = null;
+        Object.keys(methods).forEach(function (pat) {
+            if (pat === method || busGlob(pat).test(method) || busGlob(pat).test("/" + method)) {
+                found = found || [];
+                methods[pat].forEach(function (g) { if (found.indexOf(g) < 0) found.push(g); });
+            }
+        });
+        return found;
+    }
+    // What the hub would answer instead of the provider, or null. caller:
+    // the app (a page's call) or, with service, the service making the call.
+    function busRefusal(url, caller, service) {
+        busHost();
+        if (bus.mode === "off" || !caller) return null;
+        var t = busTable();
+        if (!t) return null;
+        var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)?$/.exec(url);
+        if (!m) return null;
+        var who = busClient(t, caller, service);
+        // A page's calls go through the runtime's serviceAliases on a device
+        // too (installDevice); a service's (run-js-service) do not.
+        var name = (!service && t.aliases && t.aliases[m[1]]) || m[1];
+        if (who.outbound && name !== caller && !who.outbound.some(function (o) { return busGlob(o).test(name); }))
+            return { kind: "outbound", service: name, method: "", groups: [],
+                     allowed: busAllowed(t, "outbound:" + caller + "->" + name),
+                     reply: fail(-1, "Not permitted to send to " + name + ".") };
+        var svc = t.services[name];
+        if (!svc) return null;
+        var path = (m[2] || "/").replace(/\/+$/, "").replace(/^\/+/, "");
+        var cut = path.lastIndexOf("/");
+        var category = cut < 0 ? "/" : "/" + path.slice(0, cut), method = cut < 0 ? path : path.slice(cut + 1);
+        var groups = busMethodGroups(svc.methods, path);
+        if (groups && groups.some(function (g) { return who.groups[g]; })) return null;
+        var kind = groups ? "missing-permission" : "unknown-method";
+        return { kind: kind, service: name, method: path, groups: groups || [],
+                 allowed: busAllowed(t, kind === "unknown-method" ? kind + ":" + name + "/" + path
+                                                                 : kind + ":" + caller + "->" + name + "/" + path),
+                 reply: fail(-1, "Denied method call \"" + method + "\" for category \"" + category + "\"") };
+    }
+    // tools/devicecheck/sim-bus-allowlist.json (in the table as "allow"):
+    // refusals the simulator lets through for now, each with why and who
+    // fixes it. Its ids are fnmatch patterns.
+    function busAllowed(t, id) {
+        var allow = t.allow || {};
+        for (var pat in allow)
+            if (pat === id || busGlob(pat).test(id)) return allow[pat];
+        return null;
+    }
+    runtime.bus = { refusal: busRefusal, pageCaller: busPageCaller,
+                    mode: function () { busHost(); return bus.mode; } };
+    // A call's check: true when the hub would refuse it and the simulator
+    // does (reply has had the refusal), false when the call goes on.
+    function busCheck(url, caller, service, reply, stack) {
+        var r = busRefusal(url, caller, service);
+        if (!r) return false;
+        var key = caller + " " + url;
+        if (!bus.warned[key]) {
+            bus.warned[key] = true;
+            console.warn("[phoenix-runtime] bus: " + (r.allowed ? "allowed (tools/devicecheck/sim-bus-allowlist.json: " + r.allowed + ") "
+                                                      : bus.mode === "enforce" ? "refused " : "would refuse ") + caller + " -> " + url +
+                         (r.kind === "outbound" ? " (not in its role's outbound list)"
+                          : r.kind === "unknown-method" ? " (in no api group of " + r.service + ")"
+                          : " (needs one of " + r.groups.join(", ") + ")"));
+            if (bus.report) {
+                try {
+                    var x = new XMLHttpRequest();
+                    x.open("POST", "/__phoenix/bus-denied", true);
+                    x.setRequestHeader("Content-Type", "application/json");
+                    x.send(toJson({ caller: caller, url: url, kind: r.kind, service: r.service, method: r.method,
+                                    groups: r.groups, mode: bus.mode, allowed: r.allowed || null, asService: !!service,
+                                    stack: stack || String(new Error().stack || ""), page: String(global.location && global.location.pathname || "") }));
+                } catch (e) { /* the report is a convenience */ }
+            }
+        }
+        if (bus.mode !== "enforce" || r.allowed) return false;
+        reply(JSON.parse(toJson(r.reply)));
+        return true;
+    }
+
     global.PalmServiceBridge = function () {
         var bridge = this;
         var cancelled = false;
@@ -1507,11 +1707,14 @@
         this.call = function (url, json) {
             var params = {};
             try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
+            // Where the call was made, for a refusal's report (Bus permissions).
+            busHost();
+            var stack = bus.report ? String(new Error().stack || "") : null;
             // Responses are always asynchronous, as on a device.
             var id = nextUnsent++;
             var run = function () {
                 delete unsent[id];
-                dispatch(url, params, function (response) {
+                var answer = function (response) {
                     if (cancelled || !bridge.onservicecallback)
                         return;
                     // The app's own handler: what it throws is the app's
@@ -1522,7 +1725,10 @@
                     } catch (e) {
                         setTimeout(function () { throw e; }, 0);
                     }
-                }, ctx);
+                };
+                // The hub's check, as the card's app (Bus permissions, above).
+                if (busCheck(url, busPageCaller(), false, answer, stack)) return;
+                dispatch(url, params, answer, ctx);
             };
             if (unloading) {
                 run();
@@ -13751,6 +13957,11 @@
             // A subscription: onReply for each reply until cancel().
             subscribe: function (uri, params, onReply) {
                 var stopped = false;
+                // The hub checks a service's calls as the service's
+                // (Bus permissions); without a caller, the page's own.
+                if (busCheck(uri, caller || busPageCaller(), !!caller, function (r) {
+                    setTimeout(function () { if (!stopped) onReply(r); }, 0);
+                })) return function () { stopped = true; };
                 dispatch(uri, clone(params || {}), function (r) {
                     if (!stopped) setTimeout(function () { if (!stopped) onReply(r); }, 0);
                 }, { cancelled: function () { return stopped; }, onCancel: null, caller: caller });
@@ -13759,6 +13970,10 @@
             call: function (uri, params) {
                 return new Promise(function (resolve) {
                     var done = false;
+                    if (busCheck(uri, caller || busPageCaller(), !!caller, function (r) {
+                        done = true;
+                        setTimeout(function () { resolve(r); }, 0);
+                    })) return;
                     dispatch(uri, clone(params || {}), function (r) {
                         if (done) return;
                         done = true;
@@ -14692,7 +14907,7 @@
                             try { m = hosted[service].load(); } catch (e) { return; }
                             var cap = m.def.capabilities[cp.id];
                             if (!cap || !cap.watch) return;
-                            nodeServiceLuna(PalmSystem.appIdentifier).call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
+                            nodeServiceLuna().call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
                         };
                         return true;
                     });

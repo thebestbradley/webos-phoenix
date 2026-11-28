@@ -119,6 +119,7 @@
 4 node tools/test-runtime-csp.cjs
 5 node tools/test-runtime-unload.cjs
 4 node tools/test-sim-parity.cjs
+40 node tools/test-sim-permissions.cjs --out app-tests/sim-permissions
 26 node tools/test-xmpp.cjs --out app-tests/xmpp-phone
 24 node tools/test-matrix.cjs --out app-tests/matrix-phone
 26 node tools/test-deltachat.cjs --out app-tests/deltachat-phone

@@ -270,6 +270,29 @@ def main():
     ok(holders == {"org.webosphoenix.service.packages"},
        "only the Marketplace's service holds OSE's installer groups (%s)" % ", ".join(sorted(holders)))
 
+    # The simulator's table (tools/gen-bus-permissions.py) is the checker's
+    # own model as data: the same groups for every app and service, apps
+    # apart from services of the same name, and checked in up to date.
+    table = luna.bus_table(REPO)
+    model = luna.model(REPO)
+    every = set(table["everyone"])
+    for c in model["clients"]:
+        if c.groups is None or getattr(c, "frame", False):
+            continue
+        where = table["apps"] if c.kind == "app" else table["clients"]
+        ok(set(where.get(c.name, {}).get("groups", [])) == c.groups | every,
+           "the table gives %s %s the checker's groups" % (c.kind, c.name))
+    ok("outbound" not in table["apps"].get("org.webosphoenix.clipboard", {}) and
+       table["clients"].get("org.webosphoenix.clipboard", {}).get("outbound"),
+       "the Clipboard app and the clipboard service are apart in the table")
+    ok(table["services"]["com.webos.service.devmode"]["methods"].get("setDevMode") == ["phoenix.devmode.management"],
+       "the table has the providers' api groups (devmode setDevMode)")
+    p = subprocess.run([sys.executable, os.path.join(TOOLS, "gen-bus-permissions.py"), "--check"], capture_output=True, text=True)
+    ok(p.returncode == 0, "tools/devicecheck/bus-permissions.json is up to date " + (p.stderr.strip() or ""))
+    for pat in table.get("allow", {}):
+        ok(pat.split(":", 1)[0] in ("missing-permission", "unknown-method", "outbound") and table["allow"][pat],
+           "sim-bus-allowlist.json %s: a kind and a reason" % pat)
+
     # This repository, with its allowlist, as CI runs it.
     for c in CHECKERS:
         status, out = run(c, REPO)

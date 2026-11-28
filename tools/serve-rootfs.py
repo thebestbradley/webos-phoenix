@@ -68,6 +68,12 @@ page learns the address from host.json ("tcp": "websocket", "tcpUrl").
 It reaches what this computer reaches, as /__phoenix/proxy does; --no-tcp
 turns it off.
 
+PHOENIX_BUS_PERMISSIONS=log in its environment makes the runtime only warn
+of the Luna calls ls-hubd would refuse, instead of refusing them (host.json
+"busPermissions"; docs/SIM-PARITY.md, "Bus permissions"); with
+PHOENIX_BUS_LOG=FILE the pages also report each one, written to FILE as a
+JSON line (POST /__phoenix/bus-denied).
+
 --host-json JSON adds its keys to /usr/share/phoenix/host.json, where
 phoenix-sim says what its host offers ({"marketplaceCatalog": true}: the
 shell runs the Marketplace's catalog). Tests set it here rather than
@@ -677,6 +683,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.server.tcp:
                 info["tcp"] = "websocket"
                 info["tcpUrl"] = "ws://%s/__phoenix/tcp?token=%s" % (self.headers.get("Host", ""), self.server.token)
+            # The runtime's bus permissions (runtime/phoenix-runtime.js, "Bus
+            # permissions"): PHOENIX_BUS_PERMISSIONS=log only warns; with
+            # PHOENIX_BUS_LOG=FILE the pages report each refusal here.
+            mode = os.environ.get("PHOENIX_BUS_PERMISSIONS", "")
+            if mode in ("enforce", "log", "off"):
+                info["busPermissions"] = mode
+            if os.environ.get("PHOENIX_BUS_LOG"):
+                info["busPermissionsReport"] = True
             info.update(getattr(self.server, "host_json", {}))
             return self.send(200, "application/json", json.dumps(info).encode())
         if path in ("/__phoenix/pty", "/__phoenix/pty/shells"):
@@ -741,6 +755,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path.split("?", 1)[0] == "/__phoenix/bus-denied":
+            # A call the runtime refused (or would have) as ls-hubd does: one
+            # JSON line in PHOENIX_BUS_LOG, for finding the apps' permission
+            # bugs over a whole test run (docs/SIM-PARITY.md, "Bus permissions").
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            log = os.environ.get("PHOENIX_BUS_LOG")
+            if log:
+                try:
+                    rec = json.loads(body or b"{}")
+                    with open(log, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(rec, sort_keys=True) + "\n")
+                except (ValueError, OSError):
+                    pass
+            return self.send(204, "text/plain", b"")
         if self.path.split("?", 1)[0] == "/__phoenix/installer":
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")

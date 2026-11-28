@@ -210,6 +210,45 @@ Pages talk to the shell (launch another app, show a banner) through
 `phoenixHost.postToHost(type, payload)`. In phoenix-sim that arrives as a
 console message with the `__phoenix__` prefix.
 
+### Bus permissions
+
+In the simulator the runtime checks every Luna call as ls-hubd does on a
+device, so a missing permission shows there first ([SIM-PARITY.md, "Bus
+permissions"](SIM-PARITY.md#bus-permissions)). The caller is the app whose
+card the page is in (a frame in another app's card calls as that app: the
+connectors' sign-in pages in Accounts' card call with Accounts' groups, as
+WebAppMgr gives a card's frames the card's bridge), or the Phoenix service
+running in the page (`nodeServiceLuna(name)`). A call is refused when:
+
+- the caller holds none of the ACG groups the provider's api file gives the
+  method (an app's `requiredPermissions`, or `compat/app-permissions.json`
+  for the original apps; a service's `*.perm.json`), or no api group names
+  the method: `{returnValue: false, errorCode: -1, errorText: "Denied method
+  call \"<method>\" for category \"<category>\""}`, luna-service2's answer
+  (`src/libluna-service2/transport.c:1840-1845`, `callmap.c:540-590`);
+- a service calls one its role's `outbound` list does not name: `"Not
+  permitted to send to <service>."` (`callmap.c:940-949`).
+
+The files are read through one table, `tools/devicecheck/bus-permissions.json`
+(`tools/gen-bus-permissions.py` writes it from the static checker's model,
+`tools/devicecheck/luna.py`; the quick checks fail when it is out of date),
+served at `/usr/share/phoenix/sim/bus-permissions.json` and not installed on
+a device. A service without api files in it (the simulator's own, what a
+device answers in the page) is not checked; an app installed since has what
+everyone has and its `appinfo.json`'s `requiredPermissions`. The few
+refusals let through for now are in `tools/devicecheck/sim-bus-allowlist.json`,
+each with why.
+
+Every refusal is a console warning, `[phoenix-runtime] bus: refused <caller>
+-> <url> (needs one of <groups>)`, once per caller and URL. A developer whose
+app is not ready can make the simulator only warn: `PHOENIX_BUS_PERMISSIONS=log`
+in the environment of `phoenix-sim` or `tools/serve-rootfs.py` ("would refuse"
+in the warning). `PHOENIX_BUS_LOG=FILE` also has `tools/serve-rootfs.py` write
+every refusal the pages report to FILE, one JSON line each, which is how a
+whole web test run is searched for them (`PHOENIX_BUS_PERMISSIONS=log
+PHOENIX_BUS_LOG=/tmp/bus.log ./phoenix test --web`). `tools/test-sim-permissions.cjs`
+tests it.
+
 ### Scene transitions
 
 Mojo apps had the card do their scene changes, and so can any page:
