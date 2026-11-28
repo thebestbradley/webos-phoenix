@@ -116,8 +116,10 @@ class UpdateWake(unittest.TestCase):
     """phoenix-update-wake: com.palm.update's first call (which marks the
     slot good) only once SAM lists the System UI as running."""
 
-    def run_wake(self, systemui_after, update_ok=True, tries=5):
+    def run_wake(self, systemui_after, update_ok=True, tries=5, cmdline="root=PARTLABEL=phoenix-root-a rw panic=10 rauc.slot=A"):
         d = tempfile.mkdtemp(prefix="wake-")
+        with open(os.path.join(d, "cmdline"), "w") as f:
+            f.write(cmdline + "\n")
         fake = os.path.join(d, "luna-send")
         # Answers SAM's running list with the System UI after N asks, and
         # com.palm.update's getStatus; logs every call.
@@ -134,7 +136,8 @@ case "$*" in
 esac
 """ % {"d": d, "after": systemui_after, "ok": "true" if update_ok else "false"})
         os.chmod(fake, 0o755)
-        env = dict(os.environ, PHOENIX_LUNA_SEND=fake, PHOENIX_UPDATE_WAKE_TRIES=str(tries), PHOENIX_UPDATE_WAKE_PAUSE="0")
+        env = dict(os.environ, PHOENIX_LUNA_SEND=fake, PHOENIX_UPDATE_WAKE_TRIES=str(tries), PHOENIX_UPDATE_WAKE_PAUSE="0",
+                   PHOENIX_CMDLINE=os.path.join(d, "cmdline"))
         p = subprocess.run(["sh", WAKE], env=env, capture_output=True, text=True)
         calls = read(os.path.join(d, "calls")).splitlines() if os.path.exists(os.path.join(d, "calls")) else []
         return p.returncode, calls
@@ -155,6 +158,38 @@ esac
         rc, calls = self.run_wake(systemui_after=0, update_ok=False, tries=3)
         self.assertEqual(rc, 1)
         self.assertEqual(sum("com.palm.update/getStatus" in c for c in calls), 3)
+
+    def test_gives_up_after_three_calls(self):
+        # Revision 42: it asked com.palm.update for an hour.
+        rc, calls = self.run_wake(systemui_after=0, update_ok=False, tries=50)
+        self.assertEqual(rc, 1)
+        self.assertEqual(sum("com.palm.update/getStatus" in c for c in calls), 3)
+
+    def test_nothing_on_a_boot_without_a_slot(self):
+        # A VM started straight from the ext4 (-kernel): no rauc.slot=.
+        rc, calls = self.run_wake(systemui_after=0, cmdline="root=/dev/vda rw rootwait console=ttyAMA0")
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [])
+
+    def test_unit_never_holds_up_the_start(self):
+        unit = read(WAKE + ".service")
+        self.assertIn("\nType=exec\n", unit)
+        self.assertNotIn("oneshot", unit.split("[Service]")[1])
+        self.assertNotIn("TimeoutStartSec=infinity", unit)
+        self.assertIn("\nConditionKernelCommandLine=rauc.slot\n", unit)
+
+
+class RaucService(unittest.TestCase):
+    """RAUC's daemon only on a boot from an update slot: without one it has
+    no booted slot, fails, and every D-Bus activation waits 25 s for it
+    (Revision 42's regression VM)."""
+
+    def test_condition(self):
+        conf = read(os.path.join(DYN, "recipes-core", "rauc", "files", "rauc-phoenix-slot.conf"))
+        self.assertIn("[Unit]\nConditionKernelCommandLine=rauc.slot\n", conf)
+        bb = read(os.path.join(DYN, "recipes-core", "rauc", "rauc_%.bbappend"))
+        self.assertIn("rauc.service.d/phoenix-slot.conf", bb)
+        self.assertIn("FILES:${PN}-service", bb)
 
 
 class BuildInfo(unittest.TestCase):

@@ -44,19 +44,49 @@ function raucCli(command, args) {
     });
 }
 
+// The update slot this boot started from: rauc.slot= on the kernel's
+// command line (the A/B disk's GRUB, files/wic/phoenix-ab-grub.cfg), or
+// null on a boot that did not start from one: a VM started straight from
+// the image's ext4 (`-kernel`, the regression suite, UTM), or a device
+// without A/B slots.
+function bootSlot(file) {
+    var line;
+    try { line = fs.readFileSync(file || "/proc/cmdline", "utf8"); } catch (e) { return null; }
+    var m = /(?:^|\s)rauc\.slot=(\S+)/.exec(line);
+    return m ? m[1] : null;
+}
+
 // RAUC through its command line (the RAUC daemon underneath), as
 // updatesservice.js wants it. options: {command ("rauc"), osRelease (the
 // running system's build, "/etc/os-release"), product (its name and
 // version, "/usr/share/phoenix/product.json"; os-release's NAME and
 // VERSION_ID without one: OSE's own on an image, so the product's is the
-// one Phoenix reports)}.
+// one Phoenix reports), cmdline (the kernel's command line, "/proc/cmdline")}.
+//
+// On a boot without an update slot nothing is asked of RAUC: it has no
+// booted slot there, its daemon does not start (rauc.service runs only
+// with rauc.slot=, meta-phoenix's rauc_%.bbappend), and a `rauc status`
+// would wait for D-Bus to give up on it (25 s, every call: Revision 42's
+// regression VM, 28 November 2026). Every call fails at once with
+// NOT_AVAILABLE instead.
 function createRauc(options) {
     var command = (options && options.command) || "rauc";
     var osReleaseFile = options && options.osRelease;
     var productPath = options && options.product;
+    var slot;
+    function slotted() {
+        if (slot === undefined) slot = bootSlot(options && options.cmdline);
+        if (slot) return Promise.resolve(slot);
+        var e = new Error("System updates are not available on this boot: it did not start from one of the system's update slots");
+        e.code = "NOT_AVAILABLE";
+        return Promise.reject(e);
+    }
+    function cli(args) {
+        return slotted().then(function () { return raucCli(command, args); });
+    }
     var raucApi = {
         status: function () {
-            return raucCli(command, ["status", "--output-format=json"]).then(function (out) {
+            return cli(["status", "--output-format=json"]).then(function (out) {
                 var st = JSON.parse(out);
                 var booted = null, other = null, primary = st.boot_primary || null;
                 (st.slots || []).forEach(function (entry) {
@@ -74,22 +104,22 @@ function createRauc(options) {
             });
         },
         info: function (file) {
-            return raucCli(command, ["info", "--output-format=json", file]).then(function (out) {
+            return cli(["info", "--output-format=json", file]).then(function (out) {
                 var m = JSON.parse(out);
                 return { compatible: m.compatible, version: m.version, build: parseInt(m.build, 10) || 0 };
             });
         },
         markActive: function (slot) {
-            return raucCli(command, ["status", "mark-active", slot]);
+            return cli(["status", "mark-active", slot]);
         },
         // The running slot started well: what meta-rauc's
         // rauc-mark-good.service runs at boot (`rauc status mark-good`),
         // which resets the bootloader's attempts for it.
         markGood: function () {
-            return raucCli(command, ["status", "mark-good"]);
+            return cli(["status", "mark-good"]);
         },
         install: function (file, onProgress) {
-            return new Promise(function (resolve, reject) {
+            return slotted().then(function () { return new Promise(function (resolve, reject) {
                 var p = childProcess.spawn(command, ["install", file]);
                 var tail = "";
                 function lines(chunk) {
@@ -103,7 +133,7 @@ function createRauc(options) {
                 p.stderr.on("data", lines);
                 p.on("error", reject);
                 p.on("close", function (code) { code === 0 ? resolve() : reject(new Error(tail || "rauc install failed (" + code + ")")); });
-            });
+            }); });
         }
     };
     return raucApi;
@@ -350,5 +380,5 @@ function clearOtherOverlays(opts) {
     return gone;
 }
 
-module.exports = { osRelease: osRelease, clearOtherOverlays: clearOtherOverlays, createRauc: createRauc, download: download, power: power, request: request,
+module.exports = { bootSlot: bootSlot, osRelease: osRelease, clearOtherOverlays: clearOtherOverlays, createRauc: createRauc, download: download, power: power, request: request,
                    requestBytes: requestBytes };

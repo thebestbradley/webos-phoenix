@@ -379,6 +379,12 @@ function createUpdatesService(deps) {
         return live.state ? Promise.reject(err("BUSY", "Updates are busy (" + live.state + ")")) : null;
     }
 
+    // A boot that did not start from one of the system's update slots (a VM
+    // started straight from the image's ext4; createRauc's NOT_AVAILABLE):
+    // every method says so at once, and nothing is scheduled (no daily
+    // check, no notices after boot), so nothing asks RAUC again.
+    var unavailable = null;
+
     // After a restart: mark the running slot good, and say once that the
     // system was updated, or that the new system did not start and the
     // device went back.
@@ -419,8 +425,11 @@ function createUpdatesService(deps) {
             if (note) return deps.luna.call("luna://com.webos.notification/createToast", {
                 message: note, onclick: { appId: "com.palm.app.updates", params: {} }
             }).then(null, function () {});
-        }).then(null, function (e) { log("startup: " + e.message); }).then(function () {
-            if (deps.noticesAtBoot !== false) notices.atBoot();
+        }).then(null, function (e) {
+            if (e && e.code === "NOT_AVAILABLE") unavailable = e;
+            log((unavailable ? "" : "startup: ") + e.message);
+        }).then(function () {
+            if (!unavailable && deps.noticesAtBoot !== false) notices.atBoot();
         });
         return started;
     }
@@ -710,7 +719,10 @@ function createUpdatesService(deps) {
 
     function wrap(fn) {
         return function (p) {
-            return startup().then(function () { return fn(p || {}); }).then(null, function (e) {
+            return startup().then(function () {
+                if (unavailable) throw unavailable;
+                return fn(p || {});
+            }).then(null, function (e) {
                 var o = errorOf(e);
                 return fail(o.errorCode, o.errorText);
             });
