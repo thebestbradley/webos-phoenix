@@ -21,8 +21,10 @@
     "//universalSearch": "None on purpose: accounts and codes must never reach Just Type's index or db8 (docs/SECURITY-APPS.md).",
     "//requiredPermissions": "OSE access control groups: systemmanager passcode check and lock status (device lock), filemanager.operation (apps/files/service) for import and export files, application launch for Screen & Lock.",
     "requiredPermissions": [
-        "filemanager.operation",
         "application.launcher",
-        "application.operation"
+        "application.operation",
+        "filemanager.operation",
+        "systemmanager.passcode",
+        "systemmanager.query"
     ]
 }

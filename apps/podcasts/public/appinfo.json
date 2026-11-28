@@ -23,14 +23,17 @@
     ],
     "//requiredPermissions": "OSE access control groups for the services the app calls (filemanager.operation is apps/files/service's). activity.operation and downloadmanager.operation follow the OSE naming but are not yet checked against those services' api.json.",
     "requiredPermissions": [
+        "activity.operation",
         "application.launcher",
         "application.operation",
+        "audio.operation",
+        "audiofocus.operation",
         "database.operation",
-        "activity.operation",
+        "devices.keys",
+        "download.management",
         "downloadmanager.operation",
         "filemanager.operation",
         "media.operation",
-        "audio.operation",
         "phoenix.appmanager.launch",
         "phoenix.system.media"
     ]

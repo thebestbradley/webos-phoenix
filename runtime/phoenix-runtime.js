@@ -1544,18 +1544,50 @@
     // serve-rootfs.py also writes every refusal pages report to FILE, one JSON
     // line each (host.json "busPermissionsReport": true).
     var BUS_DEFAULT_MODE = "log";
-    var bus = { table: undefined, mode: undefined, report: false, clients: {}, warned: {} };
+    var bus = { table: undefined, mode: undefined, report: false, grants: {}, clients: {}, warned: {} };
+    // The two files are fetched as the page starts, without waiting: a
+    // synchronous request made while the page is being left (the calls sent
+    // at pagehide, above) can hang its navigation where requests are
+    // intercepted (Playwright's route; serve-rootfs.py's --host-json note).
+    // One not here yet is read synchronously, except as the page goes: then
+    // the call goes unchecked.
+    var busFiles = {};
+    function busFetch(path) {
+        try {
+            var x = new XMLHttpRequest();
+            x.open("GET", path, true);
+            x.onload = function () { if (x.status >= 200 && x.status < 300) busFiles[path] = x.responseText; else busFiles[path] = null; };
+            x.onerror = function () { busFiles[path] = null; };
+            x.send();
+        } catch (e) { /* read when needed */ }
+    }
+    function busFile(path) {
+        if (path in busFiles) return { text: busFiles[path] };
+        if (unloading) return null;
+        return { text: PalmSystem.getResource(path) };
+    }
+    busFetch("/usr/share/phoenix/host.json");
+    busFetch("/usr/share/phoenix/sim/bus-permissions.json");
     function busHost() {
-        if (bus.mode !== undefined) return;
+        if (bus.mode !== undefined) return true;
+        var f = busFile("/usr/share/phoenix/host.json");
+        if (!f) return false;
         var h = {};
-        try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; } catch (e) { h = {}; }
+        try { h = JSON.parse(f.text || "{}") || {}; } catch (e) { h = {}; }
         bus.mode = h.busPermissions === "enforce" || h.busPermissions === "log" || h.busPermissions === "off"
             ? h.busPermissions : BUS_DEFAULT_MODE;
         bus.report = !!h.busPermissionsReport;
+        // A test's own calls, made in an app's page to drive a service
+        // (page.evaluate), are not the app's: serve-rootfs.py --host-json
+        // '{"busGrants": {"<app id>": ["group", ...]}}' gives that app those
+        // groups for the test, said in the test beside its calls.
+        bus.grants = h.busGrants && typeof h.busGrants === "object" ? h.busGrants : {};
     }
     function busTable() {
         if (bus.table === undefined) {
-            try { bus.table = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/sim/bus-permissions.json") || "null"); } catch (e) { bus.table = null; }
+            var f = busFile("/usr/share/phoenix/sim/bus-permissions.json");
+            if (!f) return null;
+            try { bus.table = JSON.parse(f.text || "null"); } catch (e) { bus.table = null; }
             if (!bus.table || !bus.table.services) {
                 console.warn("[phoenix-runtime] bus: no /usr/share/phoenix/sim/bus-permissions.json; calls are not checked");
                 bus.table = null;
@@ -1585,10 +1617,13 @@
         if (bus.clients[key]) return bus.clients[key];
         var e = ((service ? t.clients : t.apps) || {})[caller], groups = {}, outbound = null;
         (t.everyone || []).forEach(function (g) { groups[g] = true; });
+        if (!service && Array.isArray(bus.grants[caller]))
+            bus.grants[caller].forEach(function (g) { groups[g] = true; });
         if (e) {
             e.groups.forEach(function (g) { groups[g] = true; });
             if (e.outbound) outbound = e.outbound;
         } else if (!service) {
+            if (unloading) return { groups: groups, outbound: null };
             var info = null;
             try { info = JSON.parse(String(PalmSystem.getResource("/usr/palm/applications/" + caller + "/appinfo.json") || "null").replace(/^﻿/, "")); } catch (x) { info = null; }
             ((info && info.requiredPermissions) || []).forEach(function (g) { groups[g] = true; });
@@ -1631,13 +1666,18 @@
     }
     // What the hub would answer instead of the provider, or null. caller:
     // the app (a page's call) or, with service, the service making the call.
-    function busRefusal(url, caller, service) {
-        busHost();
+    function busRefusal(url, caller, service, frameApp) {
+        if (!busHost()) return null;
         if (bus.mode === "off" || !caller) return null;
         var t = busTable();
         if (!t) return null;
         var m = /^(?:palm|luna):\/\/([^\/]+)(\/.*)?$/.exec(url);
         if (!m) return null;
+        // A service the table does not have (a package installed since, a
+        // test's) brings perm files the simulator does not read, and the
+        // simulator's stand-ins of OSE's services (the installer) work in the
+        // page with calls a device's do not make: not checked.
+        if (service && !(t.clients || {})[caller]) return null;
         var who = busClient(t, caller, service);
         // A page's calls go through the runtime's serviceAliases on a device
         // too (installDevice); a service's (run-js-service) do not.
@@ -1656,7 +1696,7 @@
         var kind = groups ? "missing-permission" : "unknown-method";
         return { kind: kind, service: name, method: path, groups: groups || [],
                  allowed: busAllowed(t, kind === "unknown-method" ? kind + ":" + name + "/" + path
-                                                                 : kind + ":" + caller + "->" + name + "/" + path),
+                                                                 : kind + ":" + caller + (frameApp ? "@" + frameApp : "") + "->" + name + "/" + path),
                  reply: fail(-1, "Denied method call \"" + method + "\" for category \"" + category + "\"") };
     }
     // tools/devicecheck/sim-bus-allowlist.json (in the table as "allow"):
@@ -1673,7 +1713,10 @@
     // A call's check: true when the hub would refuse it and the simulator
     // does (reply has had the refusal), false when the call goes on.
     function busCheck(url, caller, service, reply, stack) {
-        var r = busRefusal(url, caller, service);
+        // A frame of another app's card: its own app, for the allowlist's
+        // "<caller>@<frame's app>" ids.
+        var own = !service && PalmSystem.appIdentifier !== caller ? PalmSystem.appIdentifier : "";
+        var r = busRefusal(url, caller, service, own);
         if (!r) return false;
         var key = caller + " " + url;
         if (!bus.warned[key]) {
@@ -1708,8 +1751,7 @@
             var params = {};
             try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
             // Where the call was made, for a refusal's report (Bus permissions).
-            busHost();
-            var stack = bus.report ? String(new Error().stack || "") : null;
+            var stack = busHost() && bus.report ? String(new Error().stack || "") : null;
             // Responses are always asynchronous, as on a device.
             var id = nextUnsent++;
             var run = function () {
@@ -14907,7 +14949,7 @@
                             try { m = hosted[service].load(); } catch (e) { return; }
                             var cap = m.def.capabilities[cp.id];
                             if (!cap || !cap.watch) return;
-                            nodeServiceLuna().call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
+                            nodeServiceLuna(service).call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
                         };
                         return true;
                     });
@@ -14997,7 +15039,7 @@
         var LOCK_MS = 5 * 60 * 1000;
 
         var loadModule = nodeServiceLoader(SERVICE_DIR, "DAV service");
-        var luna = nodeServiceLuna();
+        var luna = nodeServiceLuna(SERVICE);   // as itself, as on a device (Bus permissions)
         var request = proxiedRequest;
 
         var methods = null, shippedSources = null, preinstalledInfo = null;
@@ -15102,10 +15144,13 @@
         }
 
         // Calls one callback per provider, one after another; failures are logged.
+        // The accounts service makes these calls on a device (app-services'
+        // notify-created.js, modify.js), so the hub checks them as its.
+        var accountsLuna = nodeServiceLuna("com.palm.service.accounts");
         function notify(calls) {
             return calls.reduce(function (p, c) {
                 return p.then(function () {
-                    return luna.call(c.address, c.params).then(function (r) {
+                    return accountsLuna.call(c.address, c.params).then(function (r) {
                         if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + c.address + " failed: " + toJson(r));
                     });
                 });
@@ -15490,7 +15535,7 @@
     (function appInstaller() {
         var PACKAGES_DIR = "/usr/palm/services/org.webosphoenix.service.packages/";
         var loadModule = nodeServiceLoader(PACKAGES_DIR, "Packages service");
-        var luna = nodeServiceLuna();
+        var luna = nodeServiceLuna("com.webos.appInstallService");   // OSE's installer, as itself
         var ipkReader = null;
         var browserGzip = {
             gunzip: function (bytes) { return streamBytes(bytes, new DecompressionStream("gzip")); },
@@ -16090,16 +16135,11 @@
         var methods = null, shippedSources = null, preinstalledInfo = null, platformCatalog = null;
         function service() {
             if (!methods) {
-                // Its installs reach the installer as this service's (ctx.caller),
-                // which then takes a first-party connector (firstParty).
-                var asPage = nodeServiceLuna(), asService = nodeServiceLuna(SERVICE);
+                // Its calls are this service's (ctx.caller), as on a device: the
+                // installer then takes a first-party connector (firstParty), and
+                // the hub checks them against its perm files (Bus permissions).
                 methods = loadModule("packagesservice.js").createPackagesService({
-                    luna: {
-                        call: asPage.call,
-                        subscribe: function (uri, params, onReply) {
-                            return (/^luna:\/\/com\.webos\.appInstallService\//.test(uri) ? asService : asPage).subscribe(uri, params, onReply);
-                        }
-                    },
+                    luna: nodeServiceLuna(SERVICE),
                     request: proxiedRequest,
                     requestBytes: proxiedRequestBytes,
                     crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512"),
@@ -16423,7 +16463,7 @@
                     },
                     text: function (path) { return PalmSystem.getResource(SAMPLE + "licences/" + path.split("/").pop()) || null; }
                 },
-                luna: nodeServiceLuna(),
+                luna: nodeServiceLuna(SERVICE),
                 log: function (m) { console.info("[hardware] " + m); }
             });
             methods.watch(function (r) { watchers.slice().forEach(function (w) { w(r); }); });
@@ -17207,7 +17247,7 @@
                     var p = store.get("power", { percent: 76, charger: "none" });
                     return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
                 },
-                luna: nodeServiceLuna(),
+                luna: nodeServiceLuna("com.palm.update"),
                 requestBytes: requestBytes,
                 // No notices check as the service starts: the sample notices
                 // would be in every fresh simulator's screenshots. The Updates

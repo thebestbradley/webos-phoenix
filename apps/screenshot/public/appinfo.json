@@ -4,6 +4,11 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "filemanager.operation",
+        "mediaindexer.operation",
+        "systemmanager.query"
+    ],
     "title": "Screenshot",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

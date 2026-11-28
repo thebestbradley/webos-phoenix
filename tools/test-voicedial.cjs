@@ -41,6 +41,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it launches the voice command app from the Voice Dial page, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.voicedial": ["phoenix.appmanager.launch"]}};
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -86,9 +89,9 @@ async function main() {
     // (PalmSystem.getResource) while it is navigated away from, and the next
     // page never loads (seen at the second open, with the CPU throttled).
     const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port),
-                                     "--host-json", JSON.stringify({ dictation: true }), "--no-tcp"], { stdio: "ignore" });
+                                     "--host-json", JSON.stringify(Object.assign({ dictation: true }, BUS_GRANTS)), "--no-tcp"], { stdio: "ignore" });
     const port2 = await freePort();
-    const noShell = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port2), "--no-tcp"], { stdio: "ignore" });
+    const noShell = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port2), "--no-tcp", "--host-json", JSON.stringify(BUS_GRANTS)], { stdio: "ignore" });
     try {
         await waitForServer(`http://127.0.0.1:${port}/apps.json`, 10000);
         await waitForServer(`http://127.0.0.1:${port2}/apps.json`, 10000);
@@ -145,7 +148,10 @@ async function main() {
         };
 
         // ---- Listening, with the contacts' names as the words to expect -------------------------------
-        await page.goto(APP);
+        // The store is cleared from a page of the same origin that does not
+        // listen: Voice Dial's own page would start listening too, and its
+        // start, said late as it is left, would be counted as open()'s.
+        await page.goto(`http://127.0.0.1:${port}/`);
         await page.evaluate(() => { localStorage.clear(); });
         await open();
         let start = await waitOp("start", 1);
@@ -169,7 +175,7 @@ async function main() {
         check(/Mobile \(408\) 555-0142/.test(await page.textContent("[data-testid='target']")), "on her mobile");
         check((await page.textContent("[data-testid='heard']")).includes("Call either Palmer."), "what was heard is shown");
         const ask = await waitOp("start", 2);
-        check(ask.prompt === "Yes. No." && ask.autoStop, "the confirmation listens for Yes or No");
+        check(ask.prompt === "Yes. No." && ask.autoStop, "the confirmation listens for Yes or No (" + JSON.stringify(ask) + ")");
         await say({ state: "listening" });
         await page.waitForTimeout(300);
         await shot("voicedial-confirm");

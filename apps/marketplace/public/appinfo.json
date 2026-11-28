@@ -17,11 +17,13 @@
         "launchParams": ["section", "sourceId", "id", "common"],
         "launcherTab": 1
     },
-    "requiredPermissions": ["phoenix.appservices.accounts", 
+    "requiredPermissions": [
         "application.launcher",
         "application.operation",
         "marketplace.management",
+        "phoenix.appservices.accounts",
         "phoenix.devmode.query",
-        "systemmanager.query"
+        "systemmanager.query",
+        "systemsettings.query"
     ]
 }

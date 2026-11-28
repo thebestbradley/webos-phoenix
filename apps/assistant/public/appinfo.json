@@ -4,6 +4,13 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "application.launcher",
+        "assistant.ask",
+        "assistant.settings",
+        "systemmanager.query",
+        "systemsettings.query"
+    ],
     "title": "Assistant",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

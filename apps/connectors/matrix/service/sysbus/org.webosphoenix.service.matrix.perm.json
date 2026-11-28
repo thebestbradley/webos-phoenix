@@ -7,6 +7,7 @@
         "notification.operation",
         "messaging.operation",
         "oauth.signin",
-        "phoenix.accounts.list"
+        "phoenix.accounts.list",
+        "tempdatabase.operation"
     ]
 }

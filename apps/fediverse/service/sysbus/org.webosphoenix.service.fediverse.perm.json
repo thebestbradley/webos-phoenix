@@ -1,11 +1,13 @@
 {
-    "org.webosphoenix.service.fediverse": ["phoenix.appservices.accounts", 
+    "org.webosphoenix.service.fediverse": [
+        "phoenix.appservices.accounts",
         "database.operation",
         "activity.operation",
         "accounts.operation",
         "accounts.transport",
         "oauth.signin",
         "notification.operation",
-        "messaging.operation"
+        "messaging.operation",
+        "tempdatabase.operation"
     ]
 }

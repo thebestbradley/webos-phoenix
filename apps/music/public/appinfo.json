@@ -22,9 +22,13 @@
     "requiredPermissions": [
         "application.launcher",
         "application.operation",
-        "mediaindexer.operation",
-        "media.operation",
         "audio.operation",
+        "audio.query",
+        "audiofocus.operation",
+        "database.operation",
+        "devices.keys",
+        "media.operation",
+        "mediaindexer.operation",
         "phoenix.system.media"
     ]
 }

@@ -297,7 +297,10 @@ async function simulated(chromium) {
             b.onservicecallback = (j) => res(JSON.parse(j));
             b.call("luna://org.webosphoenix.pty/open", JSON.stringify({ cols: 80, rows: 24, subscribe: true }));
         }));
-        check(refused.returnValue === false && refused.errorCode === 1, "security: another app may not open a shell");
+        // The hub refuses it before the service sees it: only the Terminal
+        // holds pty.operation (luna-service2's answer, docs/SIM-PARITY.md).
+        check(refused.returnValue === false && refused.errorCode === -1 && refused.errorText === "Denied method call \"open\" for category \"/\"",
+              "security: another app may not open a shell (" + JSON.stringify(refused) + ")");
         await other.close();
 
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));

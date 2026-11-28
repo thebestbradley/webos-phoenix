@@ -40,6 +40,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it installs a package through OSE's installer from the Calculator's page, as the Marketplace's service would, and asks the handler table from the Scanner's, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"com.palm.app.calculator": ["applicationinstall.management"], "org.webosphoenix.scanner": ["phoenix.appmanager.query"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 
 // A response read to its end: one left unread, its socket closed under it,
@@ -77,7 +80,7 @@ async function main() {
     const appUrl = (id, params) => `${origin}/usr/palm/applications/${id}/index.html` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-links-"));
-    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const server = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     let browser;
     try {
         for (let i = 0; ; i++) {

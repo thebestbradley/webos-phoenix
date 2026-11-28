@@ -4,6 +4,12 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "application.launcher",
+        "application.operation",
+        "phoenix.clipboard",
+        "systemmanager.query"
+    ],
     "title": "Clipboard",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",

@@ -45,6 +45,9 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it installs a package through OSE's installer and schedules an activity from the Marketplace's page, as its service would, calls that are
+// the test's, not the app's, so the app gets those groups for them here.
+const BUS_GRANTS = {busGrants: {"org.webosphoenix.marketplace": ["applicationinstall.management", "activity.operation"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 const { createFakeMastodon } = require(path.join(REPO, "apps/fediverse/service/test/fake-mastodon.cjs"));
 const args = process.argv.slice(2);
@@ -89,7 +92,7 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--host-json", JSON.stringify(BUS_GRANTS), "--installed-dir", installedDir], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -224,7 +227,10 @@ async function main() {
         check(!!key && key.owner === SERVICE && !!key.accessToken && JSON.stringify(creds).indexOf(key.accessToken) < 0,
               "the token is in the key store, owned by the service; the account keeps only its key");
         const tokenCall = await luna(page, "luna://org.webosphoenix.service.oauth/token", { keyId: creds.credentials.oauthKey });
-        check(tokenCall.returnValue === false && tokenCall.errorCode === "PERMISSION_DENIED", "a page cannot read the token");
+        // The hub refuses it before the OAuth service sees it: the page's app
+        // holds no oauth.signin (luna-service2's answer, docs/SIM-PARITY.md).
+        check(tokenCall.returnValue === false && tokenCall.errorCode === -1 && /^Denied method call "token"/.test(tokenCall.errorText || ""),
+              "a page cannot read the token (" + JSON.stringify(tokenCall) + ")");
         await accounts.waitForTimeout(800);
         await shot(accounts, "6-accounts");
 

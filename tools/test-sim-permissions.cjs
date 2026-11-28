@@ -20,9 +20,11 @@
 //      connector's sign-in method its own app may not call is allowed from
 //      the frame;
 //   5. every connector's sign-in page (each account template's
-//      validator.customUI, the catalog connectors' included), opened by
-//      Accounts as on a device ({templateId}), is drawn and none of its
-//      calls is refused.
+//      validator.customUI) is drawn in Accounts' card and none of its calls
+//      is refused: the built-in and preinstalled ones opened by Accounts as
+//      on a device ({templateId}), the catalog connectors (apps/connectors,
+//      put in place here rather than installed from the catalog, so
+//      Accounts would not frame them) in a frame of an Accounts page.
 //
 //   node tools/test-sim-permissions.cjs [--out DIR]
 //
@@ -95,7 +97,7 @@ function signInPages(extra) {
                 const f = path.join(tdir, t, t + ".json");
                 if (!fs.existsSync(f)) continue;
                 const ui = ((JSON.parse(fs.readFileSync(f, "utf8")).validator || {}).customUI) || null;
-                if (ui && ui.appId && ui.name) out.push({ template: t, appId: ui.appId, name: ui.name });
+                if (ui && ui.appId && ui.name) out.push({ template: t, appId: ui.appId, name: ui.name, catalog: base !== dirs[0] });
             }
         }
     }
@@ -197,18 +199,40 @@ async function main() {
         for (const sp of pages) {
             const refused = [], errors = [];
             const ctx = await browser.newContext({ viewport: { width: 320, height: 480 } });
+            await ctx.route(/\/permissions-test\.html$/, (route) => route.fulfill({ contentType: "text/html", body: HTML }));
             const p = await ctx.newPage();
             p.on("console", (m) => { if (/\[phoenix-runtime\] bus: refused/.test(m.text())) refused.push(m.text()); });
             p.on("pageerror", (e) => errors.push(e.message));
-            await p.goto(enforcing.origin + "/usr/palm/applications/com.palm.app.accounts/index.html?launchParams=" +
-                encodeURIComponent(JSON.stringify({ templateId: sp.template })));
             const re = new RegExp("/" + sp.appId.replace(/\./g, "\\.") + "/" + sp.name.replace(/\./g, "\\.") + "(\\?|$)");
+            let how;
+            if (!sp.catalog) {
+                // Accounts launched with {templateId} frames the template's
+                // own page (CrossAppUI), as on a device.
+                how = "Accounts frames it";
+                await p.goto(enforcing.origin + "/usr/palm/applications/com.palm.app.accounts/index.html?launchParams=" +
+                    encodeURIComponent(JSON.stringify({ templateId: sp.template })));
+            } else {
+                // A catalog connector put in place here, not installed from the
+                // catalog: Accounts would not frame it (rule C17, the
+                // Marketplace's checkSignInPage), so the page goes in a frame of
+                // a page of Accounts' own, as CrossAppUI loads it.
+                how = "in a frame of Accounts' card";
+                await p.goto(enforcing.origin + pageOf(ACCOUNTS));
+                await p.waitForFunction(() => !!window.__phoenixRuntime);
+                const params = { mode: "create", template: { templateId: sp.template } };
+                await p.evaluate((src) => {
+                    const f = document.createElement("iframe");
+                    f.src = src;
+                    f.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff";
+                    document.body.appendChild(f);
+                }, "/usr/palm/applications/" + sp.appId + "/" + sp.name + "?enyoWindowParams=" + encodeURIComponent(JSON.stringify(params)));
+            }
             let frame = null;
             for (let t = 0; t < 15000 && !frame; t += 250) {
                 frame = p.frames().find((f) => re.test(f.url())) || null;
                 if (!frame) await p.waitForTimeout(250);
             }
-            if (!check(!!frame, sp.template + ": Accounts frames " + sp.appId + "/" + sp.name)) { await ctx.close(); continue; }
+            if (!check(!!frame, sp.template + ": " + how + " (" + sp.appId + "/" + sp.name + ")")) { await ctx.close(); continue; }
             const drawn = await frame.locator("input:visible, button:visible, .enyo-button:visible, [role=button]:visible").first()
                 .waitFor({ state: "visible", timeout: 15000 }).then(() => true, () => false);
             await p.waitForTimeout(800);
@@ -218,20 +242,26 @@ async function main() {
                 sp.template + ": drawn, calls as " + caller + ", nothing refused" +
                 (refused.length ? " (" + refused.join("; ") + ")" : "") + (errors.length ? " [page errors: " + errors.join("; ") + "]" : ""));
             // #116: a sign-in method Accounts holds a group for and the
-            // connector's own app does not.
+            // page's own app does not.
             if (!shownCaller) {
-                const own = new Set(TABLE.everyone);
-                let pick = null;
+                const candidates = [];
                 for (const [name, s] of Object.entries(TABLE.services)) {
                     for (const [m, gs] of Object.entries(s.methods)) {
-                        if (!pick && !/[*?[]/.test(m) && gs.some((g) => accountsGroups.has(g)) && !gs.some((g) => own.has(g)) &&
-                            gs.some((g) => /^phoenix\.[a-z]+\.signin$/.test(g))) pick = "luna://" + name + "/" + m;
+                        if (!/[*?[]/.test(m) && gs.some((g) => accountsGroups.has(g) && /^phoenix\.[a-z]+\.(signin|validate)$/.test(g)))
+                            candidates.push("luna://" + name + "/" + m);
                     }
                 }
-                const inFrame = await frame.evaluate((u) => __phoenixRuntime.bus.refusal(u, __phoenixRuntime.bus.pageCaller()), pick);
-                const alone = await frame.evaluate(([u, id]) => __phoenixRuntime.bus.refusal(u, id), [pick, sp.appId]);
-                check(!!pick && inFrame === null && alone !== null,
-                    "in Accounts' frame " + pick + " is allowed (Accounts' groups); as " + sp.appId + " alone it would be refused");
+                const [pick, alone] = await frame.evaluate(([list, id]) => {
+                    const b = __phoenixRuntime.bus;
+                    for (const u of list) {
+                        const r = b.refusal(u, id);
+                        if (r && b.refusal(u, b.pageCaller()) === null) return [u, r.reply];
+                    }
+                    return [null, null];
+                }, [candidates, sp.appId]);
+                check(!!pick && !!alone,
+                    "in Accounts' frame " + pick + " is allowed (Accounts' groups); as " + sp.appId + " alone it is refused (" +
+                    JSON.stringify(alone) + ")");
                 shownCaller = true;
             }
             await ctx.close();

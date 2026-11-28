@@ -41,6 +41,10 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The bus permissions (docs/SIM-PARITY.md): it starts the connectors' syncs from Accounts' and Tasks'
+// pages, as the accounts service would, calls that are the test's, not the app's, so the
+// apps get that group for them here.
+const BUS_GRANTS = {busGrants: {"com.palm.app.accounts": ["accounts.transport"], "org.webosphoenix.tasks": ["accounts.transport"]}};
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 const { createFakeProviders } = require(path.join(REPO, "apps/connectors/testing/fake-providers.cjs"));
 const args = process.argv.slice(2);
@@ -178,7 +182,7 @@ async function main() {
     fs.mkdirSync(path.join(device, "etc/palm/phoenix"), { recursive: true });
     fs.writeFileSync(path.join(device, "etc/palm/phoenix/servers.json"), JSON.stringify(serversJson));
     const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
-                                     "--extra-rootfs", device, "--host-json", JSON.stringify({ marketplaceCatalog: true }), "--no-tcp"], { stdio: "ignore" });
+                                     "--extra-rootfs", device, "--host-json", JSON.stringify(Object.assign({ marketplaceCatalog: true }, BUS_GRANTS)), "--no-tcp"], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;

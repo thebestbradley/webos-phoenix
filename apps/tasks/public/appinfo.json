@@ -4,6 +4,10 @@
     "vendor": "webOS Phoenix",
     "type": "web",
     "main": "index.html",
+    "requiredPermissions": [
+        "activity.operation",
+        "database.operation"
+    ],
     "title": "Tasks",
     "icon": "icon.png",
     "splashicon": "icon-256x256.png",
