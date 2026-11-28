@@ -15,6 +15,7 @@
         "hidden": true
     },
     "requiredPermissions": [
-        "accounts.transport"
+        "accounts.transport",
+        "phoenix.appmanager.open"
     ]
 }

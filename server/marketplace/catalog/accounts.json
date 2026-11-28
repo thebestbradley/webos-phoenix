@@ -22,6 +22,27 @@
             "featured": true
         },
         {
+            "templateId": "com.webosphoenix.icloud",
+            "title": "iCloud",
+            "provider": "Apple's iCloud, with an app-specific password",
+            "icon": "icons/accounts/com.webosphoenix.icloud.png",
+            "iconFrom": "apps/dav/public/accounts/com.webosphoenix.icloud/images/icloud-48x48@2x.png",
+            "summary": "Your iCloud contacts and calendars, kept in step both ways. Sign in with your Apple Account's email and an app-specific password from account.apple.com (two-factor authentication on). Reminders are not included.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" }
+            ],
+            "protocols": ["carddav", "caldav"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Apple's iCloud servers (contacts.icloud.com, caldav.icloud.com)", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.dav", "builtin": true },
+            "signUp": "https://account.apple.com",
+            "featured": true
+        },
+        {
             "templateId": "com.webosphoenix.fediverse",
             "title": "Fediverse",
             "provider": "Mastodon, GoToSocial, Akkoma, Pixelfed and other servers",

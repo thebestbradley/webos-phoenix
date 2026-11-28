@@ -15,6 +15,17 @@
 // over HTTP (runtime/phoenix-runtime.js, block "CardDAV and CalDAV").
 // Redirects are followed here, keeping the method, so every transport can
 // return 3xx responses as they are.
+//
+// options.services {carddav, caldav}: a provider whose contacts and
+// calendars are on hosts of their own (an account preset, lib/presets.js:
+// iCloud's contacts.icloud.com and caldav.icloud.com). Each service's
+// principal is then looked for on its own host only, and the home sets the
+// principals name may be on other hosts again (iCloud's per-user
+// pNN-contacts / pNN-caldav partitions), which every later request follows.
+//
+// options.checkUrl(url): called before every request, redirects included;
+// it throws to refuse a URL (a preset's hosts are its provider's only:
+// the password is never sent elsewhere, lib/presets.js).
 
 "use strict";
 
@@ -32,8 +43,17 @@ function DavError(message, status, code) {
     var e = new Error(message);
     e.status = status;
     // Error codes the Accounts app understands (enyo lib/accounts/source/accounts-list.js).
-    e.errorCode = code || (status === 401 || status === 403 ? "401_UNAUTHORIZED" : "HTTP_" + status);
+    // 429 and 503 have no code of their own there: "Server unavailable", as
+    // @phoenix/synckit's errors.js maps them.
+    e.errorCode = code || (status === 401 || status === 403 ? "401_UNAUTHORIZED"
+        : status === 429 || status === 503 ? "503_SERVICE_UNAVAILABLE" : "HTTP_" + status);
     return e;
+}
+
+// An answer that ends discovery: the password refused, or the server
+// asking us to wait (429 / 503, synckit's http.js), not a missing service.
+function stops(e) {
+    return e.status === 401 || e.status === 429 || e.status === 503 || e.errorCode === "503_SERVICE_UNAVAILABLE";
 }
 
 function base64(s) {
@@ -94,9 +114,17 @@ function createClient(options) {
     var request = options.request;
     var auth = "Basic " + base64((options.username || "") + ":" + (options.password || ""));
     var log = options.log || function () {};
-    var server = normalizeServer(options.serverUrl);
+    var services = null;
+    if (options.services) {
+        services = {};
+        Object.keys(options.services).forEach(function (k) { services[k] = normalizeServer(options.services[k]); });
+    }
+    var server = normalizeServer(options.serverUrl || (services && (services.carddav || services.caldav)));
 
     function call(method, url, headers, body, hops) {
+        if (options.checkUrl) {
+            try { options.checkUrl(url); } catch (e) { return Promise.reject(e); }
+        }
         var h = { Authorization: auth };
         Object.keys(headers || {}).forEach(function (k) { h[k] = headers[k]; });
         if (body !== undefined && !h["Content-Type"]) h["Content-Type"] = "application/xml; charset=utf-8";
@@ -148,9 +176,11 @@ function createClient(options) {
     // the user typed.
     function findPrincipal(service) {
         var candidates = [];
-        var origin = new URL(server).origin;
+        var base = services ? services[service] : server;
+        if (!base) return Promise.resolve(null);
+        var origin = new URL(base).origin;
         candidates.push(origin + "/.well-known/" + service);
-        candidates.push(server);
+        candidates.push(base);
         var i = 0;
         function next() {
             if (i >= candidates.length) return Promise.resolve(null);
@@ -161,7 +191,9 @@ function createClient(options) {
                 if (p) return { principal: p, context: list.url };
                 return next();
             }, function (e) {
-                if (e.status === 401) throw e;
+                // A preset's host that does not answer at all is that host's
+                // problem (not found, refused, TLS), not a missing service.
+                if (stops(e) || (services && !e.status)) throw e;
                 log("discovery: " + url + ": " + e.message);
                 return next();
             });
@@ -188,8 +220,7 @@ function createClient(options) {
         var components = comps ? X.children(comps, NS.CAL, "comp").map(function (c) { return c.attrs.name; })
                                : ["VEVENT", "VTODO"];
         var color = X.text(prop(item, NS.ICAL, "calendar-color"));
-        var canWrite = !privs || JSON.stringify(privs).indexOf("\"write") >= 0 ||
-            (JSON.stringify(privs).indexOf("\"all\"") >= 0);
+        var canWrite = !privs || writable(privs);
         return {
             url: item.href,
             kind: kind,
@@ -204,11 +235,24 @@ function createClient(options) {
         };
     }
 
+    // RFC 3744 5.4: may the user change the collection's members? "all",
+    // "write" (which holds the others), "write-content" (change them) or
+    // "bind" (add them). "write-properties" alone is not enough: a
+    // calendar shared read-only lets you set its colour, not its events.
+    function writable(privs) {
+        return X.children(privs, NS.DAV, "privilege").some(function (p) {
+            return p.children.some(function (c) {
+                return c.ns === NS.DAV && ["all", "write", "write-content", "bind"].indexOf(c.name) >= 0;
+            });
+        });
+    }
+
     // Everything the account needs: principal, home sets and collections.
     // A URL that is itself an address book or calendar is used as the only one.
     function discover() {
         var result = { serverUrl: server, addressbooks: [], calendars: [] };
-        return propfind(server, 0, ["d:resourcetype", "d:displayname", "cs:getctag", "d:sync-token",
+        // A preset's hosts are service roots, never a collection themselves.
+        var probe = services ? Promise.resolve([]) : propfind(server, 0, ["d:resourcetype", "d:displayname", "cs:getctag", "d:sync-token",
                                     "d:supported-report-set", "cal:supported-calendar-component-set", "ical:calendar-color"])
             .then(function (list) {
                 var item = list[0], rt = item && prop(item, NS.DAV, "resourcetype");
@@ -216,15 +260,19 @@ function createClient(options) {
                 if (hasChild(rt, NS.CAL, "calendar")) result.calendars.push(describeCollection(item, "calendar"));
             }, function (e) {
                 // No answer at all (host not found, refused, TLS): give up now.
-                if (e.status === 401 || !e.status) throw e;
+                if (stops(e) || !e.status) throw e;
                 // Servers may refuse PROPFIND on "/" (only the well-known URIs work).
                 log("discovery: " + server + ": " + e.message);
-            })
+            });
+        return probe
             .then(function () {
                 if (result.addressbooks.length || result.calendars.length) return result;
                 return Promise.all([findPrincipal("carddav"), findPrincipal("caldav")]).then(function (found) {
                     var principals = found.filter(Boolean).map(function (f) { return f.principal; });
-                    if (!principals.length) throw DavError("No CardDAV or CalDAV service found at " + server, 404, "NO_DAV_SERVICE");
+                    if (!principals.length) {
+                        throw DavError("No CardDAV or CalDAV service found at " +
+                                       (services ? Object.keys(services).map(function (k) { return services[k]; }).join(" and ") : server), 404, "NO_DAV_SERVICE");
+                    }
                     // Card and cal principals are the same on most servers.
                     var unique = principals.filter(function (p, i) { return principals.indexOf(p) === i; });
                     result.principalUrl = unique[0];
@@ -342,6 +390,7 @@ function createClient(options) {
                 e.conflict = true;
                 throw e;
             }
+            if (res.status === 403) throw refused("PUT", href);
             if (res.status < 200 || res.status >= 300) throw DavError("PUT " + href + " failed: HTTP " + res.status, res.status);
             // Servers may leave out the ETag when they changed the data; ask for it.
             if (res.headers.etag) return { etag: unquote(res.headers.etag) };
@@ -349,6 +398,14 @@ function createClient(options) {
                 return { etag: list[0] ? unquote(X.text(prop(list[0], NS.DAV, "getetag"))) : "" };
             });
         });
+    }
+
+    // A change the server will not take (403: the collection is read-only
+    // to this user, as a calendar shared with them may be, RFC 3744 7.1.1).
+    function refused(method, href) {
+        var e = DavError(method + " " + href + ": the server refuses changes here (HTTP 403)", 403, "READ_ONLY");
+        e.readOnly = true;
+        return e;
     }
 
     function del(href, etag) {
@@ -360,6 +417,7 @@ function createClient(options) {
                 throw e;
             }
             if (res.status === 404 || res.status === 410) return { gone: true };
+            if (res.status === 403) throw refused("DELETE", href);
             if (res.status < 200 || res.status >= 300) throw DavError("DELETE " + href + " failed: HTTP " + res.status, res.status);
             return {};
         });

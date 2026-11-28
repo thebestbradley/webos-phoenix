@@ -138,7 +138,8 @@ device, not yet run"):
   its sheet for the AT Protocol (Q121). Still to do: Outlook mail (Q124); an
   edit made on the device goes up at the next sync, as the kit has no watch
   on local changes (mojomail's IMAP had one); Zoom's `createMeeting` from
-  Calendar and the Assistant; the iCloud presets, CalDAV tasks, Immich,
+  Calendar and the Assistant; the Fastmail and Nextcloud presets (iCloud's
+  done 28 November 2026, not yet run against a live Apple Account), CalDAV tasks, Immich,
   Jellyfin and Navidrome (`MEDIA`), FreshRSS and Miniflux (`FEEDS`).
   The Assistant reaches all of these accounts (11 October 2026, below E3);
   an invitation answered on the device now reaches the organizer through

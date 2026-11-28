@@ -94,7 +94,8 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | Any CardDAV/CalDAV server | CardDAV, CalDAV | PW | none | Built (`com.webosphoenix.dav`) | done |
-| iCloud, Fastmail, Nextcloud, Yahoo presets | DAV with fixed hosts | PW, LF | none | Presets planned (SM 4.1) | P1 |
+| iCloud | CardDAV, CalDAV with fixed hosts | PW (app-specific) | none | *Built (`com.webosphoenix.icloud`, a preset; section 8)* | done |
+| Fastmail, Nextcloud, Yahoo presets | DAV with fixed hosts | PW, LF | none | Presets planned (SM 4.1); iCloud's is the pattern | P1 |
 | Subscribed calendars (webcal) | HTTPS `.ics` | none | none | Built (`com.webosphoenix.webcal`) | done |
 | Microsoft 365 / Outlook.com | Graph | OAuth | Entra app | SM 1.3; EWS ends 2026-27. *Built (section 8), waiting on the registration* | P1 |
 | Google | People + Calendar API | OAuth | Cloud project + verification | SM 1.2. *Built (section 8), waiting on the registration* | P2 |
@@ -668,7 +669,9 @@ presets): contacts (CardDAV, `contacts.icloud.com`), calendars (CalDAV,
 `smtp.mail.me.com:587`). The user makes the password at account.apple.com
 (Sign-In and Security, App-Specific Passwords; two-factor on); it reaches
 only mail, contacts and calendars and can be revoked. The setup page says
-how, with a link to Apple's page. Not reachable: iCloud Drive and Photos
+how, with a link to Apple's page. *Contacts and calendars built (28
+November 2026, section 8, "iCloud"); iCloud Mail is not part of it yet (an Email IMAP account with Apple's hosts, entered by hand).*
+Not reachable: iCloud Drive and Photos
 (no public API; the tools that reach them use Apple's private web API with
 the real password, against Apple's terms), the new Reminders (since iOS
 13), Notes beyond the old IMAP ones.
@@ -896,9 +899,93 @@ library's Tasks switch shows (a compat overlay of `modify.js`, which hid
 TASKS "until there is a tasks app"); Messaging knows `type_bluesky` and
 `type_slack`.
 
-**Not done in this round** (the brief's "if time"): the iCloud presets,
-CalDAV tasks, Immich, Jellyfin and Navidrome (`MEDIA`), FreshRSS and
-Miniflux (`FEEDS`). None needs a registration.
+**Not done in this round** (the brief's "if time"): the Fastmail and
+Nextcloud presets (iCloud's is below), CalDAV tasks, Immich, Jellyfin and
+Navidrome (`MEDIA`), FreshRSS and Miniflux (`FEEDS`). None needs a
+registration.
+
+**iCloud** (28 November 2026; template `com.webosphoenix.icloud`, `status:
+"beta"`, featured, built in with CardDAV & CalDAV). Not a connector of its
+own: a preset of the CardDAV & CalDAV transport, as webOS had one transport
+under several templates (Email's `com.palm.imap` and `com.palm.othermail`
+on mojomail's IMAP). The preset (`apps/dav/service/lib/presets.js`) names
+the hosts and the template's capability providers; discovery, sync and
+conflicts are `apps/dav`'s.
+
+- **Sign-in** (`apps/dav/accounts/icloud.html`, `IcloudWizard.js`): the
+  Apple Account's email and an app-specific password, no server field. The
+  page says how to make the password (account.apple.com, Sign-In and
+  Security, App-Specific Passwords; two-factor authentication must be on;
+  Apple's support.apple.com/102654), links both pages, and says Reminders
+  are not included. iCloud answers the account's own password with 401
+  like a wrong one, so a 401 says to use an app-specific password (the
+  validator's `errorText` too); the code stays `401_UNAUTHORIZED`, so a
+  password revoked later puts the warning on the account in Accounts.
+- **Discovery** (`davclient.js`, `services`): each service on its own host,
+  RFC 6764's `/.well-known/carddav` on `https://contacts.icloud.com/` and
+  `/.well-known/caldav` on `https://caldav.icloud.com/`, then the host
+  itself; `current-user-principal` (`/<dsid>/principal/`); the principal's
+  home set on the account's partition
+  (`https://pNN-contacts.icloud.com:443/<dsid>/carddavhome/`,
+  `https://pNN-caldav.icloud.com:443/<dsid>/calendars/`), which every later
+  request follows. A server the page sends is ignored: the hosts are the
+  preset's. Apple does not document these servers; the hosts, the
+  app-specific password and the partitions are what Apple's help and the
+  clients that use them report (DAVx5's iCloud page, vdirsyncer).
+- **What syncs**: the address book and the calendars with events, both
+  ways. Not: contact groups (Apple keeps each as a vCard,
+  `X-ADDRESSBOOKSERVER-KIND:group`; now left alone on every DAV account
+  instead of showing as a contact), and **Reminders**: Apple stopped
+  serving them over CalDAV when Reminders was upgraded (iOS 13, macOS
+  10.15); only an account never upgraded still has VTODO lists, which, as on
+  any DAV account, Calendar does not show (CalDAV tasks for Tasks are not
+  built).
+- **Edges** (28 November 2026): only iCloud's hosts are reached
+  (`*.icloud.com` and the image's own; `presets.js` `checkUrl`, before
+  every request and redirect), so the password goes nowhere else; an
+  account of iCloud in mainland China (home sets or a redirect on
+  `*.icloud.com.cn`) is told `REGION_NOT_SUPPORTED` at once, with why, on
+  the sign-in page; a password revoked later flags the account
+  (`401_UNAUTHORIZED`) with a sync state text saying so. A partition move
+  (pNN to pMM, same paths) keeps every collection, object and id, and
+  uploads what changed meanwhile. 429 and 503 go through synckit's
+  `createHttp` (short `Retry-After` waited out, a long one ends the sync as
+  `503_SERVICE_UNAVAILABLE` with `retryAt`, nothing sent before then; a
+  503 while uploading stops the sync). An upload whose answer is lost makes
+  no second copy (the href is kept on the object before it is sent; the
+  server's resource at it is linked, a 412 on create is sent over).
+  Sync-collection pages (507) are followed to the end, and a listing cut
+  short never removes anything. A calendar shared read-only (its
+  privileges: `write-properties` alone is not write; or a 403 on a change,
+  remembered) shows read-only, and a change made on the device anyway is
+  undone and named in the sync's `refused` and `errors`. Two accounts keep
+  apart (a new contact's photo is keyed by its account); removing one, or
+  turning a capability off, waits for a sync that is running.
+- **Hosts from the image**: `/etc/palm/dav/presets.json`
+  (`{"com.webosphoenix.icloud": {"carddav", "caldav"}}`, http(s) only; the
+  simulator's store `systemConfig:dav/presets.json`) points a preset
+  elsewhere: the tests' stand-in, or a mirror.
+- **Tests**: a stand-in that behaves like iCloud
+  (`apps/dav/service/test/icloud.cjs`: two front hosts with the well-known
+  redirect and the principal, partition hosts in front of Radicale,
+  only the app-specific password, a group card, a VTODO-only list; and on
+  a test's asking: several Apple Accounts, a partition move, 503 / 429 with
+  `Retry-After`, dropped connections, slow answers, sync-collection in
+  pages, expired sync-tokens, a calendar shared read-only, a mainland-China
+  account); `apps/dav/service/icloud.test.ts` (9 tests) and
+  `icloud-edges.test.ts` (23: the edges above, conflicts both ways, deleted
+  on iCloud while edited on the device, a recurring event with exceptions
+  across the end of DST, all-day events between Los Angeles and Tokyo, a
+  contact with a photo, several phones and emails and Unicode names,
+  groups, 1040 contacts in pages of 40, two accounts, removal during a
+  sync); `tools/test-icloud-sync.cjs` in Chromium (Accounts, add iCloud,
+  the account password refused, a mainland-China account told it is not
+  supported, contacts and an event both ways, the account deleted;
+  `--tablet`).
+- **Not yet**: a run against a live Apple Account (needs an Apple Account
+  with two-factor authentication and an app-specific password; nothing to
+  register). Accounts of iCloud in mainland China are refused clearly,
+  not synced (their hosts, `*.icloud.com.cn`, untried).
 
 **Known limits.** An edit made on the device (a task ticked in Tasks, an
 event moved in Calendar) reaches the provider at the account's next sync
@@ -927,7 +1014,8 @@ Screenshots from phoenix-sim with the stand-ins:
 [a Bluesky conversation in Messaging](screenshots/connectors-bluesky-messaging.png).
 
 ```sh
-cd apps && npx vitest run connectors shared/connector-kit
+cd apps && npx vitest run connectors shared/connector-kit dav
 NODE_PATH="$(npm root -g)" node tools/test-connectors.cjs   # Todoist and Bluesky in Chromium
+NODE_PATH="$(npm root -g)" node tools/test-icloud-sync.cjs  # iCloud against its stand-in (needs Radicale)
 node apps/connectors/testing/fake-providers.cjs 8098       # the stand-ins, for the simulator
 ```

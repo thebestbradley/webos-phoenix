@@ -40,6 +40,17 @@
 // is counted in the result's conflicts and logged. Nothing is merged
 // field by field; see docs/SYNERGY.md.
 //
+// A collection the user may only read (a calendar shared with them
+// read-only: its privileges say so, or the server answers a change with
+// 403) takes no change from the device: an edit or a deletion made there
+// anyway is undone with the server's copy, a new object removed, and each
+// is counted in the result's refused and named in its errors.
+//
+// Uploads that may have reached the server without us hearing back (the
+// connection dropped) make no second copy: a new resource's href is kept
+// on its object (remoteId) before it is sent, the same href is used to
+// send it again, and a server resource found at it is that object's.
+//
 // db is a promise API over db8 (find(query) -> all results, get(ids),
 // put(objects) / merge(objects) -> [{id, rev}], del(ids)); the device
 // service backs it with Luna calls, the simulator with its in-page db8,
@@ -89,6 +100,22 @@ function stripNulls(o) {
     return o;
 }
 
+// The same path, whatever the host (and its percent-encoding, a trailing slash).
+function samePath(a, b) {
+    var norm = function (u) {
+        var p = new URL(u).pathname.replace(/\/+$/, "");
+        try { return decodeURIComponent(p); } catch (e) { return p; }
+    };
+    try { return norm(a) === norm(b); } catch (e) { return false; }
+}
+
+// An error that ends the sync rather than one upload: the password refused,
+// the server asking us to wait, or no answer at all.
+function fatal(e) {
+    return !!e && (e.status === 401 || e.status === 429 || e.status === 503 || e.errorCode === "503_SERVICE_UNAVAILABLE" ||
+                   e.code === "HOST_NOT_ALLOWED" || (!e.status && /^E[A-Z_]+$/.test(e.code || "")));
+}
+
 function fileName(href) {
     try { return decodeURIComponent(new URL(href).pathname.split("/").pop()); } catch (e) { return href; }
 }
@@ -96,6 +123,10 @@ function fileName(href) {
 // ---- The engine ---------------------------------------------------------------------
 
 // ctx: { db, request, accountId, username, password, localTz?, log?,
+//        services? ({carddav, caldav}: a preset's hosts, lib/presets.js),
+//        checkUrl?(url) (a preset's: throws for a host not its own),
+//        passwordRefused? (a preset's text for a 401 in a sync),
+//        providers? ({CONTACTS, CALENDAR}: a preset's capability provider ids),
 //        tempdb? (for com.palm.account.syncstate:1), linkPersons? (default true),
 //        savePhoto?(key, dataUrl) -> Promise<localPath> }
 function createEngine(ctx) {
@@ -106,8 +137,9 @@ function createEngine(ctx) {
     var stats;
 
     function client(serverUrl) {
-        return davclient.createClient({ request: ctx.request, serverUrl: serverUrl, username: ctx.username,
-                                        password: ctx.password, log: log });
+        return davclient.createClient({ request: ctx.request, serverUrl: ctx.services ? null : serverUrl,
+                                        services: ctx.services, username: ctx.username, password: ctx.password, log: log,
+                                        checkUrl: ctx.checkUrl });
     }
 
     function one(query) { return db.find(query).then(function (r) { return r[0] || null; }); }
@@ -117,7 +149,7 @@ function createEngine(ctx) {
     }
 
     function setSyncState(capability, state, error) {
-        return synckit.setSyncState(ctx.tempdb, accountId, CAPABILITY_PROVIDERS[capability], state, error, log);
+        return synckit.setSyncState(ctx.tempdb, accountId, (ctx.providers || CAPABILITY_PROVIDERS)[capability], state, error, log);
     }
 
     // Stores the server, principal and home sets (after checkCredentials /
@@ -143,10 +175,27 @@ function createEngine(ctx) {
         });
         return db.find({ from: KINDS.collection, where: [{ prop: "accountId", op: "=", val: accountId }] }).then(function (local) {
             local = local.filter(function (c) { return c.capability === capability; });
-            var gone = local.filter(function (l) { return !remote.some(function (r) { return davclient.sameUrl(r.url, l.url); }); });
             var chain = Promise.resolve();
-            gone.forEach(function (col) {
-                chain = chain.then(function () { return dropCollection(col, "removed on the server"); });
+            // A provider's collection at the same path on another host is the
+            // same one, moved: iCloud moves an account to another partition
+            // (pNN-contacts.icloud.com -> pMM-...), keeping the paths.
+            if (ctx.services) {
+                local.forEach(function (l) {
+                    if (remote.some(function (r) { return davclient.sameUrl(r.url, l.url); })) return;
+                    var moved = remote.filter(function (r) {
+                        return samePath(r.url, l.url) && !local.some(function (o) { return davclient.sameUrl(r.url, o.url); });
+                    })[0];
+                    if (moved) chain = chain.then(function () { return moveCollection(l, moved.url); });
+                });
+            }
+            var gone;
+            chain = chain.then(function () {
+                gone = local.filter(function (l) { return !remote.some(function (r) { return davclient.sameUrl(r.url, l.url); }); });
+            });
+            chain = chain.then(function () {
+                return gone.reduce(function (p, col) {
+                    return p.then(function () { return dropCollection(col, "removed on the server"); });
+                }, Promise.resolve());
             });
             var result = [];
             remote.forEach(function (r, i) {
@@ -154,7 +203,8 @@ function createEngine(ctx) {
                     var col = local.filter(function (l) { return davclient.sameUrl(r.url, l.url); })[0];
                     col = col || { _kind: KINDS.collection, accountId: accountId, capability: capability, url: r.url };
                     col.displayName = r.displayName;
-                    col.readOnly = !!r.readOnly;
+                    // A server that refused a change (403) is believed over its privileges.
+                    col.readOnly = !!r.readOnly || !!col.refusedWrites;
                     col.supportsSync = !!r.supportsSync;
                     col.isDefault = i === 0;
                     var ensureCalendar = capability === "CALENDAR" ? ensureCalendarObject(col, r, i) : Promise.resolve();
@@ -173,7 +223,7 @@ function createEngine(ctx) {
     function ensureCalendarObject(col, remote, index) {
         var cal = {
             _kind: KINDS.calendar, accountId: accountId, name: remote.displayName || "Calendar",
-            isReadOnly: !!remote.readOnly, syncSource: "CalDAV", excludeFromAll: false,
+            isReadOnly: !!col.readOnly, syncSource: "CalDAV", excludeFromAll: false,
             color: COLORS[index % COLORS.length], remoteId: col.url
         };
         if (col.calendarId) {
@@ -186,6 +236,42 @@ function createEngine(ctx) {
             });
         }
         return db.put([cal]).then(function (res) { col.calendarId = res[0].id; });
+    }
+
+    // The collection l, now at url (the same path on another host): its
+    // record, its items' hrefs and its objects' remoteIds follow it, so
+    // nothing is dropped and fetched again, and nothing changed on the
+    // device meanwhile is lost.
+    function moveCollection(col, url) {
+        var from = new URL(col.url).origin, to = new URL(url).origin;
+        log("moved: " + col.url + " -> " + url);
+        var re = function (h) { return h && h.indexOf(from) === 0 ? to + h.slice(from.length) : h; };
+        return db.find({ from: KINDS.item, where: [{ prop: "collectionId", op: "=", val: col._id }] }).then(function (items) {
+            var objs = items.filter(function (it) { return it.localId; }).map(function (it) { return it.localId; });
+            return (objs.length ? db.get(objs) : Promise.resolve([])).then(function (found) {
+                // A merge changes _rev: an object unchanged since the last sync stays so.
+                var unchanged = {};
+                items.forEach(function (it) {
+                    var o = found.filter(function (f) { return f._id === it.localId; })[0];
+                    if (o && o._rev === it.localRev) unchanged[o._id] = true;
+                });
+                var moves = found.filter(function (o) { return o.remoteId; }).map(function (o) { return { _id: o._id, remoteId: re(o.remoteId) }; });
+                return (moves.length ? db.merge(moves) : Promise.resolve([])).then(function (res) {
+                    var revs = {};
+                    (res || []).forEach(function (r) { revs[r.id] = r.rev; });
+                    items.forEach(function (it) {
+                        it.href = re(it.href);
+                        if (unchanged[it.localId] && revs[it.localId]) it.localRev = revs[it.localId];
+                    });
+                    return items.length ? db.put(items) : null;
+                });
+            });
+        }).then(function () {
+            col.url = url;
+            var upd = [{ _id: col._id, url: url }];
+            if (col.calendarId) upd.push({ _id: col.calendarId, remoteId: url });
+            return db.merge(upd);
+        });
     }
 
     // A collection and everything synced from it: it disappeared from the
@@ -267,12 +353,31 @@ function createEngine(ctx) {
 
     // ---- Applying server copies ----------------------------------------------------
 
+    // A contact group kept as a vCard of its own (Apple's way: iCloud, and
+    // macOS Contacts on any CardDAV server: X-ADDRESSBOOKSERVER-KIND:group with
+    // its members as X-ADDRESSBOOKSERVER-MEMBER; vCard 4's KIND:group, RFC 6350
+    // 6.1.4). Contacts has no groups, so it is kept as it is on the server and
+    // never shown as a person.
+    function isGroupCard(data) {
+        return /^(?:[A-Za-z0-9-]+\.)?(?:X-ADDRESSBOOKSERVER-KIND|KIND)[;:](?:[^\r\n]*:)?\s*group\s*$/im.test(String(data || ""));
+    }
+
     function applyContact(col, res, item, existing) {
+        if (isGroupCard(res.data)) {
+            var drop = existing && !existing._del ? db.del([existing._id]) : Promise.resolve();
+            return drop.then(function () {
+                if (existing && !existing._del) stats.contactsRemoved.push(existing._id);
+                return saveItem(col, res, item, "", 0, {}, true);
+            });
+        }
         var parsed = vcard.toContact(res.data);
         var fields = parsed.contact;
         var photo = fields.photos[0];
         var photoStep = photo && ctx.savePhoto && /^data:/.test(photo.value)
-            ? ctx.savePhoto(existing ? existing._id : parsed.uid || fileName(res.href), photo.value).then(function (p) { photo.localPath = p; })
+            // Keyed by the contact, or for a new one by the account and the card:
+            // two accounts may have the same card (one UID), each with its photo.
+            ? ctx.savePhoto(existing ? existing._id : accountId + "-" + (parsed.uid || fileName(res.href)), photo.value)
+                .then(function (p) { photo.localPath = p; })
             : Promise.resolve(photo ? (photo.localPath = photo.value) : null);
         return photoStep.then(function () {
             var obj = Object.assign(pick(fields, CONTACT_FIELDS), { accountId: accountId, remoteId: res.href });
@@ -361,8 +466,9 @@ function createEngine(ctx) {
                 return collectAll(c, col.url, "").then(function (r) {
                     var present = {};
                     r.changed.forEach(function (ch) { present[ch.href] = true; });
-                    return { changed: r.changed, removed: items.filter(function (it) { return !present[it.href]; }).map(function (it) { return it.href; }),
-                             state: { syncToken: r.syncToken } };
+                    // Only a whole listing says what is gone.
+                    var removed = r.truncated ? [] : items.filter(function (it) { return !present[it.href]; }).map(function (it) { return it.href; });
+                    return { changed: r.changed, removed: removed, state: { syncToken: r.syncToken } };
                 });
             }
             return c.collectionState(col.url).then(function (st) {
@@ -389,15 +495,22 @@ function createEngine(ctx) {
         return full();
     }
 
-    // sync-collection, repeated while the server truncates (507).
+    // sync-collection, repeated while the server truncates (507, RFC 6578
+    // 3.6: the rest comes with the token it gave): a page at a time, as
+    // many as it takes, while the token moves on. acc.truncated: the
+    // server stopped giving the rest (the next sync goes on from there).
+    var MAX_PAGES = 10000;
     function collectAll(c, url, token) {
-        var acc = { changed: [], removed: [] };
+        var acc = { changed: [], removed: [], truncated: false };
         function step(t, rounds) {
             return c.syncCollection(url, t).then(function (r) {
                 acc.changed = acc.changed.concat(r.changed);
                 acc.removed = acc.removed.concat(r.removed);
                 acc.syncToken = r.syncToken;
-                if (r.truncated && r.syncToken && r.syncToken !== t && rounds < 20) return step(r.syncToken, rounds + 1);
+                if (!r.truncated) return acc;
+                if (r.syncToken && r.syncToken !== t && rounds < MAX_PAGES) return step(r.syncToken, rounds + 1);
+                log("sync-collection of " + url + " stopped after " + (rounds + 1) + " pages");
+                acc.truncated = true;
                 return acc;
             });
         }
@@ -445,10 +558,26 @@ function createEngine(ctx) {
         items.forEach(function (it) { byHref[it.href] = it; });
         return localGroups(capability, col, ctxState.allItems).then(function (groups) {
             var byKey = groupsByKey(groups);
+            // Objects sent up whose answer never came: no item yet, their href kept.
+            var linked = {};
+            ctxState.allItems.forEach(function (it) { if (it.localId) linked[it.localId] = true; });
+            var unlinked = {};
+            groups.forEach(function (g) {
+                if (g.parent && !g.parent._del && g.parent.remoteId && !linked[g.key]) unlinked[g.parent.remoteId] = g;
+            });
             var chain = Promise.resolve();
             resources.forEach(function (res) {
                 chain = chain.then(function () {
                     var item = byHref[res.href];
+                    var mine = !item && (unlinked[res.href] || Object.keys(unlinked).filter(function (h) {
+                        return davclient.sameUrl(h, res.href);
+                    }).map(function (h) { return unlinked[h]; })[0]);
+                    if (mine) {
+                        // Ours: linked to its object, which is then sent again
+                        // over it (If-Match), as it may have changed since.
+                        log(res.href + " is " + mine.key + ", sent up before without an answer");
+                        return saveItem(col, res, null, mine.key, -1, {});
+                    }
                     var group = item ? byKey[item.localId] : null;
                     if (item && group && localState(group, item) === "modified") {
                         stats.conflicts++;
@@ -495,10 +624,11 @@ function createEngine(ctx) {
                     seen[g.key] = true;
                     var state = localState(g, item);
                     if (!state || (item && ctxState.touched[item.href]) || (item && item.ignored)) return;
-                    if (col.readOnly) { log("read-only collection " + col.url + ": local change to " + g.key + " not uploaded"); return; }
                     chain = chain.then(function () {
+                        if (col.readOnly) return refuse(c, col, capability, g, item, state);
                         return pushGroup(c, col, capability, g, item, state).catch(function (e) {
-                            if (e.status === 401) throw e;
+                            if (e.readOnly) return markReadOnly(col).then(function () { return refuse(c, col, capability, g, item, state); });
+                            if (fatal(e)) throw e;
                             stats.errors.push(g.key + ": " + e.message);
                             log("upload of " + g.key + " failed: " + e.message);
                         });
@@ -506,15 +636,47 @@ function createEngine(ctx) {
                 });
                 // Items whose object no longer exists at all (purged).
                 items.forEach(function (it) {
-                    if (seen[it.localId] || it.ignored || ctxState.touched[it.href] || col.readOnly) return;
+                    if (seen[it.localId] || it.ignored || ctxState.touched[it.href]) return;
+                    var g = { key: it.localId, parent: null, children: [] };
                     chain = chain.then(function () {
-                        return pushGroup(c, col, capability, { key: it.localId, parent: null, children: [] }, it, "deleted")
-                            .catch(function (e) { if (e.status === 401) throw e; stats.errors.push(it.href + ": " + e.message); });
+                        if (col.readOnly) return refuse(c, col, capability, g, it, "deleted");
+                        return pushGroup(c, col, capability, g, it, "deleted").catch(function (e) {
+                            if (e.readOnly) return markReadOnly(col).then(function () { return refuse(c, col, capability, g, it, "deleted"); });
+                            if (fatal(e)) throw e;
+                            stats.errors.push(it.href + ": " + e.message);
+                        });
                     });
                 });
                 return chain;
             });
         });
+    }
+
+    // A change the collection does not take (read-only): undone, and said.
+    function refuse(c, col, capability, group, item, state) {
+        stats.refused++;
+        var what = capability === "CONTACTS" ? "contact" : "event";
+        var name = (group.parent && (group.parent.subject || (group.parent.name && [group.parent.name.givenName, group.parent.name.familyName]
+            .filter(Boolean).join(" ")))) || group.key;
+        var msg = (col.displayName || col.url) + " is read-only (shared with you, or not yours to change): the " +
+            (state === "new" ? "new " + what + " \u201c" + name + "\u201d was removed" :
+             state === "deleted" ? "deleted " + what + " was brought back" : "change to \u201c" + name + "\u201d was undone") +
+            ", as it was not saved there.";
+        stats.errors.push(msg);
+        log(msg);
+        if (state === "new") return removeLocal(col, { localId: "" }, group);
+        return restoreFromServer(c, col, capability, item, group);
+    }
+
+    // The server refused a change (403): the collection is read-only to us,
+    // whatever its privileges said; kept so (refusedWrites) on later syncs.
+    function markReadOnly(col) {
+        if (col.readOnly) return Promise.resolve();
+        col.readOnly = true;
+        col.refusedWrites = true;
+        var upd = [{ _id: col._id, readOnly: true, refusedWrites: true }];
+        if (col.calendarId) upd.push({ _id: col.calendarId, isReadOnly: true });
+        return db.merge(upd);
     }
 
     function serialize(capability, group, item) {
@@ -539,15 +701,30 @@ function createEngine(ctx) {
             });
         }
         if (state === "new") {
-            group.uid = vcard.newUid();
-            var href = new URL(encodeURIComponent(group.uid) + ext, col.url.replace(/\/?$/, "/")).href;
+            // Sent before without an answer: the same href (and UID) again.
+            var dir = col.url.replace(/\/?$/, "/");
+            var kept = group.parent.remoteId;
+            var again = kept && kept.indexOf(dir) === 0 && /^[^/]+$/.test(kept.slice(dir.length)) ? kept : null;
+            group.uid = again ? decodeURIComponent(kept.slice(dir.length)).replace(/\.(vcf|ics)$/i, "") : vcard.newUid();
+            var href = again || new URL(encodeURIComponent(group.uid) + ext, dir).href;
             var data = serialize(capability, group, null);
-            return c.put(href, data, ctype, { create: true }).then(function (r) {
-                stats.uploaded.created++;
-                return db.merge([{ _id: group.parent._id, remoteId: href }]).then(function (m) {
+            // The href first, then the upload: if its answer is lost, the next
+            // sync knows the server's resource for this object's.
+            return db.merge([{ _id: group.parent._id, remoteId: href }]).then(function (m) {
+                var rev = m[0].rev;
+                return c.put(href, data, ctype, { create: true }).catch(function (e) {
+                    // Already there: ours, sent before (or by a retry) and its answer lost.
+                    if (!e.conflict) throw e;
+                    log(href + " is already on the server: sent before; sending it again over it");
+                    return c.get(href).then(function (res) {
+                        if (!res) throw e;
+                        return c.put(href, data, ctype, { etag: res.etag });
+                    });
+                }).then(function (r) {
+                    stats.uploaded.created++;
                     if (capability === "CONTACTS") stats.contactsChanged.push(group.parent._id);
                     var o = { _kind: KINDS.item, accountId: accountId, collectionId: col._id, href: href, etag: r.etag,
-                              raw: data, localId: group.parent._id, localRev: m[0].rev, childRevs: childRevs(group) };
+                              raw: data, localId: group.parent._id, localRev: rev, childRevs: childRevs(group) };
                     return db.put([o]);
                 });
             });
@@ -593,7 +770,7 @@ function createEngine(ctx) {
     function sync(options) {
         options = options || {};
         var capabilities = options.capabilities || ["CONTACTS", "CALENDAR"];
-        stats = { contactsChanged: [], contactsRemoved: [], eventsChanged: 0, eventsRemoved: 0, conflicts: 0,
+        stats = { contactsChanged: [], contactsRemoved: [], eventsChanged: 0, eventsRemoved: 0, conflicts: 0, refused: 0,
                   uploaded: { created: 0, modified: 0, deleted: 0 }, errors: [], collections: 0 };
         var started = Date.now();
         return accountRecord().then(function (rec) {
@@ -634,6 +811,8 @@ function createEngine(ctx) {
                     log("sync of " + accountId + " done: " + JSON.stringify(summary(stats)));
                     return summary(stats);
                 }, function (e) {
+                    // The provider's own words for a password it no longer takes (an app-specific one revoked).
+                    if (e && e.status === 401 && ctx.passwordRefused) e.message = ctx.passwordRefused;
                     return Promise.all(capabilities.map(function (cap) { return setSyncState(cap, "ERROR", e); }))
                         .then(function () { throw e; });
                 });
@@ -643,7 +822,7 @@ function createEngine(ctx) {
     function summary(s) {
         return { collections: s.collections, contactsChanged: s.contactsChanged.length, contactsRemoved: s.contactsRemoved.length,
                  eventsChanged: s.eventsChanged, eventsRemoved: s.eventsRemoved, uploaded: s.uploaded,
-                 conflicts: s.conflicts, errors: s.errors, ms: s.ms };
+                 conflicts: s.conflicts, refused: s.refused, errors: s.errors, ms: s.ms };
     }
 
     // The account's data for one capability (capability turned off,
