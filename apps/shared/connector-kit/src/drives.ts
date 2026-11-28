@@ -27,6 +27,8 @@ import type { Json, Reply } from "./types";
 
 export const DRIVES_ROOT = "/media/drives";
 const DEFAULT_CACHE = "/media/internal/.phoenix/drive-cache";
+/** The device's copies of the drives' files (<accountId>/<path>, and index.json). */
+export const DRIVE_CACHE = DEFAULT_CACHE;
 
 /** The file manager's own methods for the device's files (replies, never rejecting). */
 export interface LocalFileManager {
@@ -478,6 +480,14 @@ export function createDriveRouter(opts: DriveRouterOptions): DriveRouter {
                 await exists(cache)) {
                 return { path: cache, remotePath: path, entry: Object.assign({ name: path.replace(/^.*\//, ""), path, type: "file" }, kept.entry || {}),
                          stale: true };
+            }
+            // Deleted on the drive (by the person elsewhere, while it was open
+            // here): the device's copy of it goes too.
+            if (kept && code === FILE_ERRORS.NOT_FOUND) {
+                await opts.local.remove({ path: cache }).catch(() => null);
+                const fresh = await readIndex();
+                delete fresh[cache];
+                await writeIndex(fresh).catch((x) => log("cache index not written: " + (x as Error).message));
             }
             throw e;
         }

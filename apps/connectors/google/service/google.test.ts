@@ -182,4 +182,82 @@ describe("Google", () => {
         await w.sync(id);
         expect((await w.find(K.task)).filter((t: any) => t.summary === "Renew library card").map((t: any) => t._id)).toEqual([card._id]);
     });
+
+    // Google's revocation ends the app's whole grant for that Google user
+    // (every token of every scope), and Phoenix's Google project is Google
+    // Drive's too (apps/connectors/drives): a key is revoked at Google only
+    // when no account here still signs in with that grant.
+    describe("signing in again and removing: Google's grant", () => {
+        const keyIds = (w: any) => Object.keys(w.keys).sort();
+        const DRIVE = "com.webosphoenix.drive.googledrive";
+
+        it("signing in again keeps the account signed in: the old key is only forgotten on the device", async () => {
+            const { w, id } = await signedIn();
+            await w.enable(id, P.contacts);
+            expect((await w.sync(id)).returnValue).toBe(true);
+            const old = w.credentials[id].common.oauthKey;
+            const revoked = base.revoked.length;
+            const r = await w.methods.signIn({ accountId: id });
+            expect(r, JSON.stringify(r)).toMatchObject({ returnValue: true, username: "anna.lee@gmail.example" });
+            w.credentials[id] = r.credentials;
+            const s = await w.sync(id);
+            expect(s.returnValue, JSON.stringify(s)).toBe(true);
+            expect(w.keys["key:" + old]).toBeUndefined();
+            expect(base.revoked.length).toBe(revoked);
+        });
+
+        it("signing in again as another Google user is refused; the new key is not kept and the account keeps its sign-in", async () => {
+            const { w, id } = await signedIn();
+            await w.enable(id, P.contacts);
+            const before = keyIds(w);
+            const revoked = base.revoked.length;
+            gg.as = "bo@gmail.example";
+            const r = await w.methods.signIn({ accountId: id });
+            expect(r).toMatchObject({ returnValue: false, errorCode: "WRONG_ACCOUNT" });
+            expect(r.errorText).toMatch(/bo@gmail\.example/);
+            expect(r.errorText).toMatch(/anna\.lee@gmail\.example/);
+            expect(keyIds(w)).toEqual(before);
+            expect(base.revoked.length).toBe(revoked);
+            expect((await w.sync(id)).returnValue).toBe(true);
+        });
+
+        it("a sign-in whose identity check fails leaves no key behind and revokes nothing", async () => {
+            const { w, id } = await signedIn();
+            const before = keyIds(w);
+            const revoked = base.revoked.length;
+            gg.userinfoDown = true;
+            expect((await w.methods.signIn({ accountId: id })).returnValue).toBe(false);
+            expect((await w.methods.signIn({})).returnValue).toBe(false);
+            gg.userinfoDown = false;
+            expect(keyIds(w)).toEqual(before);
+            expect(base.revoked.length).toBe(revoked);
+            await w.enable(id, P.contacts);
+            expect((await w.sync(id)).returnValue).toBe(true);
+        });
+
+        it("removing the account revokes at Google only when no other account here is the same Google user", async () => {
+            const { w, id } = await signedIn();
+            const key = w.credentials[id].common.oauthKey;
+            // Google Drive in Files, the same Google user, its own token of the same grant.
+            const drive = base.issue("google", { user: "anna.lee@gmail.example" });
+            w.accounts["gd"] = { _id: "gd", templateId: DRIVE, username: "Anna.Lee@gmail.example", capabilityProviders: [] };
+            const revoked = base.revoked.length;
+            expect((await w.methods.onDelete({ accountId: id })).returnValue).toBe(true);
+            expect(w.keys["key:" + key]).toBeUndefined();
+            expect(base.revoked.length).toBe(revoked);
+            const me = await request({ method: "GET", url: base.origin + "/google/userinfo", headers: { Authorization: "Bearer " + drive.access_token } });
+            expect(me.status).toBe(200);
+            delete w.accounts[id];
+
+            // Another Google user's Drive does not keep this one's grant: revoked at Google, the whole grant.
+            const two = await signedIn();
+            two.w.accounts["gd"] = { _id: "gd", templateId: DRIVE, username: "bo@gmail.example", capabilityProviders: [] };
+            const key2 = two.w.credentials[two.id].common.oauthKey;
+            expect((await two.w.methods.onDelete({ accountId: two.id })).returnValue).toBe(true);
+            expect(two.w.keys["key:" + key2]).toBeUndefined();
+            expect(base.revoked.length).toBeGreaterThan(revoked);
+            const after = await request({ method: "GET", url: base.origin + "/google/userinfo", headers: { Authorization: "Bearer " + drive.access_token } });
+            expect(after.status).toBe(401);
+        });
+    });
 });

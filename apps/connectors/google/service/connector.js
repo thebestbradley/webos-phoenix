@@ -256,6 +256,27 @@ function pushTask(ctx, ch) {
 
 // ---- Sign-in ---------------------------------------------------------------------------------------------
 
+// Google's revocation (https://oauth2.googleapis.com/revoke) ends the app's
+// whole grant for that Google user, every token of every scope, not just the
+// one revoked; Google Drive in Files (apps/connectors/drives) signs in with
+// the same Google project (docs/DEVELOPER-APPS.md). So a key is revoked at
+// Google only when no other account here is that Google user; otherwise it
+// is only forgotten on the device.
+var GOOGLE_PROJECT = [TEMPLATE, "com.webosphoenix.drive.googledrive"];
+var KEEP = { revoke: false };
+function lower(s) { return String(s || "").toLowerCase(); }
+
+function sameGoogleAccount(ctx) {
+    var me = lower(ctx.account && ctx.account.username);
+    if (!me) return Promise.resolve(false);
+    return ctx.luna.call("luna://com.palm.service.accounts/listAccounts", {}).then(function (r) {
+        if (!r || r.returnValue === false) return true;
+        return (r.results || []).some(function (a) {
+            return a && a._id !== ctx.accountId && !a.beingDeleted && GOOGLE_PROJECT.indexOf(a.templateId) >= 0 && lower(a.username) === me;
+        });
+    }, function () { return true; });  // not known: keep the grant
+}
+
 function signIn(ctx, p) {
     var client;
     return clientOf(ctx).then(function (c) {
@@ -263,8 +284,17 @@ function signIn(ctx, p) {
         client = c;
         return kit.oauthSignIn(ctx, client, { accountId: p.accountId });
     }).then(function (keyId) {
-        return GG.whoAmI(GG.apis(ctx, function () { return ctx.oauth.token(keyId); }, client)).then(function (me) {
-            return kit.forgetOldKey(ctx, p.accountId, keyId).then(function () { return result(me, keyId); });
+        // The new key is dropped (not revoked: that would end the grant) when it is not the account's.
+        function drop(e) { return ctx.oauth.forget(keyId, KEEP).then(function () { throw e; }); }
+        return GG.whoAmI(GG.apis(ctx, function () { return ctx.oauth.token(keyId); }, client)).catch(drop).then(function (me) {
+            // Signing in again from an account: the same Google user, or nothing changes.
+            var named = p.accountId && ctx.account && ctx.account.username;
+            if (named && lower(named) !== lower(me.username)) {
+                return drop(fail("You signed in to Google as " + me.username + ", but this account is " + named +
+                                 ". Sign in as " + named + ", or add " + me.username + " as another account.", "WRONG_ACCOUNT"));
+            }
+            // The old key is of the same grant as the new one: forgotten here, kept at Google.
+            return kit.forgetOldKey(ctx, p.accountId, keyId, KEEP).then(function () { return result(me, keyId); });
         });
     });
 }
@@ -299,7 +329,8 @@ module.exports = kit.defineConnector({
 
     onDelete: function (ctx) {
         var key = (ctx.credentials && ctx.credentials.oauthKey) || (ctx.config && ctx.config.oauthKey);
-        return key ? ctx.oauth.forget(key) : Promise.resolve();
+        if (!key) return Promise.resolve();
+        return sameGoogleAccount(ctx).then(function (others) { return ctx.oauth.forget(key, others ? KEEP : undefined); });
     },
 
     methods: {

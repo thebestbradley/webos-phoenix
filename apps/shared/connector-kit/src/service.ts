@@ -38,6 +38,7 @@ import { emptyStats, removeObjects, syncObjects, type CapabilityStats } from "./
 import { createNet } from "./net";
 import { checkShare, maxBytesOf } from "./share";
 import { createFilesMethods, DEFAULT_CHUNK, fileError, FILE_ERRORS, FILES_METHODS } from "./files";
+import { DRIVE_CACHE } from "./drives";
 import type {
     AccountContext, BaseContext, ConnectorDefinition, Environment, HelperProcess, Json, LiveConnection, MethodContext, Reply, ServiceMethods,
     ValidateContext
@@ -81,16 +82,38 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     }
     const providerIds = Object.keys(def.capabilities);
 
+    // A drive account removed: the device's copies of its files go too (the
+    // file manager's cache, drives.ts: <cache>/<accountId>/..., and their
+    // lines in its index), not left behind on the device.
+    async function forgetDriveCache(accountId: string): Promise<void> {
+        const files = env.files;
+        if (!files || !accountId || /[/\\]|^\.\.?$/.test(accountId)) return;
+        const dir = DRIVE_CACHE + "/" + accountId;
+        if (files.removeTree) await files.removeTree(dir);
+        const index = DRIVE_CACHE + "/index.json";
+        let kept: Record<string, Json>;
+        try {
+            const size = await files.size(index);
+            kept = JSON.parse(new TextDecoder().decode(await files.read(index, 0, size))) || {};
+        } catch (e) {
+            return;     // no index: nothing was opened
+        }
+        const left: Record<string, Json> = {};
+        let changed = false;
+        Object.keys(kept).forEach((k) => { if (k.indexOf(dir + "/") === 0) changed = true; else left[k] = kept[k]; });
+        if (changed) await files.write(index, new TextEncoder().encode(JSON.stringify(left)), false);
+    }
+
     const oauth = {
-        token: async (keyId: string): Promise<string> => {
+        token: async (keyId: string, opts?: { refresh?: boolean }): Promise<string> => {
             if (!keyId) throw synckit.syncError("The account has no sign-in token (sign in again)", "CREDENTIALS_NOT_FOUND");
-            const r = await bus.call(OAUTH + "token", { keyId }).catch((e: Error & { errorCode?: string }) => {
+            const r = await bus.call(OAUTH + "token", opts && opts.refresh ? { keyId, refresh: true } : { keyId }).catch((e: Error & { errorCode?: string }) => {
                 throw synckit.syncError(e.message, e.errorCode === "NOT_FOUND" ? "401_UNAUTHORIZED" : e.errorCode || "UNKNOWN_ERROR");
             });
             return String(r.accessToken || "");
         },
-        forget: async (keyId: string): Promise<void> => {
-            if (keyId) await bus.call(OAUTH + "forget", { keyId }).catch(() => {});
+        forget: async (keyId: string, opts?: { revoke?: boolean }): Promise<void> => {
+            if (keyId) await bus.call(OAUTH + "forget", opts && opts.revoke === false ? { keyId, revoke: false } : { keyId }).catch(() => {});
         }
     };
 
@@ -101,7 +124,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
             luna: bus, db: bus.db, tempdb: bus.tempdb, log, now, service: def.service, oauth,
             http: synckit.createHttp({
                 request: env.request, hosts: hosts ? (def.hosts || []).concat(hosts) : undefined, backoff,
-                maxWaitMs: env.maxWaitMs, now, sleep: env.sleep, log, userAgent: def.userAgent
+                maxWaitMs: env.maxWaitMs, timeoutMs: env.timeoutMs, now, sleep: env.sleep, log, userAgent: def.userAgent
             }),
             net: createNet({ env: env.net, hosts: (def.hosts || []).concat(hosts || []), backoff, now }),
             cachePhoto: env.cachePhoto || (async (_key: string, url: string) => url),
@@ -513,6 +536,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 await closeLive(p.accountId);
                 const { ctx, rec } = await accountContext(p.accountId);
                 if (def.onDelete) await def.onDelete(ctx).catch((e: Error) => log("onDelete: " + e.message));
+                if (hasFiles(def)) await forgetDriveCache(p.accountId).catch((e: Error) => log("the drive's copies were not removed: " + e.message));
                 for (const id of providerIds) {
                     await stopWatch(p.accountId, id);
                     await removeCapability(ctx, id);

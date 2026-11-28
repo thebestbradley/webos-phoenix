@@ -334,6 +334,11 @@ function Browser() {
 
     const open = (e: FileEntry) => {
         if (e.type === "directory") { go(e.path); return; }
+        // A drive's file that is only a page (a Google Form): the browser, not an empty copy.
+        if (e.remote && e.webUrl && /^https:\/\//.test(e.webUrl)) {
+            void run(async () => { await openWith.openUrl(e.webUrl as string); }, "Opened in the browser", false);
+            return;
+        }
         const kind = kindOf(e);
         if (e.remote && !(opensAsText(e) && (kind === "text" || kind === "code" || kind === "file"))) {
             // Fetched first (the editor reads and saves through the drive itself).

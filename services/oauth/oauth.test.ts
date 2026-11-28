@@ -329,6 +329,16 @@ describe("tokens", () => {
         expect((await world.m.token({ keyId: r.keyId }, OWNER)).errorCode).toBe("NOT_FOUND");
     });
 
+    it("forget with revoke: false deletes the key and leaves the token valid at the provider (Google ends the whole grant)", async () => {
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        const t = await world.m.token({ keyId: r.keyId }, OWNER);
+        const before = provider.state().revoked.length;
+        expect((await world.m.forget({ keyId: r.keyId, revoke: false }, OWNER)).returnValue).toBe(true);
+        expect(provider.state().revoked.length).toBe(before);
+        expect(provider.tokenLive(t.accessToken)).toBe(true);
+        expect((await world.m.token({ keyId: r.keyId }, OWNER)).errorCode).toBe("NOT_FOUND");
+    });
+
     it("client registrations are sealed too, and only their owner reads them", async () => {
         await world.m.client({ name: "mastodon.example", value: { clientId: "cid", clientSecret: "very-secret-value" } }, OWNER);
         expect((await world.m.client({ name: "mastodon.example" }, OWNER)).value.clientSecret).toBe("very-secret-value");

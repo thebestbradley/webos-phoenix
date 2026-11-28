@@ -9,7 +9,7 @@
 //
 //   const base = createFakeBase({autoApprove});
 //   base.route(method | "*", /^\/path$/, (req, res, ctx) => ...)   ctx: {url, m, body, json(), form()}
-//   base.oauthProvider(name, {secret?, scope?, pkce?: true})   /oauth/<name>/authorize|approve|token|revoke:
+//   base.oauthProvider(name, {secret?, scope?, pkce?: true, user?, grantWide?})   /oauth/<name>/authorize|approve|token|revoke:
 //       the authorization code flow as the providers document it: an Allow
 //       page (or a redirect at once with autoApprove), codes bound to their
 //       PKCE challenge, redirect URI and client, access tokens of an hour,
@@ -90,7 +90,9 @@ function createFakeBase(options) {
         if (step === "approve") {
             const q = url.searchParams;
             const code = "code-" + crypto.randomBytes(8).toString("hex");
-            codes.set(code, { provider, challenge: q.get("code_challenge"), redirect: q.get("redirect_uri"), client: q.get("client_id"), scope: q.get("scope") });
+            // p.user(): who signs in on the provider's page (its tokens are that user's).
+            codes.set(code, { provider, challenge: q.get("code_challenge"), redirect: q.get("redirect_uri"), client: q.get("client_id"), scope: q.get("scope"),
+                              user: p.user ? p.user() : undefined });
             const to = q.get("redirect_uri") + (q.get("redirect_uri").indexOf("?") < 0 ? "?" : "&") + "code=" + code + "&state=" + encodeURIComponent(q.get("state"));
             res.writeHead(302, { Location: to });
             return res.end();
@@ -110,7 +112,7 @@ function createFakeBase(options) {
                 if (!c || c.provider !== provider || (f.get("redirect_uri") && c.redirect !== f.get("redirect_uri"))) return send(res, 400, { error: "invalid_grant" });
                 if (p.pkce && b64url(crypto.createHash("sha256").update(f.get("code_verifier") || "").digest()) !== c.challenge)
                     return send(res, 400, { error: "invalid_grant", error_description: "PKCE" });
-                return send(res, 200, base.issue(provider, { scope: c.scope }));
+                return send(res, 200, base.issue(provider, c.user === undefined ? { scope: c.scope } : { scope: c.scope, user: c.user }));
             }
             if (f.get("grant_type") === "refresh_token") {
                 const r = refresh.get(f.get("refresh_token"));
@@ -124,7 +126,17 @@ function createFakeBase(options) {
         if (step === "revoke") {
             const f = new URLSearchParams(body.toString("utf8"));
             const t = f.get("token") || url.searchParams.get("token");
+            // p.grantWide: a revocation ends the app's whole grant for that
+            // user, every token of it (Google's: "revokes all of the scopes
+            // that the user granted to the app", Google Identity Services'
+            // google.accounts.oauth2.revoke; https://oauth2.googleapis.com/revoke).
+            const was = tokens.get(t) || refresh.get(t);
+            if (p.grantWide && was) {
+                for (const [k, x] of tokens) if (x.provider === provider && x.user === was.user) tokens.delete(k);
+                for (const [k, x] of refresh) if (x.provider === provider && x.user === was.user) refresh.delete(k);
+            }
             tokens.delete(t);
+            refresh.delete(t);
             base.revoked.push(provider);
             return send(res, 200, {});
         }

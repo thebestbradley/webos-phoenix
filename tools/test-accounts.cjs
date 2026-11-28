@@ -53,7 +53,7 @@ const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "accounts-tests");
 const ACCOUNTS = "luna://com.palm.service.accounts/";
-const BUILTIN = ["com.palm.imap", "com.palm.othermail", "com.palm.palmprofile", "com.palm.pop",
+const BUILTIN = ["com.palm.google", "com.palm.imap", "com.palm.othermail", "com.palm.palmprofile", "com.palm.pop",
                  "com.webosphoenix.dav", "com.webosphoenix.fediverse", "com.webosphoenix.telegram", "com.webosphoenix.webcal"];
 
 let failures = 0;

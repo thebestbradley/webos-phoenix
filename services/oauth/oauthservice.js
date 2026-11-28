@@ -25,8 +25,11 @@
 //                              clock that differs, a token revoked; Home
 //                              Assistant's frontend asks so, getExternalAuth
 //                              {force})
-//   forget {keyId}          revokes the token (RFC 7009, when the provider
-//                           has an endpoint) and deletes the key
+//   forget {keyId, revoke?} revokes the token (RFC 7009, when the provider
+//                           has an endpoint) and deletes the key; revoke:
+//                           false only deletes it (Google ends the app's
+//                           whole grant on a revocation, every token of it:
+//                           a sign-in again keeps the new one)
 //   client {name, value?}   a client registration the caller keeps here
 //                           (Mastodon's per-server client id and secret,
 //                           SYNERGY-MODERN.md 4.4: "the per-device client
@@ -248,7 +251,7 @@ function createOAuthService(env) {
                                                          body: form({ token: token, token_type_hint: hint, client_id: rec.clientId, client_secret: rec.clientSecret }) }))
                         .catch(function (e) { log("token not revoked: " + e.message); });
                 }
-                var revoke = !rec.revocationEndpoint ? Promise.resolve()
+                var revoke = !rec.revocationEndpoint || p.revoke === false ? Promise.resolve()
                     : (rec.refreshToken ? revokeOne(rec.refreshToken, "refresh_token") : Promise.resolve()).then(function () {
                         return revokeOne(rec.accessToken, "access_token");
                     });

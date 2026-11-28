@@ -33,3 +33,25 @@
 		min-width: 150px;
 	}
 }
+
+/* The account wizard's note for Gmail (accounts/source/phoenix-gmail.js),
+ * under the APP PASSWORD group. */
+.phoenix-gmail-note {
+	margin: 4px 14px 14px;
+	font-size: 14px;
+	line-height: 1.35;
+	color: #555;
+}
+
+.phoenix-gmail-link {
+	margin-top: 6px;
+	color: #1d63b8;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.phoenix-gmail-said {
+	font-size: 12px;
+	color: #666;
+	overflow-wrap: anywhere;
+}

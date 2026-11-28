@@ -124,6 +124,8 @@ export interface FileEntry {
     /** A drive's own folder: which account. */
     drive?: DriveInfo;
     mimeType?: string;
+    /** A drive's file with no bytes to open here (a Google Form): its page, opened in the browser. */
+    webUrl?: string;
 }
 
 export type FileEncoding = "utf8" | "base64";
@@ -287,6 +289,10 @@ export const openWith = {
     /** open {target}: let the application manager pick the app by MIME type. */
     open(path: string) {
         return call("luna://com.webos.applicationManager/open", { target: fileUri(path) });
+    },
+    /** open {target}: a web page, in the browser. */
+    openUrl(url: string) {
+        return call("luna://com.webos.applicationManager/open", { target: url });
     },
 };
 
