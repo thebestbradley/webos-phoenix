@@ -15,9 +15,15 @@
 #   /v1/location/geocode/json and has no key ("none" in base64: the file
 #   format requires the field, and a non-Google URL is sent without it).
 #   With PHOENIX_API_URL empty there is no geocoding service.
+# - 0002: another of the account's devices' position (location sharing,
+#   docs/MAPS.md "Another device's position"), from the account service's
+#   locationRelay; the service's ACG files gain the outbound call and the
+#   account.location group.
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
-SRC_URI += "file://0001-Network-position-without-radios-or-a-third-party-key.patch"
+SRC_URI += "file://0001-Network-position-without-radios-or-a-third-party-key.patch \
+            file://0002-Another-of-the-account-s-devices-position-location-sharing.patch \
+"
 
 PHOENIX_API_URL ?= "https://api.webosphoenix.org/"
 
@@ -38,6 +44,14 @@ do_install:append() {
     if grep -q -i -E 'AIza|googleapis' ${D}${sysconfdir}/location/wsp.conf; then
         bbfatal "wsp.conf still names Google"
     fi
+
+    # Location sharing: the network handler asks
+    # org.webosphoenix.service.account/locationRelay (group account.location).
+    ls2=${D}${datadir}/luna-service2
+    sed -i 's/"com.webos.service.power"\]/"com.webos.service.power", "org.webosphoenix.service.account"]/' $ls2/roles.d/com.webos.service.location.role.json
+    sed -i 's/"settings.query"\]/"settings.query", "account.location"]/' $ls2/client-permissions.d/com.webos.service.location.perm.json
+    grep -q '"org.webosphoenix.service.account"' $ls2/roles.d/com.webos.service.location.role.json || bbfatal "the location service's role does not reach the account service"
+    grep -q '"account.location"' $ls2/client-permissions.d/com.webos.service.location.perm.json || bbfatal "the location service's permissions lack account.location"
 }
 
 FILES:${PN} += "${sysconfdir}/location/geolocate.conf"

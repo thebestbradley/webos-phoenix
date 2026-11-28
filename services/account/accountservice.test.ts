@@ -261,3 +261,59 @@ describe("Developer Mode's override", () => {
         expect(await svc.setServers({ servers: null }, "com.example.app")).toMatchObject({ errorCode: "NOT_ALLOWED" });
     });
 });
+
+describe("another device's position (location sharing)", () => {
+    const share = (body: Any) => fetch(mock.api + "v1/conformance/location", { method: "POST", headers: { Authorization: "Bearer " + mock.token, "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+
+    it("is off on the device until Settings turns it on, and then asks nothing of the network", async () => {
+        const svc = service({ request: () => { throw new Error("no network expected"); } });
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toEqual({ returnValue: true, enabled: false, sharing: false, position: null, reason: "OFF" });
+        expect(await svc.setLocationRelay({ enabled: true }, "com.webos.service.location")).toMatchObject({ errorCode: "NOT_ALLOWED" });
+        expect(await svc.setLocationRelay({ enabled: "yes" }, "org.webosphoenix.settings")).toMatchObject({ errorCode: "BAD_PARAMS" });
+        expect(await svc.locationRelay({}, "org.example.app")).toMatchObject({ errorCode: "NOT_ALLOWED" });
+    });
+
+    it("gives the account's fresh position, with its source and age, and says why when there is none", async () => {
+        const svc = service();
+        expect(await svc.setLocationRelay({ enabled: true }, "org.webosphoenix.settings")).toEqual({ returnValue: true, enabled: true });
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toMatchObject({ enabled: true, position: null, reason: "SIGNED_OUT" });
+        await signedIn(svc);
+        await share({ enabled: false });
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toMatchObject({ returnValue: true, enabled: true, sharing: false, position: null, reason: "SHARING_OFF" });
+
+        await share({ enabled: true, position: { latitude: 51.5007, longitude: -0.1246, accuracy: 9, name: "iPad", timestamp: Date.now() - 20000 } });
+        clock += 16000;   // past the reuse window
+        const r = await svc.locationRelay({}, "com.webos.service.location");
+        expect(r).toMatchObject({ returnValue: true, enabled: true, sharing: true, reason: null,
+                                  position: { latitude: 51.5007, longitude: -0.1246, accuracy: 9, source: { kind: "browser", name: "iPad", deviceId: null } } });
+        expect(r.position.age).toBeGreaterThanOrEqual(19);
+        expect(typeof r.position.timestamp).toBe("number");
+
+        // Read again within 15 s: the same reply, aged, without asking the server.
+        const asked = mock.state.log.filter((l: string) => l.endsWith("v1/me/location")).length;
+        clock += 5000;
+        const again = await svc.locationRelay({}, "org.webosphoenix.settings");
+        expect(again.position.age).toBe(r.position.age + 5);
+        expect(mock.state.log.filter((l: string) => l.endsWith("v1/me/location")).length).toBe(asked);
+
+        // Off on the device: no position, at once.
+        await svc.setLocationRelay({ enabled: false }, "org.webosphoenix.settings");
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toMatchObject({ enabled: false, position: null, reason: "OFF" });
+    });
+
+    it("never hands a device its own shared position, nor one gone stale, and goes on offline", async () => {
+        const svc = service();
+        const st = await signedIn(svc);
+        await svc.setLocationRelay({ enabled: true }, "org.webosphoenix.settings");
+        await share({ enabled: true });
+        mock.state.locations.u_test.position = { latitude: 1, longitude: 2, accuracy: 5, measured: Date.now(), kind: "device", name: "Test TouchPad", deviceId: st.device.id };
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toMatchObject({ sharing: true, position: null, reason: "OWN_POSITION" });
+
+        mock.state.locations.u_test.position = { latitude: 1, longitude: 2, accuracy: 5, measured: Date.now(), kind: "browser", name: "iPad", deviceId: null };
+        clock += 16000;
+        expect((await svc.locationRelay({}, "com.webos.service.location")).position).toMatchObject({ latitude: 1, longitude: 2 });
+        clock += 1800 * 1000;   // the cached reply ages past 30 minutes on this device's clock
+        offline = true;
+        expect(await svc.locationRelay({}, "com.webos.service.location")).toMatchObject({ returnValue: true, position: null, reason: "CONNECTION_FAILED" });
+    });
+});
