@@ -1952,7 +1952,7 @@ the current Chrome, so sites that check the version keep working.
 
 | Job | Machines | When |
 | --- | --- | --- |
-| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64`, and the first targets' `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2` (11 October 2026), `phoenix-vm-arm64`; every Reference and Supported machine as it is added | Every PR |
+| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64`, and the first targets' `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2` (11 October 2026), `phoenix-vm-arm64`; every Reference and Supported machine as it is added | Every PR that changes the layer or its setup (`meta-phoenix/**`, the setup and parse scripts), and main |
 | Full image build (shared sstate) | `qemux86-64`, `raspberrypi4-64` | Every merge to main |
 | Boot test in QEMU (reach the card view, run app smoke tests) | `qemux86-64` | Every merge |
 | Full image build | The first targets' machines | Nightly |
