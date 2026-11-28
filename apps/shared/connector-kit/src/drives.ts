@@ -180,13 +180,17 @@ export function createDriveRouter(opts: DriveRouterOptions): DriveRouter {
 
     function cachePathOf(w: Where): string { return cacheDir + "/" + w.drive.accountId + w.path; }
     function tempPath(name: string): string { return cacheDir + "/.transfer/" + now().toString(36) + "-" + (++tempCount) + "-" + name.replace(/[/\\]/g, "-"); }
-    // The transfer folder, made before each use: the file manager's mkdir
-    // makes one level and the cache may never have been made, or was
-    // cleared (Revision 34: every write to Phoenix Drive failed, ENOENT
-    // .../drive-cache/.transfer/...). An error here (it is there already)
-    // is left to the write that follows.
+    // The transfer folder, made before each use, with every folder above
+    // it: the file manager's mkdir makes one level, and on a new device
+    // neither the cache nor /media/internal/.phoenix exists (Revision 34:
+    // every write to Phoenix Drive failed, ENOENT .../drive-cache/.transfer;
+    // Revision 37 still, with only the last two made). An error here (it is
+    // there already, or is not ours to make) is left to the write that
+    // follows.
     async function transferDir(): Promise<void> {
-        for (const dir of [cacheDir, cacheDir + "/.transfer"]) await opts.local.mkdir({ path: dir }).catch(() => null);
+        const parts = (cacheDir + "/.transfer").split("/").filter(Boolean);
+        for (let i = 1; i <= parts.length; i++)
+            await Promise.resolve(opts.local.mkdir({ path: "/" + parts.slice(0, i).join("/") })).catch(() => null);
     }
 
     async function localOk(r: Promise<Reply>): Promise<Reply> {

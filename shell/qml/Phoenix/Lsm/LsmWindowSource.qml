@@ -1139,8 +1139,11 @@ Item {
     // memorymanager closes the hidden system UI as an idle background app,
     // and nothing started it again until a reboot, so no dashboard or
     // download notice showed). The life event "stop" (or "close") of a boot
-    // app starts it again after bootAppRestartMs, at most once per
-    // bootAppRestartGapMs, so a device short of memory is not kept busy.
+    // app starts it again after bootAppRestartMs, then at most once per
+    // bootAppRestartGapMs, so a device short of memory is not kept busy. A
+    // start that is closed again at once (Revision 37: still under pressure,
+    // memorymanager closed it before it was up) is tried again when the gap
+    // has passed, not dropped.
     property int bootAppRestartMs: 5000
     property int bootAppRestartGapMs: 60000
     property var _bootAppRestarted: ({})
@@ -1150,11 +1153,15 @@ Item {
             return;
         if (r.event !== "stop" && r.event !== "close")
             return;
-        var last = _bootAppRestarted[r.appId] || 0;
-        if (Date.now() - last < bootAppRestartGapMs || _bootAppsDue.indexOf(r.appId) >= 0)
+        if (_bootAppsDue.indexOf(r.appId) >= 0)
             return;
         _bootAppsDue.push(r.appId);
-        bootAppTimer.restart();
+        var since = Date.now() - (_bootAppRestarted[r.appId] || 0);
+        var wait = Math.max(bootAppRestartMs, bootAppRestartGapMs - since);
+        if (!bootAppTimer.running || wait < bootAppTimer.interval) {
+            bootAppTimer.interval = wait;
+            bootAppTimer.restart();
+        }
     }
     function restartDueBootApps() {
         var due = _bootAppsDue;
@@ -1166,7 +1173,7 @@ Item {
     }
     Timer {
         id: bootAppTimer
-        interval: source.bootAppRestartMs
+        interval: 5000
         repeat: false
         onTriggered: source.restartDueBootApps()
     }
