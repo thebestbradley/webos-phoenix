@@ -18,6 +18,9 @@ const THREADS: ChatThread[] = [
     { _id: "t2", displayName: "Lena Okafor", replyAddress: "(650) 555-0102", replyService: "sms", summary: "Call me", timestamp: 2 },
 ] as ChatThread[];
 
+// The conversations the hooks give (a test may take one away, as a removed account's go).
+const live = vi.hoisted(() => ({ threads: null as unknown }));
+
 const luna = vi.hoisted(() => ({
     launch: vi.fn(() => Promise.resolve({})),
     deleteThread: vi.fn(() => Promise.resolve()),
@@ -25,7 +28,7 @@ const luna = vi.hoisted(() => ({
 
 vi.mock("./lib/hooks", () => ({
     usePeople: () => [],
-    useThreads: () => THREADS,
+    useThreads: () => live.threads ?? THREADS,
     useBuddies: () => [],
     useImAccounts: () => [],
     useMessages: () => [],
@@ -51,7 +54,7 @@ const row = (id: string) => screen.getAllByTestId("thread-row").find((r) => r.da
 const title = async () => (await screen.findByTestId("thread-title")).textContent;
 
 describe("Open in New Card", () => {
-    beforeEach(() => { luna.launch.mockClear(); luna.deleteThread.mockClear(); launchWith(null); });
+    beforeEach(() => { luna.launch.mockClear(); luna.deleteThread.mockClear(); launchWith(null); live.threads = null; });
     afterEach(() => launchWith(null));
 
     it("opens a conversation in a new card from its menu (right-click or held)", () => {
@@ -111,5 +114,27 @@ describe("Open in New Card", () => {
         act(() => { document.dispatchEvent(new Event("phoenixAppMenu")); });
         fireEvent.click(screen.getByText("Open in New Card"));
         expect(luna.launch).toHaveBeenCalledWith("org.webosphoenix.messaging", { threadId: "t1" }, { newCard: true });
+    });
+
+    // An account removed in Accounts takes its conversations with it
+    // (seen in phoenix-sim: Messaging stayed on Bluesky's, a blank header
+    // with an SMS field under it): the open one goes back to the list.
+    it("goes back to the list when the open conversation is deleted elsewhere", async () => {
+        const { rerender } = render(<App />);
+        fireEvent.click(row("t1").querySelector("[data-testid=thread-summary]") ?? row("t1"));
+        expect(await title()).toContain("Ada Palmer");
+        live.threads = THREADS.filter((t) => t._id !== "t1");
+        rerender(<App />);
+        expect(screen.queryByTestId("thread-title")).toBeNull();
+        expect(row("t2")).toBeTruthy();
+    });
+
+    it("keeps a conversation open that the list does not have yet", async () => {
+        // A message just sent makes its conversation (Compose's onSent), or a
+        // notification names one, before the list's query has it: not gone.
+        live.threads = THREADS.filter((t) => t._id !== "t1");
+        launchWith({ threadId: "t1" });
+        render(<App />);
+        expect(await title()).toContain("Ada Palmer");
     });
 });
