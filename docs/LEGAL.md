@@ -460,6 +460,8 @@ out of the box, as on Ubuntu and Debian. The rules that follow from it:
    package's licence against an allow-list of licences that permit
    redistribution and fails otherwise (`phoenix-firmware-policy.bbclass`,
    `PHOENIX_FIRMWARE_LICENSES`); adding a licence to it needs a note here.
+   Licence packages (`linux-firmware-*-license`) hold only licence text and
+   are not checked; their files are listed with the firmware that needs them.
 3. **The licences can be read on the device**: Settings > Device Info > Open
    source licenses lists each firmware package with its licence and shows
    the licence files (`/usr/share/phoenix/firmware/licences.json`, written

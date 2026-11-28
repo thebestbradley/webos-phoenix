@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { call, subscribe } from "./bridge";
-import { apps, devMode, shownApps } from "./services";
+import { appPicker, apps, devMode, shownApps } from "./services";
 
 const REPO = resolve(__dirname, "../../../..");
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
@@ -82,16 +82,16 @@ describe("developer apps", () => {
     });
 });
 
-describe("the apps a list to pick from offers (apps.shown)", () => {
+describe("the apps a list to pick from offers (appPicker.list)", () => {
     it("leaves out the hidden apps, and the developer apps until Developer Mode is on", async () => {
-        expect(await devMode.get()).toBe(false);
-        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
+        expect(await appPicker.developerMode()).toBe(false);
+        expect((await appPicker.list()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
         await devMode.set(true);
-        expect(await devMode.get()).toBe(true);
-        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks", "org.webosphoenix.terminal",
+        expect(await appPicker.developerMode()).toBe(true);
+        expect((await appPicker.list()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks", "org.webosphoenix.terminal",
             "org.webosphoenix.notificationlab"]);
         await devMode.set(false);
-        expect((await apps.shown()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
+        expect((await appPicker.list()).map((a) => a.id)).toEqual(["org.webosphoenix.tasks"]);
         // apps.list() still names them all (an app's title by its id).
         expect((await apps.list()).map((a) => a.id)).toContain("org.webosphoenix.notificationlab");
     });

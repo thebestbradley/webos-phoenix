@@ -3161,9 +3161,11 @@ Developer Mode"), and a release image follows it too:
   Type, the Assistant) and `listLaunchPoints` (the Assistant's apps) leave
   the developer apps out while it is off (`services/appmanager`), and an
   app's list to pick an app from (Settings > Clipboard's apps) uses
-  `apps.shown()` (`@phoenix/luna`), which leaves out the hidden apps and,
-  while Developer Mode is off, the developer apps. `apps.list()` still names
-  them all (an app's title by its id).
+  `appPicker.list()` (`@phoenix/luna`), which leaves out the hidden apps
+  and, while Developer Mode is off, the developer apps. `apps.list()` still
+  names them all (an app's title by its id). `appPicker` is an export of its
+  own, not part of `apps`, so only the apps that import it bundle the
+  Developer Mode read and need its group.
 - **Opening one by id** still works on a device (SAM's `launch`; the image
   regression suite opens Notification Lab that way); only the simulator's
   window source refuses it.

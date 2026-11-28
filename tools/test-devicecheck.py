@@ -217,12 +217,14 @@ def main():
                                     "org.example.s/m"))
     ok(got == ["example.all", "example.m"], "an exact method is callable with its wildcard's group too: %s" % got)
 
-    # The catalog connectors list their own accounts and the drives read their
-    # credentials through the accounts service's narrow groups, never the
+    # The catalog connectors list their own accounts and read each account
+    # and its credentials (the kit does for every account context: service.ts
+    # accountContext) through the accounts service's narrow groups, never the
     # whole service (phoenix.appservices.accounts can create, change and
-    # delete any account). The read-only groups hold nothing that writes; which
-    # accounts' credentials a caller may read is still each template's
-    # readPermissions (the accounts service's Utils.hasPermission).
+    # delete any account). The read-only groups hold nothing that writes;
+    # which accounts a caller may read is still each template's
+    # readPermissions (the accounts service's Utils.hasPermission, in both
+    # readCredentials and getAccountInfo).
     acct = os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "sysbus",
                         "com.palm.service.accounts.api.json")
     with open(acct, encoding="utf-8") as f:
@@ -232,8 +234,22 @@ def main():
        "phoenix.accounts.list is listAccounts and listAccountTemplates alone: %s" % acct.get("phoenix.accounts.list"))
     ok(acct.get("phoenix.accounts.read-credentials") == ["com.palm.service.accounts/readCredentials"],
        "phoenix.accounts.read-credentials is readCredentials alone: %s" % acct.get("phoenix.accounts.read-credentials"))
-    lists = {"bluesky": [], "deltachat": [], "matrix": [], "slack": [], "xmpp": [],
-             "drives": ["phoenix.accounts.read-credentials"]}
+    ok(acct.get("phoenix.accounts.info") == ["com.palm.service.accounts/getAccountInfo"],
+       "phoenix.accounts.info is getAccountInfo alone: %s" % acct.get("phoenix.accounts.info"))
+    # The apps' picker of their own accounts (the kit's compose page; rule
+    # C19 lets a third party's app hold it): listMyAccounts alone, which
+    # answers only the accounts the caller may read, and the service's
+    # services.json (Phoenix's overlay) has the method.
+    ok(acct.get("phoenix.accounts.mine") == ["com.palm.service.accounts/listMyAccounts"],
+       "phoenix.accounts.mine is listMyAccounts alone: %s" % acct.get("phoenix.accounts.mine"))
+    with open(os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "sysbus",
+                           "com.palm.service.accounts.groups.json"), encoding="utf-8") as f:
+        ok(json.load(f).get("phoenix.accounts.mine") == ["dev"], "phoenix.accounts.mine's trust is dev, like the other read groups")
+    with open(os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "services.json"), encoding="utf-8") as f:
+        ok("listMyAccounts" in [c["name"] for c in json.load(f)["services"][0]["commands"]],
+           "the accounts service's services.json (compat overlay) has listMyAccounts")
+    reads = {"phoenix.accounts.info", "phoenix.accounts.read-credentials"}
+    lists = {"bluesky", "deltachat", "drives", "matrix", "slack", "xmpp"}
     for name in sorted(os.listdir(os.path.join(REPO, "apps", "connectors"))):
         perm = os.path.join(REPO, "apps", "connectors", name, "service", "sysbus",
                             "org.webosphoenix.service.%s.perm.json" % name)
@@ -241,10 +257,60 @@ def main():
             continue
         with open(perm, encoding="utf-8") as f:
             groups = set(json.load(f).get("org.webosphoenix.service." + name) or [])
-        want = {"phoenix.accounts.list"} | set(lists[name]) if name in lists else set()
-        has = groups & {"phoenix.accounts.list", "phoenix.accounts.read-credentials", "phoenix.appservices.accounts"}
+        want = reads | ({"phoenix.accounts.list"} if name in lists else set())
+        has = groups & {"phoenix.accounts.list", "phoenix.accounts.info", "phoenix.accounts.read-credentials",
+                        "phoenix.appservices.accounts"}
         ok(has == want, "the %s connector's service holds the accounts groups %s: %s"
-           % (name, ", ".join(sorted(want)) or "none", ", ".join(sorted(has)) or "none"))
+           % (name, ", ".join(sorted(want)), ", ".join(sorted(has)) or "none"))
+
+    # check-luna charges the connector kit's calls (one shared library, which
+    # no service's own folder holds) to each service that runs on it, and
+    # synckit's bus helpers to DAV, which uses them alone; every literal call
+    # in the kit is in its table (no kit-call finding).
+    found = luna.check(REPO)
+    ids = list(found.items)
+    ok(not [i for i in ids if ":kit-call:" in i], "check-luna's KIT_CALLS names every call in the kit: %s"
+       % [i for i in ids if ":kit-call:" in i])
+    kit = luna.kit_calls(REPO)
+    cl = {c.name: c for c in luna.clients(REPO, luna.load_phoenix(REPO)[1]) if c.kind == "service"}
+    kit_users = sorted(n for n, c in cl.items() if luna.kit_charges(c, kit))
+    for name in ["org.webosphoenix.service." + n for n in ("xmpp", "deltachat", "bluesky", "telegram", "fediverse",
+                                                           "drives", "dav")]:
+        charged = {(s, m) for s, m, _ in luna.kit_charges(cl[name], kit)} if name in cl else set()
+        ok({("com.palm.service.accounts", "getAccountInfo"), ("com.palm.service.accounts", "readCredentials")} <= charged,
+           "check-luna charges %s with the kit's getAccountInfo and readCredentials" % name)
+        ok(reads <= cl[name].groups if name in cl else False,
+           "%s holds phoenix.accounts.info and phoenix.accounts.read-credentials" % name)
+        ok("phoenix.appservices.accounts" not in (cl[name].groups if name in cl else set()),
+           "%s does not hold the whole accounts service" % name)
+    ok("org.webosphoenix.service.files" not in kit_users or
+       {(s, m) for s, m, _ in luna.kit_charges(cl["org.webosphoenix.service.files"], kit)} <=
+       {("com.palm.service.accounts", "listAccounts"), ("com.palm.service.accounts", "listAccountTemplates")},
+       "the Files service is charged only the drive router's calls, not a connector's")
+    ok(("org.webosphoenix.ongoing", "set") not in
+       {(s, m) for s, m, _ in luna.kit_charges(cl["org.webosphoenix.service.bluesky"], kit)},
+       "a connector without a drive is not charged the drives' transfer rows")
+    fake = luna.Client("org.example.k", "service", [], groups=set())
+    ok(luna.kit_charges(fake, kit) == [], "a service that does not run on the kit is charged nothing")
+
+    # Messaging's presence, typing and read markers on each IM transport:
+    # a group of those methods alone (not the transport's other account
+    # methods: sign-in, push, availability), defined where the service is.
+    for name, d, methods in (("xmpp", "apps/connectors/xmpp", ["chatState", "markRead", "setPresence"]),
+                             ("matrix", "apps/connectors/matrix", ["markRead", "setPresence"]),
+                             ("deltachat", "apps/connectors/deltachat", ["markRead", "setPresence"]),
+                             ("telegram", "apps/telegram", ["markRead", "setPresence"])):
+        svc = "org.webosphoenix.service." + name
+        group = "phoenix.%s.messaging" % name
+        base = os.path.join(REPO, d, "service", "sysbus", svc)
+        with open(base + ".api.json", encoding="utf-8") as f:
+            api = json.load(f)
+        with open(base + ".groups.json", encoding="utf-8") as f:
+            trust = json.load(f)
+        ok(sorted(api.get(group) or []) == [svc + "/" + m for m in methods],
+           "%s is %s alone: %s" % (group, ", ".join(methods), api.get(group)))
+        ok(trust.get(group) == ["oem"], "%s is defined for oem callers: %s" % (group, trust.get(group)))
+        ok(group not in accounts, "Accounts does not hold %s" % group)
 
     # OSE's installer checks no signature, so only the Marketplace's service
     # may reach it: it checks who publishes each package (nova install comes

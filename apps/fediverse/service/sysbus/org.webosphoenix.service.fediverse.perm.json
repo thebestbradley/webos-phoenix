@@ -1,6 +1,5 @@
 {
     "org.webosphoenix.service.fediverse": [
-        "phoenix.appservices.accounts",
         "database.operation",
         "activity.operation",
         "accounts.operation",
@@ -8,6 +7,9 @@
         "oauth.signin",
         "notification.operation",
         "messaging.operation",
+        "phoenix.accounts.list",
+        "phoenix.accounts.info",
+        "phoenix.accounts.read-credentials",
         "tempdatabase.operation"
     ]
 }

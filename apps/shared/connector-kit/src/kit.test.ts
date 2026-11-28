@@ -10,16 +10,18 @@
 // CLI's new, validate and pack.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import * as kit from "./index";
 import { conformanceChecks, runConformance, type FakeServer } from "./conformance";
-import { checkConnector, type Files } from "./tools/checks";
+import { checkConnector, THIRD_PARTY_APP_GROUPS, THIRD_PARTY_GROUPS, type Files } from "./tools/checks";
 import { readIpk, writeIpk } from "./tools/ipk";
 import { checkIpk, pack, readFolder } from "./tools/package";
 import { main } from "./tools/cli";
+import { scaffold } from "./tools/scaffold";
 import { loadCommonJs } from "./test-support";
 
 const here = __dirname;
@@ -375,6 +377,99 @@ describe("package checks (the Marketplace's cases)", () => {
         });
     }
 
+    // C18: Phoenix's own connectors hold what their calls need (check-luna,
+    // test-devicecheck); the same files under a developer's id claim groups
+    // a third party may not (other connectors' and Accounts' narrow ones),
+    // and their un-namespaced groups would join another package's.
+    for (const dir of PAGES) {
+        it("Phoenix's own " + dir + " keeps its groups; as a third party's they are refused (C18)", () => {
+            const files = readFolder(join(REPO, dir));
+            expect(checkConnector(files, { namespaces: ["org.webosphoenix", "com.webosphoenix"] }).errors.filter((e) => /^C18 /.test(e))).toEqual([]);
+            const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8"));
+            const theirs = Object.assign({}, files, { "appinfo.json": new Uint8Array(Buffer.from(JSON.stringify(Object.assign({}, info, { id: "org.example.copy" })))) });
+            const refused = checkConnector(theirs, { namespaces: ["org.webosphoenix", "com.webosphoenix", "org.example"] }).errors.filter((e) => /^C18 /.test(e));
+            expect(refused.some((e) => /may not claim the group phoenix\.accounts\.list|is not in the namespace/.test(e))).toBe(true);
+        });
+    }
+
+    it("C18 names the refused group and what a third party may claim", () => {
+        const r = checkConnector(caseFiles(cases.base, { "service/sysbus/org.example.service.foo.perm.json": { "org.example.service.foo": ["database.operation", "phoenix.telegram.signin"] } }));
+        expect(r.errors).toEqual(["C18 org.example.service.foo may not claim the group phoenix.telegram.signin: a third-party connector claims only its own groups " +
+            "(its api.json's, named in org.example) and " + THIRD_PARTY_GROUPS.join(", ")]);
+    });
+
+    // C19: the groups THIRD_PARTY_APP_GROUPS lets a third party's app name are
+    // exactly those of the compose page's calls (besides its own share), in
+    // the api files the image installs.
+    it("C19's groups are what the compose page calls, each its method alone", () => {
+        const page = readFileSync(join(here, "..", "share-page", "compose.js"), "utf8");
+        const calls = Array.from(new Set(Array.from(page.matchAll(/"luna:\/\/([\w.]+)\/(\w+)"/g), (m) => m[1] + "/" + m[2]))).sort();
+        expect(calls).toEqual(["com.palm.applicationManager/open", "com.palm.service.accounts/listMyAccounts"]);
+        expect(page).toMatch(/"luna:\/\/" \+ target\.service \+ "\/share"/);
+        const api = Object.assign({},
+            JSON.parse(readFileSync(join(REPO, "compat", "app-services", "com.palm.service.accounts", "sysbus", "com.palm.service.accounts.api.json"), "utf8")),
+            JSON.parse(readFileSync(join(REPO, "services", "appmanager", "sysbus", "com.palm.applicationManager.api.json"), "utf8")));
+        expect(THIRD_PARTY_APP_GROUPS.map((g) => api[g])).toEqual([["com.palm.service.accounts/listMyAccounts"], ["com.palm.applicationManager/open"]]);
+        // Phoenix's own share connectors carry the same page and ask for its account group.
+        for (const dir of ["apps/connectors/bluesky", "apps/connectors/linkedin", "apps/connectors/todoist"]) {
+            expect(readFileSync(join(REPO, dir, "share", "compose.js"), "utf8")).toBe(page);
+            expect(JSON.parse(readFileSync(join(REPO, dir, "appinfo.json"), "utf8")).requiredPermissions).toContain("phoenix.accounts.mine");
+        }
+    });
+
+    it("C19 names what a third party's app may ask for", () => {
+        const r = checkConnector(caseFiles(cases.base, { "appinfo.json": Object.assign({}, cases.base["appinfo.json"], { requiredPermissions: ["phoenix.accounts.mine", "accounts.transport"] }) }));
+        expect(r.errors).toEqual(["C19 appinfo.json requiredPermissions may not name accounts.transport: a third-party connector's app names only its own groups " +
+            "(its api.json's, named in org.example) and " + THIRD_PARTY_APP_GROUPS.join(", ")]);
+    });
+
+    it("C20: Phoenix's own connectors' names pass as Phoenix's; as a third party's they are refused", () => {
+        for (const dir of PAGES) {
+            const files = readFolder(join(REPO, dir));
+            expect(checkConnector(files, { namespaces: ["org.webosphoenix", "com.webosphoenix"] }).errors.filter((e) => /^C20 /.test(e))).toEqual([]);
+            const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8"));
+            const theirs = Object.assign({}, files, { "appinfo.json": new Uint8Array(Buffer.from(JSON.stringify(Object.assign({}, info, { id: "org.example.copy" })))) });
+            const refused = checkConnector(theirs, { namespaces: ["org.example"] }).errors.filter((e) => /^C20 /.test(e));
+            expect(refused.some((e) => /^C20 the service org\.webosphoenix\.service\.[\w.]+ is in org\.webosphoenix/.test(e))).toBe(true);
+        }
+        // The scaffold's files are a third party's as they should be.
+        const w = scaffold("org.example.wall", "CONTACTS", { share: true });
+        const files: Files = {};
+        Object.keys(w.files).forEach((p) => { files[p] = new Uint8Array(Buffer.from(w.files[p])); });
+        expect(checkConnector(files).errors.filter((e) => /^C(19|20) /.test(e))).toEqual([]);
+    });
+
+    // The accounts service's listMyAccounts on a device (compat/app-services
+    // handlers/list-my-accounts.js) with the service's own utils.js: the
+    // accounts the caller may read (Utils.hasPermission, as getAccountInfo),
+    // Accounts every one, a template without readPermissions no one else.
+    const ORIGINAL = join(REPO, "third_party", "app-services", "com.palm.service.accounts");
+    it.skipIf(!existsSync(join(ORIGINAL, "utils.js")))("listMyAccounts answers only the accounts the caller may read (needs third_party)", () => {
+        const accounts = [
+            { _id: "a1", templateId: "org.example.wall", readPermissions: ["org.example.service.wall", "org.example.wall"] },
+            { _id: "a2", templateId: "com.webosphoenix.xmpp", readPermissions: ["org.webosphoenix.service.xmpp", "org.webosphoenix.messaging"] },
+            { _id: "a3", templateId: "org.example.globbed", readPermissions: ["org.example.*"] },
+            { _id: "a4", templateId: "org.example.none" }];
+        const ctx: any = { console: { log: () => {} }, require: () => ({}),
+            ListAccountsCommandAssistant: function (this: any) {
+                this.run = function (future: any) { future.result = { results: accounts.map((a) => Object.assign({}, a)) }; };
+            } };
+        runInNewContext(["publicwhitelist.js", "utils.js"].map((f) => readFileSync(join(ORIGINAL, f), "utf8")).join("\n") +
+            "\n" + readFileSync(join(REPO, "compat", "app-services", "com.palm.service.accounts", "handlers", "list-my-accounts.js"), "utf8") +
+            "\nthis.ListMyAccountsCommandAssistant = ListMyAccountsCommandAssistant;", ctx);
+        const ask = (caller: string) => {
+            const future: any = { result: undefined, then(fn: () => void) { fn(); } };
+            const message = { applicationID: () => caller, senderServiceName: () => "" };
+            new ctx.ListMyAccountsCommandAssistant().run.call({ controller: { args: {}, message, service: {} } }, future);
+            return future.result.results.map((a: any) => a._id);
+        };
+        expect(ask("org.example.wall")).toEqual(["a1", "a3"]);
+        expect(ask("org.example.wall 1234")).toEqual(["a1", "a3"]);      // the "[appid processid]" form (publicwhitelist.js)
+        expect(ask("org.webosphoenix.messaging")).toEqual(["a2"]);
+        expect(ask("org.other.app")).toEqual([]);
+        expect(ask("com.palm.app.accounts")).toEqual(["a1", "a2", "a3", "a4"]);
+    });
+
     it("the News Feed example (a third party's) uses the standard sign-in", () => {
         const r = checkConnector(readFolder(join(REPO, "apps", "shared", "connector-kit", "examples", "feeds")));
         expect(r.errors).toEqual([]);
@@ -422,7 +517,8 @@ describe("phoenix-connector", () => {
             const info = () => JSON.parse(readFileSync(join(w, "appinfo.json"), "utf8"));
             expect(info().phoenix.shareTargets).toEqual([expect.objectContaining({ types: ["text/plain", "text/uri-list", "image/*"], label: "wall",
                 connector: expect.objectContaining({ templateId: "org.example.wall", service: "org.example.service.wall" }) })]);
-            expect(info().requiredPermissions).toContain("wall.share");
+            // C19: its own share group and the compose page's two, not the connector protocol's.
+            expect(info().requiredPermissions).toEqual(["org.example.service.wall.share", "phoenix.accounts.mine", "phoenix.appmanager.open"]);
             expect(readFileSync(join(w, "index.html"), "utf8")).toMatch(/share\/compose\.js/);
             expect(readFileSync(join(w, "share", "compose.js"), "utf8")).toMatch(/\/share", \{ accountId/);
             expect(await main(["validate", w], io)).toBe(0);

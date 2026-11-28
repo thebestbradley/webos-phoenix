@@ -645,7 +645,7 @@ async function samplePackages(ipk, opts) {
     const connector = await ipk.write({
         control: { Package: conId, Version: "0.1.0", Architecture: "all", Description: "Mock Feeds" },
         files: [
-            { path: dir + "appinfo.json", data: JSON.stringify({ id: conId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: "Mock Feeds", icon: "icon.png", visible: false }) },
+            { path: dir + "appinfo.json", data: JSON.stringify({ id: conId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: "Mock Feeds", icon: "icon.png", visible: false, requiredPermissions: [] }) },
             { path: dir + "index.html", data: "<!doctype html><title>Mock Feeds</title>" },
             { path: dir + "icon.png", data: new Uint8Array(icon) },
             { path: dir + "service/package.json", data: JSON.stringify({ name: conId + ".service", version: "0.1.0", main: "service.js" }) },

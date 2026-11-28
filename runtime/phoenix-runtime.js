@@ -15213,6 +15213,29 @@
         accounts["/listAccounts"] = listWithDav("listAccounts");
         accounts["/listAccountsPublic"] = listWithDav("listAccountsPublic");
 
+        // listMyAccounts (Phoenix's addition, compat/app-services/
+        // com.palm.service.accounts/handlers/list-my-accounts.js): listAccounts
+        // less the accounts the caller may not read, by the check the
+        // service's getAccountInfo and readCredentials make (utils.js
+        // hasPermission): the caller against the template's readPermissions
+        // (globs: * and ?), Accounts and the service itself reading all; no
+        // readPermissions, no one else.
+        function mayRead(account, caller) {
+            caller = String(caller || "").split(" ")[0];
+            if (caller === "com.palm.app.accounts" || caller === "com.palm.service.accounts") return true;
+            return (account.readPermissions || []).some(function (glob) {
+                var re = "^" + String(glob).replace(/[.\\+^$|(){}\[\]]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+                return new RegExp(re).test(caller);
+            });
+        }
+        accounts["/listMyAccounts"] = function (p, reply, ctx) {
+            var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            accounts["/listAccounts"](p, function (r) {
+                if (!r.returnValue) return reply(r);
+                reply(ok({ results: (r.results || []).filter(function (a) { return mayRead(a, caller); }) }));
+            }, ctx);
+        };
+
         accounts["/getAccountInfo"] = function (p, reply, ctx) {
             var a = getAccount(p.accountId);
             if (a && isDav(a.templateId)) return reply(ok({ result: annotate(a) }));

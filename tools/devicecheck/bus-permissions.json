@@ -442,11 +442,17 @@
     "*": [
      "phoenix.appservices.accounts"
     ],
+    "getAccountInfo": [
+     "phoenix.accounts.info"
+    ],
     "listAccountTemplates": [
      "phoenix.accounts.list"
     ],
     "listAccounts": [
      "phoenix.accounts.list"
+    ],
+    "listMyAccounts": [
+     "phoenix.accounts.mine"
     ],
     "readCredentials": [
      "phoenix.accounts.read-credentials"
@@ -3947,7 +3953,8 @@
      "accounts.transport"
     ],
     "markRead": [
-     "deltachat.account"
+     "deltachat.account",
+     "phoenix.deltachat.messaging"
     ],
     "onCreate": [
      "accounts.transport"
@@ -3965,7 +3972,8 @@
      "accounts.transport"
     ],
     "setPresence": [
-     "deltachat.account"
+     "deltachat.account",
+     "phoenix.deltachat.messaging"
     ],
     "sync": [
      "accounts.transport"
@@ -4216,7 +4224,8 @@
      "accounts.transport"
     ],
     "markRead": [
-     "matrix.account"
+     "matrix.account",
+     "phoenix.matrix.messaging"
     ],
     "onCreate": [
      "accounts.transport"
@@ -4234,7 +4243,8 @@
      "accounts.transport"
     ],
     "setPresence": [
-     "matrix.account"
+     "matrix.account",
+     "phoenix.matrix.messaging"
     ],
     "signIn": [
      "matrix.account",
@@ -4417,6 +4427,7 @@
      "accounts.transport"
     ],
     "markRead": [
+     "phoenix.telegram.messaging",
      "telegram.account"
     ],
     "onCreate": [
@@ -4435,6 +4446,7 @@
      "accounts.transport"
     ],
     "setPresence": [
+     "phoenix.telegram.messaging",
      "telegram.account"
     ],
     "signIn": [
@@ -4484,6 +4496,7 @@
   "org.webosphoenix.service.xmpp": {
    "methods": {
     "chatState": [
+     "phoenix.xmpp.messaging",
      "xmpp.account"
     ],
     "checkCredentials": [
@@ -4500,6 +4513,7 @@
      "xmpp.account"
     ],
     "markRead": [
+     "phoenix.xmpp.messaging",
      "xmpp.account"
     ],
     "onCreate": [
@@ -4518,6 +4532,7 @@
      "accounts.transport"
     ],
     "setPresence": [
+     "phoenix.xmpp.messaging",
      "xmpp.account"
     ],
     "sync": [
@@ -4929,8 +4944,8 @@
    "groups": [
     "accounts.transport",
     "fediverse.account",
+    "phoenix.accounts.mine",
     "phoenix.appmanager.launch",
-    "phoenix.appservices.accounts",
     "service.communication",
     "servicebus.communication"
    ]
@@ -5766,7 +5781,9 @@
     "messaging.operation",
     "notification.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5788,6 +5805,8 @@
     "accounts.transport",
     "activity.operation",
     "database.operation",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5808,7 +5827,9 @@
     "database.operation",
     "messaging.operation",
     "notification.operation",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5829,7 +5850,9 @@
     "accounts.transport",
     "activity.operation",
     "database.operation",
+    "notification.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
     "phoenix.accounts.read-credentials",
     "phoenix.ongoing",
@@ -5857,7 +5880,9 @@
     "messaging.operation",
     "notification.operation",
     "oauth.signin",
-    "phoenix.appservices.accounts",
+    "phoenix.accounts.info",
+    "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5880,6 +5905,8 @@
     "activity.operation",
     "database.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5923,6 +5950,8 @@
     "activity.operation",
     "database.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5945,7 +5974,9 @@
     "messaging.operation",
     "notification.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -5968,6 +5999,8 @@
     "activity.operation",
     "database.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -6026,7 +6059,9 @@
     "messaging.operation",
     "notification.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -6050,7 +6085,9 @@
     "database.operation",
     "messaging.operation",
     "notification.operation",
-    "phoenix.appservices.accounts",
+    "phoenix.accounts.info",
+    "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -6072,6 +6109,8 @@
     "activity.operation",
     "database.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -6093,7 +6132,9 @@
     "database.operation",
     "messaging.operation",
     "notification.operation",
+    "phoenix.accounts.info",
     "phoenix.accounts.list",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"
@@ -6115,6 +6156,8 @@
     "activity.operation",
     "database.operation",
     "oauth.signin",
+    "phoenix.accounts.info",
+    "phoenix.accounts.read-credentials",
     "service.communication",
     "servicebus.communication",
     "tempdatabase.operation"

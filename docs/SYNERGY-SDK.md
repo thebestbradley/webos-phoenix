@@ -63,6 +63,58 @@ org.example.feeds/                      hidden app ("phoenix": {"hidden": true})
     test/fixture.js                     the conformance suite's fixture
 ```
 
+The `.perm.json` holds the groups the kit's own calls need, besides your
+code's: `database.operation`, `activity.operation`, and the accounts
+service's two read groups, `phoenix.accounts.info` (`getAccountInfo`) and
+`phoenix.accounts.read-credentials` (`readCredentials`), which the kit calls
+for every account it works on (`ctx.account`, `ctx.credentials`). Without
+them `ctx.credentials` is empty on a device. Which accounts the service may
+read is the template's `readPermissions`, checked per caller, so list the
+service's own name there. Never ask for the whole accounts service
+(`phoenix.appservices.accounts`, which can create, change and delete any
+account). `tools/check-luna.py` charges the kit's calls to each service that
+runs on it (`KIT_CALLS` in `tools/devicecheck/luna.py`).
+
+Your `.perm.json` may claim only your own groups and the few the kit's
+features need (rule C18, `THIRD_PARTY_GROUPS` in the kit's `checks.ts`):
+`database.operation`, `tempdatabase.operation`, `activity.operation`,
+`accounts.transport`, `phoenix.accounts.info`,
+`phoenix.accounts.read-credentials`, `oauth.signin` (`ctx.oauth`, section 6)
+and `notification.operation` (`ctx.notify`). Each service keeps you to your
+own data there: your kinds' permissions, your templates' `readPermissions`,
+the OAuth keys you made. A group of your own is one your `.api.json`
+defines, named in your namespace (`org.example.service.feeds.share`), with
+only your service's methods: luna-hub's group names are global, and a group
+named like another package's would join it. Your `.groups.json` sets the
+trust of your own groups only; `accounts.transport` and
+`phoenix.connector.share`, which every connector adds its methods to, stay
+`oem`. Any other group is refused by name, among them another connector's
+(`phoenix.<name>.signin`, `phoenix.<name>.messaging`, `<name>.account`), the
+whole accounts service, `phoenix.accounts.list` (it answers every account)
+and groups no service defines.
+
+Your **app** asks for groups too, in `appinfo.json`'s `requiredPermissions`
+(rule C19, `THIRD_PARTY_APP_GROUPS`): webOS OSE's installer copies that list
+into the app's permissions as it is, so it is what the app may call. Always
+write the list (`[]` is fine: without it the installer gives the app the
+`public` group). The kit's pages need at most your own share group and
+`phoenix.accounts.mine` and `phoenix.appmanager.open` (the compose page,
+section 7); a connector without sharing needs none. Not
+`accounts.transport`: Accounts calls your service, your app never does.
+
+Your names stay yours (rule C20): your app id, service, templates and own
+kinds are in your namespace and never in one the system's names use
+(`com.palm`, `com.webos`, `com.lge`, `org.webosports`, `org.webosphoenix`,
+`com.webosphoenix`). The bus keeps no names for the system, and the accounts
+service tells its callers by their ids. Your `sysbus/` files are your
+service's (`<service>.service`, `.role.json`, `.api.json`, `.perm.json`,
+`.groups.json`, `.manifest.json`), as `phoenix-connector new` writes them:
+the `.service` file names your service and runs
+`/usr/bin/run-js-service -n /usr/palm/services/<service>`, the role is a
+`regular` one for your service (no `exeName`, no `trustLevel` above `dev`),
+and the manifest's `id` is your service, with only your files (the bus keeps
+one manifest per id, the highest version's).
+
 The whole connector (`service/connector.js`, shortened):
 
 ```js
@@ -495,9 +547,11 @@ luna://<service>/share {accountId, content: {title?, text?, url?, files?: [{path
     or {returnValue: false, errorCode, errorText, retryable, retryAt?}
 ```
 
-List it in your service's `.api.json`, in a group your app's
-`requiredPermissions` names (the Fediverse's `fediverse.account`), so your
-compose page may call it (C15).
+List it in your service's `.api.json`, in a group of your own that your
+app's `requiredPermissions` names (`phoenix-connector new --share` writes
+`<service>.share`, in your namespace as rule C18 asks), so your compose page
+may call it (C15). The app's other two groups are the compose page's
+(C19): `phoenix.accounts.mine` and `phoenix.appmanager.open`.
 
 ### The compose page
 
@@ -519,9 +573,17 @@ fifth picture, a video the service does not take). Post calls `share`;
 after an error it keeps the text and offers **Try Again** with the same
 key. Launched without a share it offers to add an account.
 
+It calls, and your app asks for (C19):
+
+| Call | Group |
+| --- | --- |
+| `luna://<service>/share` | your own share group (`<service>.share`) |
+| `com.palm.service.accounts/listMyAccounts {templateId}` | `phoenix.accounts.mine`: the accounts your app may read, the template's `readPermissions` (list your app's id there, as `new` does), checked as `getAccountInfo` checks them; `listAccounts` would answer every account on the device, so a third party's app may not ask for it |
+| `com.palm.applicationManager/open` | `phoenix.appmanager.open`: Accounts with your template (`{id: "com.palm.app.accounts", params: {templateId}}`) and the posted link (`{target}`); not `launch`'s group, which also adds launch points and handlers |
+
 **To replace it**, write your own main page: read the launch parameters
 (`PalmSystem.launchParams`), list your accounts
-(`com.palm.service.accounts/listAccounts {templateId}`, pre-selecting
+(`com.palm.service.accounts/listMyAccounts {templateId}`, pre-selecting
 `accountId`), and call your `share` method with one `idempotencyKey` per
 share. The Fediverse's page (`apps/fediverse/index.html`, `compose.js`)
 does, with Mastodon's character count and its four visibilities.
@@ -658,6 +720,9 @@ starts with its rule:
 | C15 | sharing reaches the service: `<service>/share` in an `.api.json` group the app's `requiredPermissions` names; the app's main page (the compose page) in the package |
 | C16 | the template's `signUp`: `https://` addresses only (`url`, `servers[].url`), each server with a name |
 | C17 | a sign-in page of its own (`validator.customUI`) only in Phoenix's own connectors (an `org.webosphoenix.*` app checked with Phoenix's namespaces, which the catalogs give only to Phoenix's uploads): the page would run with Accounts' permissions; use the standard sign-in (section 2) |
+| C18 | a third-party connector's groups: the `.perm.json` names only your service and claims only your own groups and `database.operation`, `tempdatabase.operation`, `activity.operation`, `accounts.transport`, `phoenix.accounts.info`, `phoenix.accounts.read-credentials`, `oauth.signin`, `notification.operation` (section 2); your own groups are your `.api.json`'s, named in your namespace, with only your service's methods (`accounts.transport` and `phoenix.connector.share` are the protocol's); the `.groups.json` sets your own groups' trust and leaves the protocol's `oem`. Phoenix's own connectors are checked against their calls instead (`tools/check-luna.py`) |
+| C19 | a third-party connector's app's groups: `appinfo.json` `requiredPermissions` is a list (`[]` is fine) of your own groups (C18's) and `phoenix.accounts.mine`, `phoenix.appmanager.open`, what the kit's compose page calls (section 7); the installer copies the list into the app's permissions as it is |
+| C20 | a third-party connector's names: the app id in your namespace; the app id, service, templates and own kinds outside `com.palm`, `com.webos`, `com.lge`, `org.webosports`, `org.webosphoenix`, `com.webosphoenix`; `sysbus/` files only your service's; the `.service` file names your service and runs `/usr/bin/run-js-service -n /usr/palm/services/<service>`; a `regular` role for your service (no `exeName`, no `trustLevel` above `dev`); the manifest's `id` your service, listing only your files (section 2) |
 
 `pack` writes `appinfo.json`'s share target from the definition (section
 7), validates, then writes the `.ipk` the Marketplace takes: every

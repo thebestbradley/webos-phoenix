@@ -10,5 +10,8 @@
     ],
     "phoenix.matrix.signin": [
         "oem"
+    ],
+    "phoenix.matrix.messaging": [
+        "oem"
     ]
 }

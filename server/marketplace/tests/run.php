@@ -368,13 +368,13 @@ $connectorFiles = [];
 foreach ($caseFiles($cases['base'], []) as $p => $v) {
     $connectorFiles["usr/palm/applications/org.example.foo/$p"] = $v;
 }
-$good = ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles);
+$good = ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles, [], ['requiredPermissions' => []]);
 $r = \Phoenix\Marketplace\Connector::checkIpk($good);
 check($r['errors'] === [] && $r['service'] === 'org.example.service.foo' && $r['templates'] === ['org.example.foo'],
       'connector .ipk: a good one passes (' . implode('; ', $r['errors']) . ')');
-$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles + ['etc/evil.conf' => 'x'], ['postinst' => "#!/bin/sh\n"]));
+$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles + ['etc/evil.conf' => 'x'], ['postinst' => "#!/bin/sh\n"], ['requiredPermissions' => []]));
 check($codes($r['errors']) === ['C13'] && count($r['errors']) === 2, 'connector .ipk: scripts and files outside the app are refused');
-$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '2.0.0', $connectorFiles, [], ['version' => '1.0.0']));
+$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '2.0.0', $connectorFiles, [], ['version' => '1.0.0', 'requiredPermissions' => []]));
 check(in_array('C13 appinfo.json and the control file must give the same version', $r['errors'], true), 'connector .ipk: control and appinfo.json agree');
 [$s] = $call('GET', '/api/apps/com.example.notes');
 check($s === 404, 'a pending app is not public');
@@ -670,7 +670,7 @@ $connector = function (string $version, ?array $meta, array $more = []) use ($tm
     if ($meta !== null) {
         $files['usr/palm/applications/org.example.foo/catalog.json'] = json_encode($meta);
     }
-    return ipk($tmp, 'org.example.foo', $version, $files, [], ['vendor' => 'Example Ltd']);
+    return ipk($tmp, 'org.example.foo', $version, $files, [], ['vendor' => 'Example Ltd', 'requiredPermissions' => []]);
 };
 [$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', null), $dev['token']);
 check($s === 400 && str_contains($r['error'], 'catalog.json'), 'a connector without catalog.json is refused, saying what it is for');

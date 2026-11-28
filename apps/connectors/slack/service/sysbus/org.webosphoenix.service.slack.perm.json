@@ -8,6 +8,8 @@
         "notification.operation",
         "messaging.operation",
         "phoenix.accounts.list",
+        "phoenix.accounts.info",
+        "phoenix.accounts.read-credentials",
         "tempdatabase.operation"
     ]
 }

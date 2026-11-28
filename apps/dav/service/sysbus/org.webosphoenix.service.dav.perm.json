@@ -1,3 +1,11 @@
 {
-    "org.webosphoenix.service.dav": ["database.operation", "activity.operation", "accounts.operation", "accounts.transport", "tempdatabase.operation"]
+    "org.webosphoenix.service.dav": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "phoenix.accounts.info",
+        "phoenix.accounts.read-credentials",
+        "tempdatabase.operation"
+    ]
 }

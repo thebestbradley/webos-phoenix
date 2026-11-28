@@ -24,6 +24,21 @@ manifest. `tools/install-rootfs.py` installs each service at
 `/usr/share/luna-service2`. Its upstart job (accounts'
 `createLocalAccount`) is not installed: OSE runs systemd.
 
+Beside `sysbus/`, a folder may hold Phoenix's additions to the service's
+code, which `tools/install-rootfs.py` lays over the original's files (later
+entries win, as `compat/rootfs` does). The accounts service has one:
+
+- `handlers/list-my-accounts.js`: `listMyAccounts {templateId?,
+  capability?}`, the accounts `listAccounts` answers less those the caller
+  may not read (the template's `readPermissions`, checked by `utils.js`
+  `hasPermission` as `getAccountInfo` checks them), for an app's picker of
+  its own accounts (group `phoenix.accounts.mine`; docs/DEVICE-AUDIT.md
+  "Names and groups on the hub").
+- `services.json` and `sources.json`: JSON, so they cannot say why they are
+  here. They are the original's, unchanged, plus `listMyAccounts`'s command
+  (`ListMyAccountsCommandAssistant`, not public) and its source, loaded
+  after `handlers/list-accounts.js`, whose assistant it runs.
+
 STATUS: written against the services' sources and OSE's recipes; not yet
 run on a device (docs/DEVICE-AUDIT.md). The groups their own calls need
 beyond db8 and the application manager are to be seen there.

@@ -301,18 +301,6 @@ export const devMode = {
     watch(cb: (on: boolean) => void, onError?: OnError): Subscription {
         return subscribe("luna://com.webos.service.devmode/getDevMode", {}, (r) => cb(r.status === "enabled" || r.enabled === true), onError);
     },
-    /**
-     * getDevMode: whether Developer Mode is on now (false when it cannot be
-     * told). Phoenix's provider answers {status, enabled}; OSE's {enabled}.
-     */
-    async get(): Promise<boolean> {
-        try {
-            const r = await call("luna://com.webos.service.devmode/getDevMode", {});
-            return r.status === "enabled" || r.enabled === true;
-        } catch {
-            return false;
-        }
-    },
     /** setDevMode {status}: Settings asks for the device passcode before turning it on. */
     set(on: boolean) {
         return call("luna://com.webos.service.devmode/setDevMode", { status: on ? "enabled" : "disabled" });
@@ -381,15 +369,6 @@ export const apps = {
         const list = (r as { apps?: { id?: string; title?: string }[] }).apps || [];
         return list.filter((a) => typeof a.id === "string").map((a) => ({ id: a.id!, title: a.title || a.id! }));
     },
-    /**
-     * The apps the launcher shows, by id and title, for a list to pick an
-     * app from: listApps less the hidden ones and, while Developer Mode is
-     * off, the developer apps (shownApps; docs/APP-RUNTIME.md "Developer apps").
-     */
-    async shown(): Promise<{ id: string; title: string }[]> {
-        const [r, developerOn] = await Promise.all([call("luna://com.webos.applicationManager/listApps", {}), devMode.get()]);
-        return shownApps(((r as { apps?: AppRecord[] }).apps) || [], developerOn);
-    },
     /** getAppInfo {id}: whether an app is installed (false when it is not). */
     async installed(id: string): Promise<boolean> {
         try {
@@ -398,5 +377,39 @@ export const apps = {
         } catch {
             return false;
         }
+    },
+};
+
+/**
+ * A list to pick an app from (Settings > Clipboard's apps): the apps the
+ * launcher shows. Kept apart from `apps` and `devMode` so only an app that
+ * imports it bundles the Developer Mode read (getDevMode, the devmode
+ * groups): nearly every app imports `apps` to launch one, and `apps.shown()`
+ * there put `devMode` (its setDevMode, and systemservice's devModeUnlocked
+ * preference) in all their bundles (phoenix-default-apps' device checker
+ * counted it in each, 28 November 2026).
+ */
+export const appPicker = {
+    /**
+     * getDevMode: whether Developer Mode is on now (false when it cannot be
+     * told). Phoenix's provider answers {status, enabled}; OSE's {enabled}.
+     */
+    async developerMode(): Promise<boolean> {
+        try {
+            const r = await call("luna://com.webos.service.devmode/getDevMode", {});
+            return r.status === "enabled" || r.enabled === true;
+        } catch {
+            return false;
+        }
+    },
+    /**
+     * The apps the launcher shows, by id and title: listApps less the hidden
+     * ones and, while Developer Mode is off, the developer apps (shownApps;
+     * docs/APP-RUNTIME.md "Developer apps"). apps.list() still names them all.
+     */
+    async list(): Promise<{ id: string; title: string }[]> {
+        const [r, developerOn] = await Promise.all([call("luna://com.webos.applicationManager/listApps", {}),
+            appPicker.developerMode()]);
+        return shownApps(((r as { apps?: AppRecord[] }).apps) || [], developerOn);
     },
 };

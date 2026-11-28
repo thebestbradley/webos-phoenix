@@ -17,6 +17,8 @@
 //     template's sign-in;
 //   - that sign-in page (Enyo 1.0) is drawn in a frame of a page without
 //     Enyo 1.0 too, as in an Accounts built on another framework;
+//   - listMyAccounts answers an app the accounts of templates whose
+//     readPermissions name it (the connector's own app), not another's;
 //   - rule C17 on the device: a sideloaded third party's template with a
 //     sign-in page of its own (validator.customUI) is not framed, Accounts
 //     says why (C17's words) and Back returns to its main view; Phoenix's
@@ -72,12 +74,14 @@ function connector() {
         templateId: "org.example.feeds", loc_name: "Example Feeds",
         icon: { loc_32x32: "images/feeds-32.png", loc_48x48: "images/feeds-48.png" },
         validator: "palm://org.example.feeds.service/checkCredentials",
+        readPermissions: ["org.example.feeds.service", "org.example.feeds"],
         capabilityProviders: [{ id: "org.example.feeds.feeds", capability: "FEEDS",
                                 implementation: "palm://org.example.feeds.service/",
                                 onCreate: "palm://org.example.feeds.service/onCreate" }]
     };
     return servers.webApp("org.example.feeds", "1.0.0", {
-        title: "Example Feeds", appinfo: { phoenix: { hidden: true } },
+        // A third party's app names what its pages call (C19): listMyAccounts.
+        title: "Example Feeds", appinfo: { phoenix: { hidden: true }, requiredPermissions: ["phoenix.accounts.mine"] },
         files: [{ path: dir + "public/accounts/org.example.feeds/org.example.feeds.json", data: JSON.stringify(template) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-32.png", data: new Uint8Array(servers.png(32, [240, 140, 0])) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-48.png", data: new Uint8Array(servers.png(48, [240, 140, 0])) }]
@@ -189,6 +193,18 @@ async function main() {
         const created = await luna(page, ACCOUNTS + "createAccount", { templateId: "org.example.feeds", username: "me@example.org",
             capabilityProviders: [{ id: "org.example.feeds.feeds" }] });
         check(created.returnValue === true, "an account of it can be created");
+        // listMyAccounts (compat/app-services handlers/list-my-accounts.js): an
+        // app's own accounts, the template's readPermissions naming it; listAccounts,
+        // a transport's, answers every account.
+        const mine = async (p) => ((await luna(p, ACCOUNTS + "listMyAccounts", { templateId: "org.example.feeds" })).results || []).map((a) => a._id);
+        const own = await context.newPage();
+        await own.goto(`${origin}/usr/palm/applications/org.example.feeds/index.html`);
+        await own.waitForFunction(() => !!window.__phoenixRuntime);
+        check(JSON.stringify(await mine(own)) === JSON.stringify([created.result._id]), "listMyAccounts: the connector's app gets its account");
+        check(JSON.stringify(await mine(page)) === "[]", "listMyAccounts: another app (Calculator) gets none of it");
+        check(((await luna(page, ACCOUNTS + "listAccounts", { templateId: "org.example.feeds" })).results || []).length === 1,
+              "listAccounts still answers every account");
+        await own.close();
         await luna(page, ACCOUNTS + "deleteAccount", { accountId: created.result && created.result._id });
 
         // ---- Accounts' "Find More ..." --------------------------------------------------------------

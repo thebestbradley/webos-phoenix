@@ -35,8 +35,8 @@
     },
     "requiredPermissions": [
         "accounts.transport",
-        "phoenix.accounts.list",
+        "todoist.account",
         "phoenix.appmanager.launch",
-        "todoist.account"
+        "phoenix.accounts.mine"
     ]
 }
