@@ -316,8 +316,8 @@ function createUpdatesService(deps) {
                 var feed = s.feeds[rs.compatible + "/" + s.channel] || {};
                 return {
                     returnValue: true, state: live.state || (ready ? "ready" : "idle"), current: current, available: available,
-                    progress: live.progress, lastChecked: s.lastChecked || null, error: live.error,
-                    autoDownload: s.autoDownload, channel: s.channel, channels: channelsOf(cfg), configured: !!(cfg && cfg.url),
+                    progress: live.progress, lastChecked: s.lastChecked || null, error: unavailable ? errorOf(unavailable) : live.error,
+                    autoDownload: s.autoDownload, channel: s.channel, channels: channelsOf(cfg), configured: !!(cfg && cfg.url) && !unavailable,
                     verified: !!feed.verified, rollout: s.waiting || null,
                     battery: r[1], minBattery: MIN_BATTERY, deferred: !!s.deferred
                 };
@@ -380,9 +380,11 @@ function createUpdatesService(deps) {
     }
 
     // A boot that did not start from one of the system's update slots (a VM
-    // started straight from the image's ext4; createRauc's NOT_AVAILABLE):
-    // every method says so at once, and nothing is scheduled (no daily
-    // check, no notices after boot), so nothing asks RAUC again.
+    // started straight from the image's ext4; createRauc's noSlot): the
+    // status says so (the running version, error NOT_AVAILABLE), every
+    // other method fails at once with NOT_AVAILABLE, and nothing is
+    // scheduled (no daily check, no notices after boot), so nothing asks
+    // RAUC anything.
     var unavailable = null;
 
     // After a restart: mark the running slot good, and say once that the
@@ -391,6 +393,10 @@ function createUpdatesService(deps) {
     function startup() {
         if (started) return started;
         started = deps.rauc.status().then(function (rs) {
+            if (rs.noSlot) {
+                unavailable = err("NOT_AVAILABLE", "System updates are not available on this boot: it did not start from one of the system's update slots");
+                return rs;
+            }
             var good = deps.rauc.markGood
                 ? deps.rauc.markGood().then(function () { return true; }, function (e) { log("mark-good: " + e.message); return false; })
                 : true;
@@ -407,6 +413,7 @@ function createUpdatesService(deps) {
                 return rs;
             });
         }).then(function (rs) {
+            if (unavailable) return log(unavailable.message);
             var s = deps.state.load() || {};
             var note = null;
             if (s.restarting) {
@@ -425,10 +432,7 @@ function createUpdatesService(deps) {
             if (note) return deps.luna.call("luna://com.webos.notification/createToast", {
                 message: note, onclick: { appId: "com.palm.app.updates", params: {} }
             }).then(null, function () {});
-        }).then(null, function (e) {
-            if (e && e.code === "NOT_AVAILABLE") unavailable = e;
-            log((unavailable ? "" : "startup: ") + e.message);
-        }).then(function () {
+        }).then(null, function (e) { log("startup: " + e.message); }).then(function () {
             if (!unavailable && deps.noticesAtBoot !== false) notices.atBoot();
         });
         return started;
@@ -717,10 +721,12 @@ function createUpdatesService(deps) {
         }).then(null, function () {});
     }
 
-    function wrap(fn) {
+    // always: the method answers on a boot without an update slot too (it
+    // asks RAUC nothing there).
+    function wrap(fn, always) {
         return function (p) {
             return startup().then(function () {
-                if (unavailable) throw unavailable;
+                if (unavailable && !always) throw unavailable;
                 return fn(p || {});
             }).then(null, function (e) {
                 var o = errorOf(e);
@@ -733,7 +739,7 @@ function createUpdatesService(deps) {
         // Palm's GetStatus: the first reply, then onReply(reply) for what
         // happens (watchPalm). An update that is ready is said again.
         GetStatus: wrap(function () {
-            ensureSchedule();
+            if (!unavailable) ensureSchedule();
             return status().then(function (st) {
                 var out = { returnValue: true };
                 if (st.state === "ready" && !st.deferred) {
@@ -744,7 +750,7 @@ function createUpdatesService(deps) {
                 }
                 return out;
             });
-        }),
+        }, true),
         watchPalm: function (onReply) {
             palmWatchers.push(onReply);
             return function () { palmWatchers = palmWatchers.filter(function (w) { return w !== onReply; }); };
@@ -753,7 +759,7 @@ function createUpdatesService(deps) {
         InstallNow: wrap(installNow),
         AlertDisplayed: wrap(function () { return { returnValue: true }; }),
 
-        getStatus: wrap(function () { ensureSchedule(); return status(); }),
+        getStatus: wrap(function () { if (!unavailable) ensureSchedule(); return status(); }, true),
         // onChange(status) after every change -> stop(). (getStatus {subscribe})
         watch: function (onChange) {
             watchers.push(onChange);
@@ -796,7 +802,7 @@ function createUpdatesService(deps) {
         }),
         scheduled: wrap(scheduled),
         charging: wrap(charging),
-        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; }),
+        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; }, true),
         checkNotices: wrap(notices.checkNotices),
         getNotices: wrap(notices.list),
         dismissNotice: wrap(function (p) { return notices.dismiss(p.id); })

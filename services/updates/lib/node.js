@@ -67,8 +67,9 @@ function bootSlot(file) {
 // booted slot there, its daemon does not start (rauc.service runs only
 // with rauc.slot=, meta-phoenix's rauc_%.bbappend), and a `rauc status`
 // would wait for D-Bus to give up on it (25 s, every call: Revision 42's
-// regression VM, 28 November 2026). Every call fails at once with
-// NOT_AVAILABLE instead.
+// regression VM, 28 November 2026). status() then gives the running
+// system's version with noSlot (no slots to update), and every other call
+// fails at once with NOT_AVAILABLE.
 function createRauc(options) {
     var command = (options && options.command) || "rauc";
     var osReleaseFile = options && options.osRelease;
@@ -84,8 +85,19 @@ function createRauc(options) {
     function cli(args) {
         return slotted().then(function () { return raucCli(command, args); });
     }
+    function running() {
+        var os = osRelease(osReleaseFile), product = productFile(productPath);
+        return { name: product.name || os.NAME || "webOS Phoenix",
+                 version: product.version || os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 };
+    }
     var raucApi = {
         status: function () {
+            if (slot === undefined) slot = bootSlot(options && options.cmdline);
+            if (!slot) {
+                var r = running();
+                return Promise.resolve({ compatible: "", name: r.name, primary: null, other: null, noSlot: true,
+                                         booted: { slot: null, version: r.version, build: r.build } });
+            }
             return cli(["status", "--output-format=json"]).then(function (out) {
                 var st = JSON.parse(out);
                 var booted = null, other = null, primary = st.boot_primary || null;
@@ -96,10 +108,10 @@ function createRauc(options) {
                         else other = name;
                     });
                 });
-                var os = osRelease(osReleaseFile), product = productFile(productPath);
+                var r = running();
                 return {
-                    compatible: st.compatible, name: product.name || os.NAME || "webOS Phoenix", primary: primary, other: other,
-                    booted: { slot: booted, version: product.version || os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 }
+                    compatible: st.compatible, name: r.name, primary: primary, other: other,
+                    booted: { slot: booted, version: r.version, build: r.build }
                 };
             });
         },

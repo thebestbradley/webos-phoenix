@@ -593,7 +593,12 @@ describe("signed feeds, rollout, resume and the boot check", () => {
         fs.writeFileSync(path.join(dir, "cmdline"), "root=/dev/vda rw rootwait console=ttyAMA0\n");
         const svc = service();
         const t0 = Date.now();
-        for (const m of ["getStatus", "GetStatus", "check", "download", "installNow", "scheduled", "checkNotices"]) {
+        // The status: the running version, and why there are no updates.
+        expect(await svc.getStatus({})).toMatchObject({
+            returnValue: true, state: "idle", current: { version: "1.0.0", build: 100 }, available: null, configured: false,
+            error: { errorCode: "NOT_AVAILABLE", errorText: expect.stringContaining("not available on this boot") } });
+        expect(await svc.GetStatus({})).toEqual({ returnValue: true });
+        for (const m of ["check", "download", "installNow", "InstallNow", "setPreferences", "scheduled", "charging", "checkNotices"]) {
             expect(await svc[m]({}), m).toMatchObject({ returnValue: false, errorCode: "NOT_AVAILABLE",
                                                         errorText: expect.stringContaining("not available on this boot") });
         }

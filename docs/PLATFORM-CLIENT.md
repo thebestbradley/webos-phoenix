@@ -246,9 +246,11 @@ line: a VM started straight from the image's ext4 with `-kernel`, as UTM
 and the regression suite do, or a device without A/B slots): RAUC finds no
 booted slot there, so nothing asks it anything. `rauc.service` does not
 start (`ConditionKernelCommandLine=rauc.slot`, meta-phoenix's
-`rauc_%.bbappend`), nor does `phoenix-update-wake.service`, and every
-method of `com.palm.update` answers at once with `NOT_AVAILABLE` ("System
-updates are not available on this boot") and schedules nothing. Before
+`rauc_%.bbappend`), nor does `phoenix-update-wake.service`.
+`com.palm.update` answers at once: `getStatus` with the running version
+and `error` `NOT_AVAILABLE` ("System updates are not available on this
+boot", `configured: false`), every other method with that error, and it
+schedules nothing. Before
 this, each call waited 25 s for D-Bus to give up on the RAUC daemon and
 the wake held up the start for an hour (Revision 42's regression VM, 28
 November 2026).
