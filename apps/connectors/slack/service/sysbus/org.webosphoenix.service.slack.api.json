@@ -11,5 +11,10 @@
     "slack.account": [
         "org.webosphoenix.service.slack/providerInfo",
         "org.webosphoenix.service.slack/signIn"
+    ],
+    "phoenix.slack.signin": [
+        "org.webosphoenix.service.slack/providerInfo",
+        "org.webosphoenix.service.slack/checkCredentials",
+        "org.webosphoenix.service.slack/signIn"
     ]
 }

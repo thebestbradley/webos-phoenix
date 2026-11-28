@@ -173,6 +173,33 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(w.calls.find((c: Any) => c.method === "addLaunchPoint").params).toEqual({ id: "com.palm.app.browser", title: "News", params: { url: "https://n.example" } });
     });
 
+    it("keeps hidden and developer apps out of search, the developer ones only while Developer Mode is off", async () => {
+        let enabled: unknown = false;
+        const list = [
+            { id: "notes", title: "Notes" },
+            { id: "demo", title: "Notes Demo", phoenix: { developer: true } },
+            { id: "hidden", title: "Notes Hidden", phoenix: { hidden: true } },
+            { id: "provider", title: "Notes Provider", visible: false }
+        ];
+        const manager = am.createAppManager({
+            developerMode: () => enabled instanceof Error ? Promise.reject(enabled) : Promise.resolve(enabled),
+            sam: (method: string) => Promise.resolve(method === "listApps"
+                ? { returnValue: true, apps: list }
+                : { returnValue: true, launchPoints: list.map(a => ({ id: a.id, title: a.title, launchPointId: a.id + "_default" }))
+                    .concat([{ id: "notes", title: "Notes Work", launchPointId: "work" }]) }) });
+        const search = async () => (await manager.methods.searchApps({ keyword: "notes" })).apps;
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "work" }]);
+        enabled = true;
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "demo_default" }, { launchPoint: "work" }]);
+        enabled = new Error("no Developer Mode service");
+        expect(await search()).toEqual([{ launchPoint: "notes_default" }, { launchPoint: "work" }]);
+        // listLaunchPoints (the Assistant's apps) leaves out the developer apps' only.
+        const ids = async () => (await manager.methods.listLaunchPoints({})).launchPoints.map((lp: Any) => lp.launchPointId);
+        expect(await ids()).toEqual(["notes_default", "hidden_default", "provider_default", "work"]);
+        enabled = true;
+        expect(await ids()).toEqual(["notes_default", "demo_default", "hidden_default", "provider_default", "work"]);
+    });
+
     it("keeps the exhibitions the user turned on", async () => {
         const w = world();
         let r = await w.m.methods.listDockModeLaunchPoints({});
@@ -210,10 +237,15 @@ describe("com.palm.applicationManager on OSE", () => {
         const listed = new Set(Object.values(api).flat().map((m: Any) => String(m).split("/")[1]));
         for (const name of [...am.METHODS, "launchPointChanges"]) expect(listed.has(name)).toBe(true);
         const perm = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/com.palm.applicationManager.perm.json"), "utf8"));
-        // SAM's launch is application.launcher, oem only (webosose/sam files/sysbus/com.webos.sam.groups.json).
-        expect(perm["com.palm.applicationManager"]).toEqual(["application.operation", "application.launcher"]);
+        // SAM's launch is application.launcher, oem only (webosose/sam files/sysbus/com.webos.sam.groups.json);
+        // searchApps and listLaunchPoints read Developer Mode from OSE's service (devmode.query) or Phoenix's
+        // provider (phoenix.devmode.query, dev push P3).
+        expect(perm["com.palm.applicationManager"]).toEqual(expect.arrayContaining(["application.operation", "application.launcher",
+            "devmode.query", "phoenix.devmode.query"]));
         const role = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/com.palm.applicationManager.role.json"), "utf8"));
         expect(role.trustLevel).toBe("oem");
+        const outbound = role.permissions.find((x: Any) => x.service === "com.palm.applicationManager").outbound;
+        expect(outbound).toContain("com.webos.service.devmode");
     });
 });
 

@@ -2,7 +2,9 @@
 // plus css/phoenix-compat.css, which lets its 500 px account pages (used by
 // Accounts, Contacts, Calendar and Email) fit a phone card, and
 // source/phoenix-signup.js, the "Don't have an account? Sign up" link of a
-// template with a signUp (docs/SYNERGY-SDK.md). Nothing else is changed.
+// template with a signUp (docs/SYNERGY-SDK.md). source/cross-app.js is an
+// overlay of the original's (a template's own sign-in page is framed only
+// when it is Phoenix's own, rule C17 on the device). Nothing else is changed.
 enyo.depends(
 	"css/accounts-list.css",
 	"css/phoenix-compat.css",

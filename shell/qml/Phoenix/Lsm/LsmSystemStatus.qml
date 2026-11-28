@@ -316,12 +316,16 @@ QtObject {
     property string exhibitionNightEnd: "07:00"
     property url dockWallpaper: ""
 
-    // Developer Mode (OSE's com.webos.service.devmode getDevMode: its
-    // setDevMode restarts the device, so reading it at start is enough) and
-    // the devModeUnlocked system preference (Just Type's Konami code).
-    // STATUS: written against the services' APIs, not yet run on a device;
-    // LsmWindowSource's apps do not carry appinfo.json's phoenix.developer
-    // yet (SAM's launch points have no such field), so every app shows.
+    // Developer Mode (com.webos.service.devmode getDevMode {subscribe}: its
+    // setDevMode restarts the device, but the subscription lets the launcher
+    // follow the flag at once all the same) and the devModeUnlocked system
+    // preference (Just Type's Konami code). The developer apps (appinfo.json's
+    // phoenix.developer: Notification Lab, the framework demos, Terminal, and
+    // the image's other test apps, meta-phoenix/conf/developer-apps.json) are
+    // in the launcher, the dock and Just Type only while devMode is true
+    // (Shell.developerShown; LsmWindowSource's apps carry the flag from SAM's
+    // listApps). Phoenix's provider answers {status, enabled}; OSE's {enabled}.
+    // STATUS: written against the services' APIs, not yet run on a device.
     property bool devMode: false
     property bool devModeUnlocked: false
     property var _developer: Service {
@@ -331,13 +335,15 @@ QtObject {
             try { r = JSON.parse(payload); } catch (e) { return; }
             if (!r)
                 return;
-            if (r.status === "enabled" || r.status === "disabled")
+            if (typeof r.enabled === "boolean")
+                status.devMode = r.enabled;
+            else if (r.status === "enabled" || r.status === "disabled")
                 status.devMode = r.status === "enabled";
             if (r.devModeUnlocked !== undefined)
                 status.devModeUnlocked = r.devModeUnlocked === true;
         }
         Component.onCompleted: {
-            call("luna://com.webos.service.devmode", "/getDevMode", JSON.stringify({}));
+            call("luna://com.webos.service.devmode", "/getDevMode", JSON.stringify({ subscribe: true }));
             call("luna://com.webos.service.systemservice", "/getPreferences",
                  JSON.stringify({ keys: ["devModeUnlocked"], subscribe: true }));
         }
