@@ -560,6 +560,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
 | `build/siminstances-test` | The simulators' registry behind Window > Simulators: two find each other (in one process and in two), one brings the other forward, a crashed one's entry is dropped |
 | `build/useragent-test` | The user agent every page is told (docs/APP-RUNTIME.md, "The web engine and the user agent"): Chrome's current version on its four-week cadence, the override, the strings and client hints per form factor |
+| `xvfb-run -a node tools/test-browser-sim.cjs` | The browser with phoenix-sim's page view: a server's 404 page is shown with no "Unable to Load Page" over it; a server that is not there still says so |
 | `xvfb-run -a node tools/test-useragent-sim.cjs` | What a site is sent and its page reads in phoenix-sim (a header-echo site in a web app's card and the browser; phone, tablet, a live switch), and the engine in Settings > Device Info |
 
 The table has the main ones. [docs/COMMANDS.md](docs/COMMANDS.md) lists every

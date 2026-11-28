@@ -142,8 +142,21 @@ Summary summarize(String src) {
   final rest = lines.skip(1).join(' ');
   return Summary(
     lines.isEmpty ? 'New Note' : lines.first,
-    rest.isEmpty ? 'No additional text' : (rest.length > 200 ? rest.substring(0, 200) : rest),
+    rest.isEmpty ? 'No additional text' : clip(rest, 200),
   );
+}
+
+/// At most [max] characters, cut between words with "…" when cut, and never
+/// in the middle of a character (an emoji is two UTF-16 units); as
+/// notes-core's clip (apps/shared/notes-core/src/markdown.ts).
+String clip(String text, int max) {
+  if (text.length <= max) return text;
+  var cut = text.substring(0, max);
+  final last = cut.codeUnitAt(cut.length - 1);
+  if (last >= 0xD800 && last <= 0xDBFF) cut = cut.substring(0, cut.length - 1);
+  final space = cut.lastIndexOf(' ');
+  if (space > max / 2) cut = cut.substring(0, space);
+  return '${cut.trimRight()}…';
 }
 
 /// Words in the note (for the note's info).

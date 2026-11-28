@@ -812,6 +812,20 @@ async function main() {
             await open(p);
             await shot(p);
         }
+        // ---- No pane is wider than the screen ------------------------------------------
+        // A row's value never pushes the row off the screen: Text Assist's
+        // "Automatic (phone: black, tablet: TouchPad)" made the whole pane
+        // scroll sideways at 320 px (.pui-row-end did not shrink).
+        await page.goto(base);
+        await page.waitForSelector("[data-testid='hub-wifi']");
+        const panes = await page.$$eval("[data-testid^='hub-']", (es) => es.map((e) => e.dataset.testid.slice(4)));
+        const wide = [];
+        for (const p of panes) {
+            await open(p);
+            const w = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            if (w > 0) wide.push(`${p} (+${w}px)`);
+        }
+        check(panes.length > 20 && wide.length === 0, `every pane (${panes.length}) fits the screen's width` + (wide.length ? ": " + wide.join(", ") : ""));
         await page.goto(base);
         await page.waitForSelector("[data-testid='hub-wifi']");
         await shot("hub");

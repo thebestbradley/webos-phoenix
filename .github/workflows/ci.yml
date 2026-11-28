@@ -354,6 +354,12 @@ jobs:
         timeout-minutes: 15
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-useragent-sim.cjs --out app-tests/useragent-sim
 
+      # The browser's own page view: a 404 page is shown, with no error
+      # over it; a server that is not there still says so.
+      - name: The browser in the simulator
+        timeout-minutes: 10
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-browser-sim.cjs --out app-tests/browser-sim
+
       # Two simulators at once, each its own device (--instance).
       - name: Two simulators at once
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-instance-sim.cjs --out app-tests/instance-sim

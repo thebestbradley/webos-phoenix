@@ -190,12 +190,21 @@ body.pui-app, .pui-app {
 }
 .pui-row.tappable:active .pui-row-subtitle { color: #ddd; }
 
+/* The value gives way before the title does: a long one (Text Assist's
+   "Automatic (phone: black, tablet: TouchPad)") is cut with an ellipsis, as
+   Enyo's ListSelector cuts its value, instead of pushing the row, and the
+   whole pane, off the screen. */
 .pui-row-end { flex: none; display: flex; align-items: center; gap: 6px; }
+.pui-row-end:has(> .pui-row-value) { flex: 0 1 auto; min-width: 0; max-width: 60%; }
+.pui-row-end > :not(.pui-row-value) { flex: none; }
 
 .pui-row-value {
     color: var(--pui-label);
     font-size: 16px;
     white-space: nowrap;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .pui-row.tappable:active .pui-row-value { color: #fff; }
 

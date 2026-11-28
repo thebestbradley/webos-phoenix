@@ -112,6 +112,10 @@ describe("paths and formatting", () => {
         expect(opensAsText({ name: "a.txt", type: "file", size: 10 })).toBe(true);
         expect(opensAsText({ name: "a.jpg", type: "file", size: 10 })).toBe(false);
         expect(opensAsText({ name: "data", type: "file", size: 1 << 20 })).toBe(false);
+        // A type with an app of its own is not opened as text, however small.
+        expect(opensAsText({ name: "Personal.kdbx", type: "file", size: 2000 })).toBe(false);
+        expect(opensAsText({ name: "data", type: "file", size: 2000 })).toBe(true);
+        expect(kindOf({ name: "Budget.ods", type: "file" })).toBe("document");
         expect(looksLikeText("hello\nworld\t!")).toBe(true);
         expect(looksLikeText("PK\x03\x04\x00\x00")).toBe(false);
     });

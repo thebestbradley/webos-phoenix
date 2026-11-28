@@ -1332,7 +1332,11 @@ FocusScope {
     // A modal card that did not take it goes, faded, as for the minimize
     // gesture (minimizeActiveWindow with m_addingModalWindow,
     // CardWindowManager.cpp:1151-1164).
+    // In First Use, as for the swipe up, only to switch to an app it opened:
+    // its own card stays (LunaSysMgr's minimal UI had no card view).
     function _backUnhandled(uid) {
+        if (firstUse && cards.count < 2)
+            return;
         if (cards.maximized && !cards.minimizing && cards.activeUid === uid && !launcher.open && !justType.open)
             cards.minimize();
     }
