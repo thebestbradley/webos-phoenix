@@ -22,7 +22,9 @@
 #                    ipad-se  the same, for UTM SE (its interpreter is many
 #                             times slower than JIT): timeouts at 30 minutes
 #                    mac      UTM on an Apple silicon Mac (HVF): the
-#                             device's CPUs and memory, as scripts/vm.sh
+#                             device's CPUs and memory, as scripts/vm.sh,
+#                             the CPUs at most the Mac's performance cores
+#                             (UTM's own default) when made on the Mac
 #   --image PATH     a folder with Image and
 #                    webos-phoenix-image-phoenix-vm-arm64.rootfs.ext4
 #                    (default out/phoenix-vm-arm64), or the .ext4 itself
@@ -63,7 +65,7 @@ PROFILES="$REPO_DIR/meta-phoenix/recipes-phoenix/phoenix-device-config/files/dev
 QEMU_IMG=${PHOENIX_UTM_QEMU_IMG:-qemu-img}
 
 die() { echo "make-utm.sh: $*" >&2; exit 2; }
-usage() { sed -n '11,53p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '11,54p' "$0" | sed 's/^# \{0,1\}//'; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is needed (to read the device profiles and write config.plist)"
 
@@ -122,7 +124,25 @@ APPEND="root=/dev/vda rw rootwait console=ttyAMA0 phoenix.device=$DEVICE"
 case $FOR in
     mac)
         SUFFIX=-mac LABEL=" (Mac)"
-        CPUS=${CPUS:-$DEV_CPUS}
+        # At most the Mac's performance cores: UTM's own default (CPUCount 0
+        # is hw.perflevel0.physicalcpu on Apple silicon, Configuration/
+        # UTMQemuConfiguration+Arguments.swift emulatedCpuCount). More puts
+        # vCPUs on the efficiency cores and leaves none for QEMU's own
+        # threads, which draw the guest's GL (virgl over ANGLE) on the host.
+        if [ -z "$CPUS" ]; then
+            CPUS=$DEV_CPUS
+            host_os=${PHOENIX_UTM_HOST_OS:-$(uname -s)}
+            pcores=${PHOENIX_UTM_HOST_PCORES:-}
+            if [ "$host_os" = Darwin ] && [ -z "$pcores" ]; then
+                pcores=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || sysctl -n hw.physicalcpu 2>/dev/null || echo '')
+            fi
+            if [ "$host_os" != Darwin ]; then
+                echo "make-utm.sh: made off a Mac, so $DEV_CPUS CPUs, the device's; on a Mac with fewer performance cores, make it there or give --cpus (UTM's own default is the performance cores)" >&2
+            elif [ -n "$pcores" ] && [ "$CPUS" -gt "$pcores" ]; then
+                echo "make-utm.sh: the device has $DEV_CPUS cores; this Mac has $pcores performance cores, so the VM gets $pcores (--cpus to change it)" >&2
+                CPUS=$pcores
+            fi
+        fi
         MEMORY=${MEMORY:-$DEV_MEMORY}
         JIT_CACHE=0 TIMEOUT='' ;;
     ipad|ipad-se)
