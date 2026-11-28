@@ -479,13 +479,14 @@ def frame_clients(root, out, compat_perms):
 
 def method_groups(methods, method):
     """The groups for a method, from an api file's patterns; None if no
-    pattern matches."""
-    if method in methods:
-        return methods[method]
+    pattern matches. Every group whose pattern matches may call it, the
+    method's own and a wildcard's (com.palm.service.accounts/listAccounts is
+    phoenix.accounts.list's and phoenix.appservices.accounts' "/*"), as
+    luna-hub joins them."""
     found = None
     for pat, groups in methods.items():
-        if fnmatch.fnmatchcase(method, pat) or fnmatch.fnmatchcase("/" + method, pat):
-            found = (found or []) + groups
+        if pat == method or fnmatch.fnmatchcase(method, pat) or fnmatch.fnmatchcase("/" + method, pat):
+            found = (found or []) + [g for g in groups if g not in (found or [])]
     return found
 
 

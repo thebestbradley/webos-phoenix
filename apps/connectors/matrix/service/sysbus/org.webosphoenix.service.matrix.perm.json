@@ -6,6 +6,7 @@
         "accounts.transport",
         "notification.operation",
         "messaging.operation",
-        "oauth.signin"
+        "oauth.signin",
+        "phoenix.accounts.list"
     ]
 }
