@@ -884,6 +884,37 @@ accounts".
 | **LinkedIn** | Sign In with LinkedIn (OpenID Connect); sharing as the user (Posts API); connections on contact cards from the user's own `Connections.csv`, imported from a file | OpenID Connect, Posts API and OAuth stand-in (11 tests, the CSV reader among them) | Phoenix's LinkedIn app (its Page verified), and the token relay |
 | **Slack** | Direct messages and channels in Messaging both ways (one conversation's history per sync outside the Slack Marketplace, all of them once listed), the workspace's people as contacts, direct messages and mentions as notifications | Slack Web API stand-in with Slack's 2025 limits (8 tests) | Phoenix's Slack app, the token relay with the broker, and the Slack Marketplace listing (Q17) |
 
+**Audit, 28 November 2026** (`origin/main` 90664332; the owner's
+registration sheet, click by click: [CONNECTOR-REGISTRATIONS.md](CONNECTOR-REGISTRATIONS.md)).
+The ids come only from `/etc/palm/<name>/clients.json` (`ctx.systemConfig`);
+no recipe installs those files yet (Q76) and no token relay exists: the
+OAuth service has no `broker` or `sheet` method (`services/oauth/oauthservice.js:107`)
+and Phoenix-Web-Services has no `/v1/oauth-broker/` route.
+
+| Connector | Tests (28 November 2026) | Waiting on |
+| --- | --- | --- |
+| **Microsoft** (+ OneDrive) | vitest 13/13 | The Entra app (C1); work accounts: publisher verification |
+| **Google** (Calendar, Contacts, Tasks) | vitest 11/11 | The Google project and Desktop client (C2); sensitive-scope verification past 100 users |
+| **Drives**: Google Drive | vitest (drives 28/28) | C2's project with the Drive API (C3). The owner wants both scopes offered per user (28 November 2026); the code picks one per image (`drives/service/connector.js:106`): a change is needed. `drive`: restricted, CASA |
+| **Drives**: Dropbox, Box | as above | The Dropbox app (C5; production approval after 50 users); the Box app and Q78 (its secret) (C6) |
+| **Drives**: Nextcloud, ownCloud, WebDAV, S3, SFTP | vitest 28/28 and SFTP 18/19 (one skipped: no `ssh-keygen` in the container); Chromium `test-drives` 30/30 | Nothing |
+| **Todoist** | vitest 13/13; Chromium `test-connectors` 31/31 | Nothing with the token. OAuth: Q123 (secret) and its exact-match redirect (the fixed port in the setting) |
+| **Bluesky** | vitest 17/17; Chromium `test-connectors` 31/31 | Nothing with an app password. OAuth: Q120, Q121 (no `sheet` method) |
+| **XMPP**, **Matrix**, **Delta Chat** | vitest 23/23, 12/12, 14/14; Chromium `test-xmpp` 30/30, `test-matrix` 19/19, `test-deltachat` 20/20 | Nothing |
+| **Zoom** | vitest 7/7 | The relay (none built) and Q122 (Basic authentication) |
+| **LinkedIn** | vitest 11/11 | The relay, or its secret in the setting with the fixed-port redirect |
+| **Slack** | vitest 8/8 | The relay (only way: the user token comes in `authed_user`), Marketplace review |
+| **Gmail** in Email | Chromium `test-email` 21/21, but no test reaches a mail server (the simulator's transports are simulated) | App password now (the owner, 28 November 2026): a device run of mojomail with Gmail (local). XOAUTH2 after: restricted scope, CASA, mojomail's XOAUTH2 |
+| **iCloud** presets | the DAV account under them: Chromium `test-dav-sync` 30/30 against Radicale | Not built: two hosts per account, Email's `icloud.com` presets (2 to 3 days) |
+| **Outlook mail** | none | Not built: XOAUTH2 in mojomail and a token for `outlook.office.com` (1 to 2 weeks after Gmail's XOAUTH2) |
+
+The connector kit: vitest 100/100 (`kit`, `pim`, `share-page`, `publish`,
+`turns`); in all, `npx vitest run connectors shared/connector-kit` 275
+passed, 1 skipped. `test-signin-card` passed; `test-xmpp-server` skipped its
+checks (no Prosody in the container). The Chromium tests need the
+submodules (`git submodule update --init`): without `third_party/core-apps`
+every one stops at "no sign-in page", the Accounts app being missing.
+
 Shared pieces in the kit for these: `registeredClient`, `notAvailable`,
 `viaRelay`, `oauthSignIn` and `restApi` (`src/registered.ts`), calendar and
 task helpers (`src/pim.ts`: containers, repeat rules through synckit's
