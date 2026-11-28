@@ -147,7 +147,7 @@
     setVisibility("public");
     showPictures();
 
-    call("luna://com.palm.service.accounts/listAccounts", { templateId: TEMPLATE }).then(function (r) {
+    call("luna://com.palm.service.accounts/listMyAccounts", { templateId: TEMPLATE }).then(function (r) {
         accounts = (r.results || []).filter(function (a) { return !a.beingDeleted; });
         if (!accounts.length) { $("none").hidden = false; return; }
         accounts.forEach(function (a) {

@@ -236,6 +236,18 @@ def main():
        "phoenix.accounts.read-credentials is readCredentials alone: %s" % acct.get("phoenix.accounts.read-credentials"))
     ok(acct.get("phoenix.accounts.info") == ["com.palm.service.accounts/getAccountInfo"],
        "phoenix.accounts.info is getAccountInfo alone: %s" % acct.get("phoenix.accounts.info"))
+    # The apps' picker of their own accounts (the kit's compose page; rule
+    # C19 lets a third party's app hold it): listMyAccounts alone, which
+    # answers only the accounts the caller may read, and the service's
+    # services.json (Phoenix's overlay) has the method.
+    ok(acct.get("phoenix.accounts.mine") == ["com.palm.service.accounts/listMyAccounts"],
+       "phoenix.accounts.mine is listMyAccounts alone: %s" % acct.get("phoenix.accounts.mine"))
+    with open(os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "sysbus",
+                           "com.palm.service.accounts.groups.json"), encoding="utf-8") as f:
+        ok(json.load(f).get("phoenix.accounts.mine") == ["dev"], "phoenix.accounts.mine's trust is dev, like the other read groups")
+    with open(os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts", "services.json"), encoding="utf-8") as f:
+        ok("listMyAccounts" in [c["name"] for c in json.load(f)["services"][0]["commands"]],
+           "the accounts service's services.json (compat overlay) has listMyAccounts")
     reads = {"phoenix.accounts.info", "phoenix.accounts.read-credentials"}
     lists = {"bluesky", "deltachat", "drives", "matrix", "slack", "xmpp"}
     for name in sorted(os.listdir(os.path.join(REPO, "apps", "connectors"))):

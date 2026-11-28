@@ -58,6 +58,26 @@
 //       and leaves the connector protocol's (SHARED_GROUPS) at oem.
 //       Phoenix's own connectors are checked against what their calls
 //       need instead (tools/check-luna.py, tools/test-devicecheck.py).
+//   C19 a third-party connector's app's groups (appinfo.json
+//       requiredPermissions), least privilege: a list (without one,
+//       OSE's installer gives the app the public group), naming only the
+//       package's own groups (C18's) and THIRD_PARTY_APP_GROUPS, what the
+//       kit's pages call (share-page/compose.js). OSE's installer copies the
+//       list into the app's client permissions as it is, with the oem trust
+//       level (appinstalld2 ServiceInstallerUtility.cpp), so the list is the
+//       app's privilege on the bus.
+//   C20 a third-party connector's names: its ids (app, service, templates,
+//       own kinds) are not in a namespace the
+//       system's names use (RESERVED_NAMESPACES: luna-hub keeps no names
+//       for the system, docs/DEVICE-AUDIT.md "Names and groups on the
+//       hub"), and its app id is in the developer's namespace; its sysbus
+//       files are its service's only (<service>.<kind>), the .service file
+//       names its service and runs it with run-js-service from
+//       /usr/palm/services/<service>, the role is a regular one for its
+//       service (no exeName, no trust level above dev: the system sets
+//       trust), and the manifest is its service's (id, its own files): the
+//       hub keeps the manifest of an id with the highest version, so a
+//       manifest named like another would unload that one's files.
 //
 // files: the package's files by path relative to the app's folder.
 
@@ -190,6 +210,47 @@ export const THIRD_PARTY_GROUPS = ["database.operation", "tempdatabase.operation
  * trust is the system's, oem.
  */
 export const SHARED_GROUPS = ["accounts.transport", "phoenix.connector.share"];
+
+/**
+ * C19: the groups a third-party connector's app may name besides its own
+ * (its service's share group): what the kit's compose page calls
+ * (share-page/compose.js), each confined to the caller's own.
+ *
+ *   phoenix.accounts.mine    listMyAccounts alone: the accounts whose template's
+ *                            readPermissions name the app (compat/app-services
+ *                            com.palm.service.accounts handlers/list-my-accounts.js,
+ *                            utils.js hasPermission), for the account picker;
+ *                            phoenix.accounts.list would answer every account
+ *   phoenix.appmanager.open  com.palm.applicationManager/open alone (services/
+ *                            appmanager): Accounts with the template ({id, params})
+ *                            and the posted link ({target}); not
+ *                            phoenix.appmanager.launch, which also adds and
+ *                            removes launch points and resource handlers
+ *
+ * Not on the list, so refused: accounts.transport (the connector protocol's
+ * oem group: Accounts calls the service, the app never does; since C17 the
+ * app has no sign-in page), phoenix.connector.share (the Assistant's: it
+ * reaches every connector's share), phoenix.appmanager.launch, the accounts
+ * service's other groups and every other group.
+ */
+export const THIRD_PARTY_APP_GROUPS = ["phoenix.accounts.mine", "phoenix.appmanager.open"];
+
+/**
+ * C20: namespaces the system's names use (webOS's, OSE's, LG's, LuneOS's,
+ * Phoenix's apps and services, and Phoenix's templates). luna-hub refuses
+ * no name to a package (docs/DEVICE-AUDIT.md "Names and groups on the hub"),
+ * and the accounts service tells callers by these names (templates'
+ * readPermissions: org.webosphoenix.messaging reads the IM accounts), so a
+ * third party's ids stay out of them. Phoenix's own (firstParty) are its.
+ */
+export const RESERVED_NAMESPACES = ["com.palm", "com.webos", "com.lge", "org.webosports", "org.webosphoenix", "com.webosphoenix"];
+
+/** C20: the sysbus files a connector's service has, by kind. */
+const SYSBUS_KINDS = [".service", ".role.json", ".api.json", ".perm.json", ".groups.json", ".manifest.json"];
+const MANIFEST_DIRS: Record<string, [string, string]> = {
+    roleFiles: ["roles.d", ".role.json"], serviceFiles: ["services.d", ".service"], apiPermissionFiles: ["api-permissions.d", ".api.json"],
+    clientPermissionFiles: ["client-permissions.d", ".perm.json"], groupsFiles: ["groups.d", ".groups.json"]
+};
 
 /** C17's answer to a third-party connector's own sign-in page. */
 export const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
@@ -387,10 +448,10 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
     }
 
     // C18 a third-party connector's groups (THIRD_PARTY_GROUPS, SHARED_GROUPS)
+    const own: string[] = [];
     if (!firstParty && service && ID.test(service)) checkGroups();
     function checkGroups() {
         const ns = namespaces.join(", ");
-        const own: string[] = [];
         const apiPath = "service/sysbus/" + service + ".api.json";
         const api = json(files, apiPath);
         if (files[apiPath] && (!api.ok || !api.value || typeof api.value !== "object" || Array.isArray(api.value))) errors.push("C18 " + apiPath + ": not valid JSON (an object: each group and its methods)");
@@ -433,6 +494,80 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
                 }
             });
         });
+    }
+
+    // C19 a third-party connector's app's groups (THIRD_PARTY_APP_GROUPS)
+    if (!firstParty) {
+        const req = info.value.requiredPermissions;
+        const appClaims = "a third-party connector's app names only its own groups (its api.json's, named in " + namespaces.join(", ") +
+            ") and " + THIRD_PARTY_APP_GROUPS.join(", ");
+        if (!Array.isArray(req)) errors.push("C19 appinfo.json requiredPermissions must be a list (an empty one is fine): without it the installer gives the app the public group");
+        else req.forEach((g: unknown) => {
+            if (typeof g !== "string" || (own.indexOf(g) < 0 && THIRD_PARTY_APP_GROUPS.indexOf(g) < 0))
+                errors.push("C19 appinfo.json requiredPermissions may not name " + (typeof g === "string" ? g : JSON.stringify(g)) + ": " + appClaims);
+        });
+    }
+
+    // C20 a third-party connector's names (RESERVED_NAMESPACES)
+    if (!firstParty) checkNames();
+    function checkNames() {
+        const ns = namespaces.join(", ");
+        if (ID.test(appId) && !inNamespace(appId, namespaces)) errors.push("C20 the app id " + appId + " is not in the namespace " + ns);
+        const ids: [string, string][] = [["the app id", appId], ["the service", service]];
+        out.templates.forEach((t) => ids.push(["the template", t]));
+        out.kinds.filter((k) => !genericPrefixOf(k)).forEach((k) => ids.push(["the kind", k.replace(/:\d+$/, "")]));
+        ids.forEach(([what, id]) => {
+            const r = RESERVED_NAMESPACES.filter((n) => inNamespace(id, [n]))[0];
+            if (id && r) errors.push("C20 " + what + " " + id + " is in " + r + ", a namespace of the system's names: use your own");
+        });
+        if (!service || !ID.test(service)) return;
+        Object.keys(files).sort().filter((p) => p.indexOf("service/sysbus/") === 0).forEach((p) => {
+            const name = p.slice("service/sysbus/".length);
+            if (!SYSBUS_KINDS.some((k) => name === service + k))
+                errors.push("C20 " + p + ": a connector's sysbus files are its service's, " + SYSBUS_KINDS.map((k) => service + k).join(", "));
+        });
+        const svcPath = "service/sysbus/" + service + ".service";
+        if (files[svcPath]) {
+            const exec = "/usr/bin/run-js-service -n /usr/palm/services/" + service;
+            const lines = text(files[svcPath]).split(/\r?\n/).map((l) => l.trim()).filter((l) => l && l.charAt(0) !== "#" && l !== "[D-BUS Service]");
+            const keys: Record<string, string> = {};
+            lines.forEach((l) => {
+                const m = /^([A-Za-z]+)=(.*)$/.exec(l);
+                if (!m || ["Name", "Exec", "Type"].indexOf(m[1]) < 0 || keys[m[1]] !== undefined)
+                    errors.push("C20 " + svcPath + ": " + JSON.stringify(l) + " is not one of Name=, Exec=, Type= (once each)");
+                else keys[m[1]] = m[2].trim();
+            });
+            if (keys.Name !== service) errors.push("C20 " + svcPath + ": Name= must be " + service + " alone");
+            if (keys.Exec !== exec) errors.push("C20 " + svcPath + ": Exec= must be " + exec);
+            if (keys.Type !== undefined && keys.Type !== "dynamic") errors.push("C20 " + svcPath + ": Type= must be dynamic");
+        }
+        const role = json(files, "service/sysbus/" + service + ".role.json");
+        if (role.ok && role.value && typeof role.value === "object" && !Array.isArray(role.value)) {
+            const where = "C20 service/sysbus/" + service + ".role.json: ";
+            Object.keys(role.value).forEach((k) => {
+                if (["appId", "type", "allowedNames", "permissions", "trustLevel"].indexOf(k) < 0) errors.push(where + k + " is not for a connector's role (appId, type, allowedNames, permissions)");
+            });
+            if (role.value.appId !== undefined && role.value.appId !== service) errors.push(where + "appId must be " + service);
+            if (role.value.type !== undefined && role.value.type !== "regular") errors.push(where + "type must be \"regular\" (\"privileged\" may take any name)");
+            if (role.value.trustLevel !== undefined && role.value.trustLevel !== "dev") errors.push(where + "a connector may not raise its trust level (" + JSON.stringify(role.value.trustLevel) + "): the system sets it");
+            (Array.isArray(role.value.permissions) ? role.value.permissions : []).forEach((perm: any) => {
+                if (!perm || perm.service !== service) errors.push(where + "its permissions are for " + service + " only");
+            });
+        }
+        const manPath = "service/sysbus/" + service + ".manifest.json";
+        const man = json(files, manPath);
+        if (files[manPath] && (!man.ok || !man.value || typeof man.value !== "object" || Array.isArray(man.value))) errors.push("C20 " + manPath + ": not valid JSON");
+        else if (man.ok) {
+            if (man.value.id !== service) errors.push("C20 " + manPath + ": id must be " + service + " (the hub keeps one manifest per id, the highest version's)");
+            Object.keys(man.value).forEach((k) => {
+                if (k === "id" || k === "version") return;
+                const d = MANIFEST_DIRS[k];
+                if (!d) { errors.push("C20 " + manPath + ": " + k + " is not a manifest's list of files"); return; }
+                const want = "/usr/share/luna-service2/" + d[0] + "/" + service + d[1];
+                const list = man.value[k];
+                if (!Array.isArray(list) || list.some((f: unknown) => f !== want)) errors.push("C20 " + manPath + ": " + k + " may list only " + want);
+            });
+        }
     }
 
     // C14, C15 sharing (share.ts)

@@ -27,7 +27,7 @@
     try { params = (raw && JSON.parse(raw)) || {}; } catch (e) { params = {}; }
     if (params.share) return;
 
-    call("luna://com.palm.service.accounts/listAccounts", { templateId: TEMPLATE }).then(function (r) {
+    call("luna://com.palm.service.accounts/listMyAccounts", { templateId: TEMPLATE }).then(function (r) {
         var account = ((r && r.results) || [])[0];
         if (!account) return;
         // Signed in: no "add your account" (the compose page's), the import instead.

@@ -68,6 +68,23 @@ for svc in ("com.palm.service.accounts", "com.palm.service.contacts", "com.palm.
     check("/usr/share/luna-service2/roles.d/%s.role.json" % svc in paths, svc + ": with OSE's bus files")
     check(not any(p.startswith("/usr/palm/services/%s/files/" % svc) or "/tests/" in p and svc in p for p in paths),
           svc + ": not its luna-service 1 files or tests")
+# Phoenix's additions to their code (compat/app-services/<id>/ beside
+# sysbus/): accounts' listMyAccounts, its handler loaded by the overlaid
+# sources.json and named by the overlaid services.json.
+ACCT = os.path.join(REPO, "compat", "app-services", "com.palm.service.accounts")
+ORIGINAL = os.path.join(REPO, "third_party", "app-services", "com.palm.service.accounts")
+check("/usr/palm/services/com.palm.service.accounts/handlers/list-my-accounts.js" in paths,
+      "accounts: Phoenix's listMyAccounts handler is installed")
+with open(os.path.join(ACCT, "sources.json"), encoding="utf-8") as f:
+    srcs = [e.get("source") for e in json.load(f)]
+with open(os.path.join(ACCT, "services.json"), encoding="utf-8") as f:
+    cmds = {c["name"]: c for c in json.load(f)["services"][0]["commands"]}
+check("handlers/list-my-accounts.js" in srcs and srcs.index("handlers/list-my-accounts.js") > srcs.index("handlers/list-accounts.js")
+      and all(os.path.isfile(os.path.join(ACCT, s)) or os.path.isfile(os.path.join(ORIGINAL, s)) for s in srcs if s),
+      "accounts: the overlaid sources.json loads the handler after list-accounts.js, and every source exists")
+check(cmds.get("listMyAccounts", {}).get("assistant") == "ListMyAccountsCommandAssistant" and not cmds["listMyAccounts"].get("public")
+      and "listAccounts" in cmds and "readCredentials" in cmds,
+      "accounts: the overlaid services.json keeps the original's commands and adds listMyAccounts")
 check("/etc/palm/db/kinds/com.palm.service.accounts/com.palm.account" in paths, "app services: db8 kinds in /etc/palm/db")
 check("/etc/palm/tempdb/kinds/com.palm.service.accounts/com.palm.signaling" in paths, "app services: tempdb kinds")
 check("/etc/palm/activities/applications/com.palm.app.clock/com.palm.app.clock.update.json" in paths
