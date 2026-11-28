@@ -301,6 +301,31 @@ describe("downloading and preparing", () => {
         expect(await service().GetStatus({ subscribe: true })).toMatchObject({ status: "Available", version: "webOS Phoenix 1.1.0" });
     });
 
+    it("asks RAUC for the slots once, not at every progress tick or while it writes a slot", async () => {
+        publish("1.1.0", 110);
+        const svc = service();
+        await svc.check({});
+        const before = raucState().calls.filter((c: string) => c === "status --output-format=json").length;
+        expect((await svc.download({})).state).toBe("ready");
+        // One after the install and mark-active changed the slots; none before.
+        const during = raucState().calls.slice(raucState().calls.indexOf("info --output-format=json " + path.join(dir, "downloads", "phoenix-110.raucb")));
+        expect(raucState().calls.filter((c: string) => c === "status --output-format=json").length - before).toBe(1);
+        expect(during.indexOf("status --output-format=json")).toBeGreaterThan(during.findIndex((c: string) => c.startsWith("install ")));
+    });
+
+    it("keeps a download when RAUC does not answer, and prepares it next time without fetching it again", async () => {
+        publish("1.1.0", 110);
+        const st0 = raucState(); delete st0.calls;
+        fs.writeFileSync(path.join(dir, "rauc.json"), JSON.stringify({ ...st0, infoTimeouts: 1 }));
+        const svc = service();
+        await svc.check({});
+        expect(await svc.download({})).toMatchObject({ returnValue: false, errorCode: "UPDATER_BUSY" });
+        expect(fs.readdirSync(path.join(dir, "downloads"))).toEqual(["phoenix-110.raucb"]);
+        expect((await svc.download({})).state).toBe("ready");
+        expect(files[`/${COMPATIBLE}/phoenix-1.1.0.raucb`].served).toBe(1);
+        expect(raucState().slots["rootfs.1"]).toEqual({ version: "1.1.0", build: 110 });
+    });
+
     it("refuses a download that is not what the feed said", async () => {
         publish("1.1.0", 110, { sha256: "0".repeat(64) });
         const svc = service();
