@@ -220,10 +220,16 @@ alerts.
    prepared slot active and restarts; "Install Later" waits for the charger.
 6. **After the restart**: the service marks the running slot good (`rauc
    status mark-good`, what meta-rauc's `rauc-mark-good.service` does) when
-   it first starts, which luna-systemui's GetStatus subscription causes
-   once the System UI is up; a system that never gets there is not marked
-   good, so the bootloader's counter takes the device back, and the service
-   then says "The update to X did not start".
+   it first starts. On an A/B device that first call is
+   `phoenix-update-wake.service` (meta-phoenix `phoenix-slots`), once SAM
+   lists the System UI (`com.palm.systemui`) as running: luna-systemui's own
+   GetStatus subscription waits for the bus to report the service running
+   (`registerServerStatus`), and the service starts only on demand, so
+   without it nothing would start it and no slot would ever be marked good
+   (found on Revision 39's A/B disk, 28 November 2026). A system that never
+   gets to the System UI is not marked good, so the boot loader's counter
+   takes the device back, and the service then says "The update to X did
+   not start".
 
 On a device the RAUC calls are its command line talking to the RAUC daemon
 over D-Bus (`lib/node.js`); in the simulator the fake slots in the runtime
