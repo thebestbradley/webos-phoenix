@@ -44,6 +44,9 @@
 //                                 "signingIn" | "signedIn", account, device,
 //                                 signIn: {method, userCode, verificationUri,
 //                                 verificationUriComplete, expiresAt} | null,
+//                                 methods: the sign-ins the server offers
+//                                 (["code"], ["code", "browser"]; null until
+//                                 its discovery document has been read),
 //                                 entitlements, error, accountName, issuer}       any
 //   signIn {method?: "code" | "browser"} -> status (the code to show)           Settings, First Use
 //   cancelSignIn {}                                                              Settings, First Use
@@ -73,7 +76,8 @@
 //   setLocationRelay {enabled}    this device's "Use my other device's
 //                                 position" switch, off by default              Settings
 //
-// Errors: NOT_SET_UP, SIGNED_OUT, BUSY, ACCESS_DENIED, EXPIRED,
+// Errors: NOT_SET_UP, SIGNED_OUT, SIGNED_IN (signIn while signed in), BUSY, UNSUPPORTED (signIn browser on a server
+// that offers only the code), ACCESS_DENIED, EXPIRED,
 // CONNECTION_FAILED, BAD_SERVER, BAD_SIGNATURE, UNAUTHORIZED, FORBIDDEN,
 // RATE_LIMITED (retryAfter), QUOTA, NEEDS_DEVMODE, NOT_ALLOWED, BAD_PARAMS,
 // and the server's own codes (PLATFORM.md 5).
@@ -204,9 +208,33 @@ function createAccountService(deps) {
                                     verificationUriComplete: pending.verificationUriComplete || null, expiresAt: pending.expiresAt || null } : null,
                 entitlements: state === "signedIn" ? entitlementsView(s) : null,
                 services: configured ? { backup: !!r.backup, push: !!(r.push && r.push.server), assistant: !!r.assistant } : null,
+                methods: configured ? methodsOf(r, s) : null,
                 error: lastError
             };
         });
+    }
+    // The sign-ins the server offers, from its discovery document: "browser"
+    // only with an authorization endpoint and, where it lists its grants,
+    // the authorization code grant (Phoenix-Web-Services offers only the
+    // device code under its preview lock). Signed out and not yet read: read
+    // it once, quietly, and tell the watchers, so Settings offers only what
+    // works (a "Sign In on This Device" that cannot work is not shown).
+    var reading = null, readFailed = 0;
+    function methodsOf(r, s) {
+        var d = s.discovery && s.discovery.issuer === r.account.issuer ? s.discovery.doc : null;
+        if (!d) {
+            // Offline or a bad server: asked again a minute later at most.
+            if (!reading && !s.signedIn && now().getTime() - readFailed > 60000) {
+                reading = discovery(r).then(function () { reading = null; return changed(); },
+                                            function (e) { reading = null; readFailed = now().getTime(); log("discovery: " + e.message); });
+            }
+            return null;
+        }
+        var grants = Array.isArray(d.grant_types_supported) ? d.grant_types_supported : null;
+        var out = [];
+        if (typeof d.device_authorization_endpoint === "string") out.push("code");
+        if (typeof d.authorization_endpoint === "string" && (!grants || grants.indexOf("authorization_code") >= 0)) out.push("browser");
+        return out;
     }
     function changed() {
         return status().then(function (st) {
@@ -331,6 +359,10 @@ function createAccountService(deps) {
     function signIn(p) {
         var method = p.method === "browser" ? "browser" : "code";
         if (pending) return Promise.reject(err("BUSY", "A sign-in is in progress"));
+        // Signed in already: never a second set of tokens beside the kept ones
+        // (a browser sign-in's would stay in the OAuth service's key store,
+        // never revoked). Sign out first.
+        if (load().signedIn) return Promise.reject(err("SIGNED_IN", "This device is signed in already; sign out first"));
         return setUp().then(function (r) {
             return discovery(r).then(function (d) {
                 lastError = null;
@@ -395,7 +427,9 @@ function createAccountService(deps) {
     }
 
     function browser(r, d) {
-        if (typeof d.authorization_endpoint !== "string") throw err("BAD_SERVER", "The account server does not offer browser sign-in");
+        var grants = Array.isArray(d.grant_types_supported) ? d.grant_types_supported : null;
+        if (typeof d.authorization_endpoint !== "string" || (grants && grants.indexOf("authorization_code") < 0))
+            throw err("UNSUPPORTED", "This account server signs in with a code only: choose Sign In");
         pending = { method: "browser" };
         changed();
         return deps.luna.call("luna://org.webosphoenix.service.oauth/authorize", {

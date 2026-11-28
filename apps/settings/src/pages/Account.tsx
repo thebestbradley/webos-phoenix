@@ -57,9 +57,14 @@ export function AccountPage() {
                     <Group>
                         <div className="account-status" data-testid="account-signed-out">Sign in to your {name} (optional).</div>
                         <Button onClick={() => void run(() => phoenixAccount.signIn("code"))} data-testid="account-sign-in">Sign In</Button>
-                        <Button variant="dark" onClick={() => void run(() => phoenixAccount.signIn("browser"))} data-testid="account-sign-in-browser">
-                            Sign In on This Device
-                        </Button>
+                        {/* Only where the server offers it (getStatus methods): a
+                            server that signs in with a code only (Phoenix-Web-Services'
+                            preview) has no page for this device to show. */}
+                        {st.methods?.includes("browser") && (
+                            <Button variant="dark" onClick={() => void run(() => phoenixAccount.signIn("browser"))} data-testid="account-sign-in-browser">
+                                Sign In on This Device
+                            </Button>
+                        )}
                     </Group>
                     <Note>
                         Your {name} keeps encrypted backups of this device and lets you restore them on another. No account is

@@ -270,6 +270,16 @@ describe("the loopback listener", () => {
         expect(await portOpen(l.port)).toBe(false);
     });
 
+    it("an error from the provider (RFC 6749 4.1.2.1) ends the wait too, and the page does not say signed in", async () => {
+        const lb = createLoopback({ http });
+        const l = await lb.open({ state: "s2" });
+        const answer = await get(l.redirectUri + "?error=unauthorized_client&error_description=No&state=s2");
+        expect(answer.status).toBe(200);
+        expect(answer.body).not.toContain("Signed in");
+        expect(answer.body).toContain("did not finish");
+        expect(await l.result).toBe("/oauth/callback?error=unauthorized_client&error_description=No&state=s2");
+    });
+
     it("close() ends it with null; a busy fixed port is BUSY", async () => {
         const lb = createLoopback({ http });
         const a = await lb.open({ state: "s" });

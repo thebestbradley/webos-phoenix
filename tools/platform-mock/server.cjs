@@ -325,6 +325,12 @@ function start(opts) {
 
         // -- OpenID Connect discovery and OAuth (Passport) --
         if (p === ".well-known/openid-configuration") {
+            // state.deviceOnly: a server that offers only the device code (as
+            // Phoenix-Web-Services under its preview lock does,
+            // DiscoveryController::metadata): no authorization_endpoint.
+            if (st.deviceOnly) return send(res, 200, { issuer: issuer(), token_endpoint: apiUrl() + "oauth/token",
+                                                       device_authorization_endpoint: apiUrl() + "oauth/device/code", revocation_endpoint: apiUrl() + "oauth/revoke",
+                                                       grant_types_supported: ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"] });
             return send(res, 200, { issuer: issuer(), authorization_endpoint: apiUrl() + "oauth/authorize", token_endpoint: apiUrl() + "oauth/token",
                                     device_authorization_endpoint: apiUrl() + "oauth/device/code", revocation_endpoint: apiUrl() + "oauth/revoke",
                                     userinfo_endpoint: apiUrl() + "v1/me", response_types_supported: ["code"],

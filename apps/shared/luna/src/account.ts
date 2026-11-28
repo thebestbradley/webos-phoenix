@@ -51,6 +51,8 @@ export interface AccountStatus {
               verificationUriComplete: string | null; expiresAt: string | null } | null;
     entitlements: AccountEntitlements | null;
     services: { backup: boolean; push: boolean; assistant: boolean } | null;
+    /** The sign-ins the server offers; null until its discovery document is read. */
+    methods?: ("code" | "browser")[] | null;
     error: { errorCode: string; errorText: string } | null;
 }
 

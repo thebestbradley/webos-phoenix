@@ -182,6 +182,42 @@ describe("signing in with a code (RFC 8628)", () => {
     });
 });
 
+describe("the sign-ins the server offers", () => {
+    afterAll(() => { mock.state.deviceOnly = false; });
+    it("reports code and browser from discovery, and offers browser only where the server has it", async () => {
+        mock.state.deviceOnly = false;
+        const svc = service();
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).methods).toBeNull();   // not read yet: read once, quietly
+        await until(async () => (await svc.getStatus({}, "org.webosphoenix.settings")).methods !== null);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).methods).toEqual(["code", "browser"]);
+    });
+    it("signed in already: a second sign-in is refused, and the tokens kept stay the only ones", async () => {
+        mock.state.deviceOnly = false;
+        const svc = service();
+        await signedIn(svc);
+        const before = JSON.stringify(keystore);
+        for (const method of ["code", "browser"]) {
+            const r = await svc.signIn({ method }, "org.webosphoenix.settings");
+            expect(r).toMatchObject({ returnValue: false, errorCode: "SIGNED_IN" });
+        }
+        expect(calls.some((c) => c.uri.includes("service.oauth/authorize"))).toBe(false);
+        expect(JSON.stringify(keystore)).toBe(before);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).state).toBe("signedIn");
+    });
+    it("a server that signs in with a code only (Phoenix-Web-Services' preview): no browser, and signIn browser says so at once", async () => {
+        mock.state.deviceOnly = true;
+        const svc = service();
+        await svc.getStatus({}, "org.webosphoenix.settings");
+        await until(async () => (await svc.getStatus({}, "org.webosphoenix.settings")).methods !== null);
+        const st = await svc.getStatus({}, "org.webosphoenix.settings");
+        expect(st.methods).toEqual(["code"]);
+        const r = await svc.signIn({ method: "browser" }, "org.webosphoenix.settings");
+        expect(r).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });
+        expect(calls.some((c) => c.uri.includes("service.oauth/authorize"))).toBe(false);
+        expect((await svc.getStatus({}, "org.webosphoenix.settings")).state).toBe("signedOut");
+    });
+});
+
 describe("entitlements", () => {
     it("a wrong signature is refused; offline, the kept copy holds through the grace days", async () => {
         const svc = service();
