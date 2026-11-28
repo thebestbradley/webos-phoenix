@@ -281,6 +281,67 @@ check(entry is not None and entry["sha256"] == hashlib.sha256(want).hexdigest() 
       "manifest: an app page's hash is of the page with the runtime's tag, as the image holds it")
 check(all(f["mode"] in ("0644", "0755") for f in man["files"]), "manifest: modes 0644 or 0755")
 
+# No macOS Finder files reach ${D} (Revisions 41 and 43 stopped in
+# phoenix-apps' do_package, installed-vs-shipped, on /.DS_Store and
+# /usr/.DS_Store): install-rootfs.py leaves them out of every tree, and
+# phoenix-no-macos-files.bbclass deletes any under ${D} after do_install.
+import shutil  # noqa: E402
+MACOS_NAMES = re.compile(r"(^|/)(\.DS_Store|\._[^/]*|\.localized)$")
+check(not [p for p in paths if MACOS_NAMES.search(p)], "Finder files: none in this checkout's plan")
+check(not [p for p in ir.shell_plan() if MACOS_NAMES.search(p)], "Finder files: none in the shell's plan")
+with tempfile.TemporaryDirectory() as tmp:
+    fixture = os.path.join(tmp, "repo")
+    shutil.copytree(os.path.join(REPO, "tools", "fixtures", "devicecheck", "bad"), fixture)
+    shutil.rmtree(os.path.join(fixture, "services"))   # a service whose npm package is not installed
+    with open(os.path.join(fixture, "runtime", "rootfs.json")) as f:
+        cfg = json.load(f)
+    cfg["overlays"] = ["compat/rootfs"]
+    with open(os.path.join(fixture, "runtime", "rootfs.json"), "w") as f:
+        json.dump(cfg, f)
+    os.makedirs(os.path.join(fixture, "compat", "rootfs", "usr", "lib"))
+    os.makedirs(os.path.join(fixture, "shell", "qml", "Phoenix"), exist_ok=True)
+    planted = ["compat/rootfs/.DS_Store", "compat/rootfs/usr/.DS_Store", "compat/rootfs/usr/lib/._x.conf",
+               "apps/.DS_Store", "apps/demo/.DS_Store", "apps/demo/._index.html", "apps/demo/.localized",
+               "shell/qml/.DS_Store", "shell/qml/Phoenix/._Thing.qml"]
+    for name in planted + ["compat/rootfs/usr/lib/x.conf"]:
+        with open(os.path.join(fixture, name), "w") as f:
+            f.write("x\n")
+    dest = os.path.join(tmp, "D")
+    run = subprocess.run([sys.executable, os.path.join(REPO, "tools", "install-rootfs.py"), dest, "--repo", fixture],
+                         capture_output=True, text=True)
+    installed = []
+    for root, dirs, files in os.walk(dest):
+        installed += ["/" + os.path.relpath(os.path.join(root, fn), dest) for fn in files]
+    check(run.returncode == 0 and "/usr/lib/x.conf" in installed
+          and "/usr/palm/applications/org.example.demo/index.html" in installed,
+          "Finder files: a checkout with them planted installs (%s)" % (run.stderr.strip() or "ok"))
+    check(not [p for p in installed if MACOS_NAMES.search(p)],
+          "Finder files: none planted in compat/rootfs, apps or the shell reach ${D}: %s"
+          % [p for p in installed if MACOS_NAMES.search(p)])
+    check(not [p for p in ir.shell_plan(fixture) if MACOS_NAMES.search(p)], "Finder files: none in the shell's plan")
+
+    # The bbclass's own function, run as do_install:append runs it, over a
+    # ${D} with them planted (and a folder named like one, which stays).
+    bbclass = open(os.path.join(REPO, "meta-phoenix", "classes", "phoenix-no-macos-files.bbclass")).read()
+    func = re.search(r"^phoenix_remove_macos_files\(\) \{\n.*?^\}", bbclass, re.M | re.S).group(0)
+    d = os.path.join(tmp, "image")
+    keep = ["usr/palm/applications/a/index.html", "usr/share/phoenix/qml/._folder/Kept.qml", "etc/DS_Store.txt"]
+    gone = [".DS_Store", "usr/.DS_Store", "usr/palm/applications/a/._index.html", "usr/share/.localized",
+            "usr/palm/services/s/node_modules/p/.DS_Store"]
+    for name in keep + gone:
+        os.makedirs(os.path.dirname(os.path.join(d, name)), exist_ok=True)
+        with open(os.path.join(d, name), "w") as f:
+            f.write("x\n")
+    os.symlink("nowhere", os.path.join(d, "usr", "._link"))
+    gone.append("usr/._link")
+    sh = subprocess.run(["sh", "-ec", 'bbnote() { echo "$*"; }\n%s\nphoenix_remove_macos_files "$1"' % func, "sh", d],
+                        capture_output=True, text=True)
+    left = [n for n in gone if os.path.lexists(os.path.join(d, n))]
+    check(sh.returncode == 0 and not left and all(os.path.isfile(os.path.join(d, n)) for n in keep),
+          "phoenix-no-macos-files.bbclass: removes .DS_Store, ._* and .localized under ${D}, nothing else (%s%s)"
+          % (sh.stderr.strip(), left))
+    check(sh.stdout.count("removing") == len(gone), "phoenix-no-macos-files.bbclass: names each one in the log")
+
 if failures:
     print("%d failed" % failures)
     sys.exit(1)

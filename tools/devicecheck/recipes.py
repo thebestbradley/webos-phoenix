@@ -21,6 +21,10 @@
   service-file   a luna-service2 .service file whose Name has no role file,
                  or whose run-js-service path is not where install-rootfs.py
                  puts the service
+  macos-files    a recipe that fetches this repository, or an image, that
+                 does not inherit phoenix-no-macos-files: a Mac's Finder
+                 files (.DS_Store, ._*) in the tree reach ${D}, and
+                 do_package stops (installed-vs-shipped)
 """
 
 import hashlib
@@ -32,6 +36,7 @@ from . import Findings, finish, parser, read, read_json, recipe_vars, recipe_fil
 CHECKER = "recipes"
 COMMON_LICENSES = {"Apache-2.0": "89aea4e17d99a7cacdbeed46a0096b10", "MIT": "0835ade698e0bcf8506ecda2f7b4f302"}
 NETWORK = re.compile(r"\b(npm\s+(?:install|ci|i)\b|yarn\s+install|pnpm\s+install|pip3?\s+install|curl\s|wget\s|git\s+clone|cargo\s+fetch|go\s+get)")
+THIS_REPO = re.compile(r"^git(?:sm)?://github\.com/thebestbradley/(?:webos-phoenix|phoenix-ember-glass-ui)(?:\.git)?;")
 EXEC_PROVIDERS = {"/usr/bin/run-js-service": "mojoservicelauncher", "/usr/bin/node": "nodejs"}
 
 
@@ -126,6 +131,13 @@ def check(root):
                 if m:
                     f.add("network", "%s:%s" % (name, task), "%s's %s runs '%s': no network outside do_fetch"
                           % (name, task, m.group(1).strip()), where)
+        # A tree from this repository, or an image, without a Mac's Finder files.
+        fetches_this = any(THIS_REPO.match(u) for u in uris)
+        is_image = not is_append and os.path.basename(os.path.dirname(path)) == "images"
+        if (fetches_this or is_image) and "phoenix-no-macos-files" not in inherits:
+            f.add("macos-files", name, "%s %s but does not inherit phoenix-no-macos-files: a .DS_Store a Mac "
+                  "left in the tree stops do_package (installed-vs-shipped)"
+                  % (name, "is an image" if is_image else "installs from this repository"), where)
         # Units the recipe names.
         for u in v.get("SYSTEMD_SERVICE:${PN}", "").split():
             units[u] = name

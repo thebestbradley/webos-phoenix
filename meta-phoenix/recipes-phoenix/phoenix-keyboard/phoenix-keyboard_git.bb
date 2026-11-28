@@ -22,6 +22,8 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git/services/keyboard"
 
 inherit qt6-cmake pkgconfig
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
 
 # maliit-framework-webos: the plugin API's headers and libmaliit-plugins
 # (its recipe installs them, maliit-framework-webos.bb do_install).

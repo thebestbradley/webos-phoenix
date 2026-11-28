@@ -3,7 +3,9 @@
 /out/
 /shell/build/
 *.user
+# macOS Finder files (never in an image: phoenix-no-macos-files.bbclass)
 .DS_Store
+._*
 /.claude/
 __pycache__/
 /node_modules/
