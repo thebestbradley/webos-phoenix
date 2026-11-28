@@ -27,6 +27,10 @@ var SOURCES = "/etc/palm/marketplace/sources.json";
 // them in /media/cryptofs/apps, the apps the user may remove).
 var PREINSTALLED = "/etc/palm/marketplace/preinstalled.json";
 var INSTALLED_APPS = "/media/cryptofs/apps/usr/palm/applications/";
+// The account templates of the system image, as the accounts service reads
+// them (app-services com.palm.service.accounts accounts.js TEMPLATE_ROOTS,
+// its first root): every *.json in each folder.
+var SYSTEM_TEMPLATES = "/usr/palm/public/accounts/";
 
 var service = new Service(packages.SERVICE);
 
@@ -85,10 +89,29 @@ var methods = packages.createPackagesService({
     preinstalled: function () {
         return ((readJson(PREINSTALLED) || {}).packages || []).map(function (p) {
             var info = readJson(INSTALLED_APPS + p.id + "/appinfo.json") || {};
-            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id,
+                     templates: p.templates || [] };
         });
     },
     firstParty: function () { return (readJson(PREINSTALLED) || {}).firstParty || []; },
+    systemTemplates: function () {
+        var out = [];
+        var dirs = [];
+        try { dirs = fs.readdirSync(SYSTEM_TEMPLATES); } catch (e) { return out; }
+        dirs.forEach(function (dir) {
+            var files = [];
+            try { files = fs.readdirSync(SYSTEM_TEMPLATES + dir); } catch (e) { return; }
+            files.filter(function (f) { return /\.json$/i.test(f); }).forEach(function (f) {
+                var parsed = readJson(SYSTEM_TEMPLATES + dir + "/" + f);
+                (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId) return;
+                    var v = t.validator && typeof t.validator === "object" ? t.validator : null;
+                    out.push({ templateId: String(t.templateId), appId: v && v.customUI && v.customUI.appId ? String(v.customUI.appId) : null });
+                });
+            });
+        });
+        return out;
+    },
     log: function (msg) { console.log("[marketplace] " + msg); }
 });
 
