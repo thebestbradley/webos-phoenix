@@ -6,7 +6,7 @@
     "permissions": [
         {
             "service": "org.webosphoenix.service.oauth",
-            "outbound": ["com.webos.service.applicationmanager", "org.webosphoenix.shellhost"]
+            "outbound": ["com.webos.service.applicationmanager", "org.webosphoenix.shellhost", "org.webosphoenix.service.account"]
         }
     ]
 }

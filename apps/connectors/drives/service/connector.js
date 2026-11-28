@@ -38,6 +38,11 @@
 // docs/DEVELOPER-APPS.md). Without one the account type says "not
 // available in this build" (providerInfo) instead of failing at sign-in.
 // Tokens stay in the OAuth service's key store; the account keeps its key.
+// A provider whose token endpoint asks for the client secret (Box) is
+// signed in through Phoenix's token relay instead of a secret in the file:
+// {"box": {"clientId": "...", "relay": true}} (the OAuth service's `relay`
+// option; docs/SYNERGY-CONNECTORS.md "The token relay"). Not available
+// when this build's OAuth service has no relay.
 
 "use strict";
 
@@ -103,13 +108,16 @@ function clientOf(ctx, provider) {
         if (!c || typeof c.clientId !== "string" || !c.clientId) return null;
         var lib = OAUTH_PROVIDERS[provider].lib;
         var out = Object.assign({}, lib.OAUTH, c);
+        delete out.relay;
+        if (c.relay === true) { out.relay = provider; delete out.clientSecret; }
         if (provider === "googledrive" && c.scope === "drive") out.scope = lib.OAUTH.fullScope;
         else out.scope = lib.OAUTH.scope;
         // Endpoint addresses of the setting (a test server) may be reached.
         ["authorizationEndpoint", "tokenEndpoint", "revocationEndpoint"].concat(OAUTH_PROVIDERS[provider].endpoints).forEach(function (k) {
             if (c[k]) { try { ctx.http.allowHost(new URL(c[k]).host); } catch (e) { /* not an address */ } }
         });
-        return out;
+        if (!out.relay) return out;
+        return ctx.luna.call(OAUTH + "redirectUri", {}).then(function (r) { return r && r.relay === true ? out : null; }, function () { return null; });
     });
 }
 
@@ -440,8 +448,9 @@ function signIn(ctx, p) {
         var req = { authorizationEndpoint: client.authorizationEndpoint, tokenEndpoint: client.tokenEndpoint, clientId: client.clientId,
                     scope: client.scope,
                     redirectUri: client.redirectUri || (OAUTH_PROVIDERS[provider].fixedRedirect && r.fixedRedirectUri) || r.redirectUri };
-        if (client.clientSecret) req.clientSecret = client.clientSecret;
-        if (client.revocationEndpoint) req.revocationEndpoint = client.revocationEndpoint;
+        if (client.relay) req.relay = client.relay;
+        else if (client.clientSecret) req.clientSecret = client.clientSecret;
+        if (client.revocationEndpoint && !client.relay) req.revocationEndpoint = client.revocationEndpoint;
         if (client.params) req.params = client.params;
         return lunaOk(ctx, OAUTH + "authorize", req);
     }).then(function (auth) {

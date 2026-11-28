@@ -787,6 +787,17 @@ device ──(6) POST /v1/oauth-broker/slack/redeem {handle, code_verifier} ─�
 device ──(7) POST /v1/oauth-broker/slack/refresh {refresh_token} ──► new tokens (the broker adds the secret; stores nothing)
 ```
 
+**As built (28 November 2026), the exchange-only relay**: for a provider
+that takes the device's own loopback redirect (Box, Todoist, LinkedIn),
+steps 1 to 6 are not needed. The device runs the authorization itself
+(PKCE, its loopback redirect) and posts the code with its verifier to
+`POST /v1/oauth-broker/<provider>/exchange {code, code_verifier,
+redirect_uri}`; step 7 is `/refresh` as above. The server adds the secret
+at the provider's fixed token endpoint and keeps nothing
+([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) "The token relay";
+Phoenix-Web-Services `docs/OAUTH-TOKEN-RELAY.md`). The broker's own
+callback (steps 1 to 6) remains for Slack, whose redirect must be https.
+
 The PKCE pair is between the device and the broker (step 6 needs the
 verifier), so a stolen handle is useless. The device's
 `org.webosphoenix.service.oauth` gains a `broker` option on `authorize`;
@@ -1730,7 +1741,7 @@ so nothing is forgotten. Each is small unless said.
 | The account service, Settings > Phoenix Account, First Use's step | `services/account`, `apps/settings` `Account.tsx`, `apps/firstuse` | **Done** |
 | "Phoenix Cloud" preset in Backup and Restore | `apps/settings/service` (backup), `Backup.tsx`, First Use | **Done** |
 | Push service (C6), relay channel registration | registration: **done** (`services/account` `pushEndpoint`, `pushRegister`); the ntfy connection and decryption: `org.webosphoenix.service.push` (SYNERGY-MODERN.md 4.8) | P3 |
-| OAuth broker option | client: **done** (`services/account` `tokenRelay`); the option in `services/oauth/oauthservice.js` `authorize` | With the first confidential provider (Slack) |
+| OAuth broker option | **done** for the exchange-only relay (28 November 2026): `services/account` `tokenRelay` exchange and refresh, the OAuth service's `relay` option, Phoenix-Web-Services `/v1/oauth-broker/<provider>/exchange` and `/refresh`; the broker's callback (authorize, redeem) not built | The callback with Slack |
 | "Phoenix" assistant provider type | `apps/assistant/service` | **Done** |
 | RAUC in the image (recipe, `system.conf`, keyring) and mark-good | meta-phoenix `dynamic-layers/rauc`: **done** for `phoenix-vm-arm64` (A/B disk, GRUB's boot counter, test keyring, `phoenix-bundle`; 28 November 2026), mark-good in `com.palm.update`; the phones' and tablets' slots, and the owner's release keyring, to do | Before the first device image (7.2) |
 | Model download mirror | `apps/assistant/service/lib/models.js:45` | When GitHub releases stop being used |

@@ -15,7 +15,9 @@
 //     this service's name as the sender, so no page can draw that bar);
 //   - the key store: /var/lib/phoenix/oauth, sealed (keystore.js);
 //   - the loopback redirect on 127.0.0.1 (loopback.js), only while a
-//     sign-in is pending.
+//     sign-in is pending;
+//   - Phoenix's token relay, through the account service's tokenRelay
+//     (group account.cloud), for providers whose secret stays there.
 //
 // The caller is the one luna-service2 names: a WebAppMgr page's app id,
 // else the calling service's bus name (as services/shellhost).
@@ -53,6 +55,9 @@ function call(uri, params) {
 var lifeEvents = null;
 var oauthDevice = device.createDeviceOAuth({
     request: synckit.createRequest({ userAgent: "webOS-Phoenix-OAuth/0.2" }),
+    // Phoenix's token relay: the account service adds the device's
+    // Phoenix token (accountservice.js tokenRelay).
+    relay: function (params) { return call("luna://org.webosphoenix.service.account/tokenRelay", params); },
     fs: fs, path: path, crypto: crypto, http: http, dir: DIR,
     launchCard: function (params) {
         // The card's closes, while this service runs (it runs while a

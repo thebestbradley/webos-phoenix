@@ -30,6 +30,8 @@ function createLuna(luna) {
             if (!r || r.returnValue === false) {
                 var e = new Error((r && (r.errorText || r.errorMessage)) || ("call failed: " + uri));
                 e.errorCode = r && r.errorCode;
+                // A wait the service asks for (the OAuth service's busy token relay): kept for the caller's backoff.
+                if (r && typeof r.retryAt === "number") e.retryAt = r.retryAt;
                 throw e;
             }
             return r;

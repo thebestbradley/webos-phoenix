@@ -28,7 +28,7 @@
 //
 //   const fake = await createFakeDrives().start(0);
 //   fake.origin, fake.clients (the drives/clients.json for it), fake.trees,
-//   fake.requests, fake.stop()
+//   fake.requests, fake.tokenForms (the token endpoints' forms), fake.stop()
 
 "use strict";
 
@@ -150,7 +150,7 @@ function ranged(req, bytes, extra) {
 function createFakeDrives(options) {
     options = options || {};
     const picture = png(64, [40, 110, 170]);
-    const fake = { origin: "", requests: [], autoApprove: !!options.autoApprove, offline: false };
+    const fake = { origin: "", requests: [], tokenForms: [], autoApprove: !!options.autoApprove, offline: false };
     const trees = fake.trees = {
         dav: createTree("dav"), s3: createTree("s3"), dropbox: createTree("dbx"), onedrive: createTree("od-root"),
         googledrive: createTree("gd-root"), box: createTree("0")
@@ -210,6 +210,12 @@ function createFakeDrives(options) {
         }
         if (rest === "token" && req.method === "POST") {
             const f = new URLSearchParams(body.toString("utf8"));
+            fake.tokenForms.push({ provider, form: body.toString("utf8") });
+            // fake.boxTokenAnswer(res, form): a token endpoint that misbehaves (relay-e2e.test.ts), true when it answered.
+            if (provider === "box" && fake.boxTokenAnswer && fake.boxTokenAnswer(res, f)) return;
+            // Box's token endpoint asks for the client secret, PKCE or not (fake.boxSecret: as Box does).
+            if (provider === "box" && fake.boxSecret && (f.get("client_secret") !== fake.boxSecret || f.get("client_id") !== "phoenix-test-box"))
+                return send(res, 401, { error: "invalid_client", error_description: "The client credentials are not valid" });
             if (f.get("grant_type") === "authorization_code") {
                 const c = codes.get(f.get("code"));
                 codes.delete(f.get("code"));

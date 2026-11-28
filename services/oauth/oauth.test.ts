@@ -96,7 +96,8 @@ function makeWorld(opts: any = {}) {
         mayWipe: (c: string) => c === "com.palm.systemmanager",
         now: () => w.now,
         timeoutMs: opts.timeoutMs,
-        fixedPort: opts.fixedPort
+        fixedPort: opts.fixedPort,
+        relay: opts.relay
     });
     w.m = w.device.methods;
     return w;
@@ -334,6 +335,137 @@ describe("tokens", () => {
         expect((await world.m.client({ name: "mastodon.example" }, OWNER)).value.clientSecret).toBe("very-secret-value");
         expect((await world.m.client({ name: "mastodon.example", owner: OWNER }, "com.example.page")).errorCode).toBe("PERMISSION_DENIED");
         expect(fs.readFileSync(path.join(dir, "keys.enc"), "utf8")).not.toContain("very-secret-value");
+    });
+});
+
+describe("Phoenix's token relay", () => {
+    // The relay as the account service and the server do it: the code and
+    // verifier from the device, the client secret added there.
+    const SECRET = "box-secret-only-on-the-server";
+    function relayTo(calls: any[]) {
+        return async (p: any) => {
+            calls.push(p);
+            const form = p.step === "exchange"
+                ? { grant_type: "authorization_code", code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri }
+                : { grant_type: "refresh_token", refresh_token: p.refreshToken };
+            const res = await get(provider.tokenEndpoint, { method: "POST", body: new URLSearchParams({ ...form, client_id: provider.clientId, client_secret: SECRET }).toString() });
+            const b = JSON.parse(res.body);
+            if (res.status !== 200) return { returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." };
+            return { returnValue: true, accessToken: b.access_token, refreshToken: b.refresh_token || null, tokenType: b.token_type, expiresIn: b.expires_in, scope: b.scope };
+        };
+    }
+
+    it("signs in with the device's PKCE and loopback redirect, the secret only on the relay, and refreshes there", async () => {
+        await provider.stop();
+        provider = await createFakeProvider({ clientSecret: SECRET, expiresIn: 120 }).start(0);
+        const calls: any[] = [];
+        world = makeWorld({ relay: relayTo(calls) });
+        expect((await world.m.redirectUri({}, OWNER)).relay).toBe(true);
+        const r = await world.m.authorize(authorizeParams({ tokenEndpoint: undefined, relay: "box" }), OWNER);
+        expect(r).toMatchObject({ returnValue: true, keyId: expect.any(String) });
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ provider: "box", step: "exchange", code: expect.stringMatching(/^code-/),
+                                         codeVerifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), redirectUri: expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/) });
+        // The challenge the page was given is the verifier the relay was handed.
+        const challenge = provider.state().authorizeRequests[0].code_challenge;
+        expect(crypto.createHash("sha256").update(calls[0].codeVerifier).digest("base64url")).toBe(challenge);
+        expect(JSON.stringify(calls)).not.toContain(SECRET);
+        const first = await world.m.token({ keyId: r.keyId }, OWNER);
+        world.now += 3600 * 1000;
+        const second = await world.m.token({ keyId: r.keyId }, OWNER);
+        expect(second.accessToken).not.toBe(first.accessToken);
+        expect(calls[1]).toMatchObject({ provider: "box", step: "refresh", refreshToken: expect.stringMatching(/^rt-/) });
+        expect(provider.state().refreshed).toBe(1);
+        // Nothing to revoke without the secret: the key goes, the provider is not asked.
+        expect((await world.m.forget({ keyId: r.keyId }, OWNER)).returnValue).toBe(true);
+        expect(provider.state().revoked).toEqual([]);
+    });
+
+    it("a refusal there is 401_UNAUTHORIZED; no relay in this build is NOT_AVAILABLE; no secret is sent from the device", async () => {
+        await provider.stop();
+        provider = await createFakeProvider({ clientSecret: SECRET }).start(0);
+        const refused = makeWorld({ relay: async () => ({ returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." }) });
+        expect((await refused.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("401_UNAUTHORIZED");
+        const unknown = makeWorld({ relay: async () => ({ returnValue: false, errorCode: "UNKNOWN_PROVIDER", errorText: "no" }) });
+        expect((await unknown.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("NOT_AVAILABLE");
+        const none = makeWorld();
+        expect((await none.m.redirectUri({}, OWNER)).relay).toBe(false);
+        expect((await none.m.authorize(authorizeParams({ relay: "box" }), OWNER)).errorCode).toBe("NOT_AVAILABLE");
+        expect((await none.m.authorize(authorizeParams({ relay: "https://evil.example/" }), OWNER)).errorCode).toBe("BAD_PARAMS");
+        // Without the relay the provider refuses the device's own exchange (it has no secret).
+        expect((await none.m.authorize(authorizeParams(), OWNER)).errorCode).toBe("401_UNAUTHORIZED");
+    });
+});
+
+describe("Phoenix's token relay when it fails", () => {
+    const SECRET = "box-secret-only-on-the-server";
+    // A relay that answers as the account service does, once signed in: `next` decides each refresh.
+    async function signedIn(next: { reply?: any; wait?: Promise<any> }) {
+        await provider.stop();
+        provider = await createFakeProvider({ clientSecret: SECRET, expiresIn: 120 }).start(0);
+        const calls: any[] = [];
+        const w = makeWorld({ relay: async (p: any) => {
+            calls.push(p);
+            if (p.step === "exchange") return { returnValue: true, accessToken: "at-1", refreshToken: "rt-1", tokenType: "Bearer", expiresIn: 120, scope: "files.read" };
+            if (next.wait) await next.wait;
+            return next.reply;
+        } });
+        const r = await w.m.authorize(authorizeParams({ tokenEndpoint: undefined, relay: "box" }), OWNER);
+        expect(r.returnValue, JSON.stringify(r)).toBe(true);
+        w.now += 3600 * 1000;
+        return { w, keyId: r.keyId as string, calls };
+    }
+
+    it("a busy relay (429) is 503_SERVICE_UNAVAILABLE with the time to try again, and the key is kept", async () => {
+        const { w, keyId } = await signedIn({ reply: { returnValue: false, errorCode: "RATE_LIMITED", errorText: "Too Many Requests", retryAfter: 42 } });
+        const r = await w.m.token({ keyId }, OWNER);
+        expect(r).toMatchObject({ returnValue: false, errorCode: "503_SERVICE_UNAVAILABLE", retryAt: w.now + 42000 });
+        expect(r.errorText).toMatch(/busy.*try(ing)? again/i);
+        // Without a Retry-After: a minute.
+        const { w: w2, keyId: k2 } = await signedIn({ reply: { returnValue: false, errorCode: "RATE_LIMITED", errorText: "Too Many Requests" } });
+        expect(await w2.m.token({ keyId: k2 }, OWNER)).toMatchObject({ errorCode: "503_SERVICE_UNAVAILABLE", retryAt: w2.now + 60000 });
+        // The server away for maintenance (503 with Retry-After): the same.
+        const { w: w3, keyId: k3 } = await signedIn({ reply: { returnValue: false, errorCode: "UNAVAILABLE", errorText: "Service Unavailable", retryAfter: 300 } });
+        expect(await w3.m.token({ keyId: k3 }, OWNER)).toMatchObject({ errorCode: "503_SERVICE_UNAVAILABLE", retryAt: w3.now + 300000 });
+        // The key is still there with its refresh token: the next try can refresh.
+        expect(await w.device.keystore.get("key:" + keyId)).toMatchObject({ relay: "box", refreshToken: "rt-1", accessToken: "at-1" });
+    });
+
+    it("a refused refresh flags the account (401_UNAUTHORIZED); an unreachable relay or provider, or Phoenix signed out, does not", async () => {
+        const cases: [any, string][] = [
+            [{ returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." }, "401_UNAUTHORIZED"],
+            [{ returnValue: false, errorCode: "CONNECTION_FAILED", errorText: "Cannot reach api.example (ECONNREFUSED)" }, "CONNECTION_FAILED"],
+            [{ returnValue: false, errorCode: "CONNECTION_TIMEOUT", errorText: "Phoenix's token relay did not answer" }, "CONNECTION_TIMEOUT"],
+            [{ returnValue: false, errorCode: "PROVIDER_UNAVAILABLE", errorText: "The provider could not be reached." }, "500_SERVER_ERROR"],
+            [{ returnValue: false, errorCode: "SERVER_ERROR", errorText: "Internal Server Error" }, "500_SERVER_ERROR"],
+            [{ returnValue: false, errorCode: "SIGNED_OUT", errorText: "Sign in to your Phoenix account first" }, "SIGNED_OUT"],
+            [{ returnValue: false, errorCode: "DEVICE_REQUIRED", errorText: "Only a registered device signs in through the relay." }, "DEVICE_REQUIRED"],
+            [{ returnValue: true }, "500_SERVER_ERROR"]
+        ];
+        for (const [reply, code] of cases) {
+            const { w, keyId, calls } = await signedIn({ reply });
+            const r = await w.m.token({ keyId }, OWNER);
+            expect(r, JSON.stringify(reply)).toMatchObject({ returnValue: false, errorCode: code });
+            expect(r.errorText).toContain("Phoenix's token relay");
+            // Kept, to try again (or to sign in again over).
+            const again = await w.m.token({ keyId }, OWNER);
+            expect(again.errorCode).toBe(code);
+            expect(calls.filter((c) => c.step === "refresh")).toHaveLength(2);
+        }
+    });
+
+    it("an account removed while its refresh is in flight stays removed", async () => {
+        let release: (v?: unknown) => void = () => {};
+        const wait = new Promise((r) => { release = r; });
+        const { w, keyId } = await signedIn({ wait, reply: { returnValue: true, accessToken: "at-2", refreshToken: "rt-2", tokenType: "Bearer", expiresIn: 120 } });
+        const pending = w.m.token({ keyId }, OWNER);
+        await new Promise((r) => setTimeout(r, 10));
+        expect((await w.m.forget({ keyId }, OWNER)).returnValue).toBe(true);
+        release();
+        expect(await pending).toMatchObject({ returnValue: false, errorCode: "NOT_FOUND" });
+        // Not written back: the tokens of the removed account are not on the device.
+        expect(await w.m.token({ keyId }, OWNER)).toMatchObject({ returnValue: false, errorCode: "NOT_FOUND" });
+        expect(await w.device.keystore.get("key:" + keyId)).toBeFalsy();
     });
 });
 

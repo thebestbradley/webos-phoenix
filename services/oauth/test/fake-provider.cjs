@@ -8,7 +8,8 @@
 // redirects matched as RFC 8252 7.3 asks (any port) or exactly
 // ({exactRedirect: true}, as Dropbox does).
 //
-//   createFakeProvider({clientId, redirectUris, exactRedirect, expiresIn})
+//   createFakeProvider({clientId, clientSecret, redirectUris, exactRedirect, expiresIn})
+//     clientSecret: the token endpoint asks for it (as Box's does)
 //     .start(port) -> Promise<provider>
 //   provider.base, .stop(), .state(): {issued, refreshed, revoked, tokenRequests}
 //
@@ -100,6 +101,7 @@ function createFakeProvider(opts) {
             const b = await body(req);
             st.tokenRequests.push(b);
             if (b.client_id !== clientId) return json(res, 401, { error: "invalid_client" });
+            if (opts.clientSecret && b.client_secret !== opts.clientSecret) return json(res, 401, { error: "invalid_client", error_description: "client_secret" });
             if (b.grant_type === "authorization_code") {
                 const c = codes[b.code];
                 delete codes[b.code];

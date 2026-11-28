@@ -77,7 +77,7 @@ function memoryFiles() {
     };
 }
 
-async function world(opts?: { clients?: any }) {
+async function world(opts?: { clients?: any; relay?: (p: any) => Promise<any> }) {
     const db = memdb.createMemDb(memdb.KIND_PARENTS);
     const tempdb = memdb.createMemDb();
     const keys: Record<string, any> = {};
@@ -91,6 +91,7 @@ async function world(opts?: { clients?: any }) {
         crypto: { randomBytes: (n: number) => new Uint8Array(require("crypto").randomBytes(n)),
                   sha256: async (b: Uint8Array) => new Uint8Array(require("crypto").createHash("sha256").update(Buffer.from(b)).digest()) },
         redirectUri: "http://127.0.0.1:1/signed-in.html",
+        relay: opts && opts.relay,
         // The browser sheet: the provider's page, its redirects followed, until the redirect address.
         sheet: async (url: string, prefix: string) => {
             sheets.push(url);
@@ -368,6 +369,95 @@ describe("OAuth drives", () => {
         expect(w.sheets).toEqual([]);
         const none = await world({ clients: null });
         expect((await none.methods.providerInfo({ templateId: T.onedrive })).available).toBe(false);
+    });
+
+    it("box through Phoenix's token relay: no secret on the device, the exchange and refreshes there", async () => {
+        // The server's side (Phoenix-Web-Services OAuthTokenRelay): the code and verifier, the secret added.
+        fake.boxSecret = "box-secret-on-the-server";
+        const asked: any[] = [];
+        const relay = async (p: any) => {
+            asked.push(p);
+            const form = new URLSearchParams(p.step === "exchange"
+                ? { grant_type: "authorization_code", code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri }
+                : { grant_type: "refresh_token", refresh_token: p.refreshToken });
+            form.set("client_id", "phoenix-test-box");
+            form.set("client_secret", fake.boxSecret);
+            const res = await request({ method: "POST", url: fake.origin + "/oauth/box/token", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString() });
+            const b = JSON.parse(res.body);
+            return res.status === 200 ? { returnValue: true, accessToken: b.access_token, refreshToken: b.refresh_token || null, tokenType: b.token_type, expiresIn: b.expires_in }
+                : { returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." };
+        };
+        try {
+            const clients = { box: { ...fake.clients().box, relay: true, clientSecret: "left-in-the-file" } };
+            // A device without the relay: not available, no page.
+            const without = await world({ clients });
+            expect((await without.methods.providerInfo({ templateId: T.box })).available).toBe(false);
+            expect(await without.methods.signIn({ templateId: T.box })).toMatchObject({ returnValue: false, errorCode: "NOT_AVAILABLE" });
+            expect(without.sheets).toEqual([]);
+            // Without the relay the device's own exchange is refused (Box wants the secret).
+            const direct = await world({ clients: { box: fake.clients().box } });
+            expect(await direct.methods.signIn({ templateId: T.box })).toMatchObject({ returnValue: false, errorCode: "401_UNAUTHORIZED" });
+
+            const w = await world({ clients, relay });
+            expect((await w.methods.providerInfo({ templateId: T.box })).available).toBe(true);
+            const r = await w.methods.signIn({ templateId: T.box });
+            expect(r.returnValue, JSON.stringify(r)).toBe(true);
+            expect(r.username).toBe("phoenix@box.test");
+            expect(asked[0]).toMatchObject({ provider: "box", step: "exchange", code: expect.stringMatching(/^code-/), codeVerifier: expect.stringMatching(/^[\w-]{43}$/) });
+            const key = w.keys["key:" + r.credentials.common.oauthKey];
+            expect(key).toMatchObject({ owner: SERVICE, relay: "box", clientSecret: "" });
+            expect(JSON.stringify(w.keys) + JSON.stringify(asked)).not.toContain("left-in-the-file");
+            const id = await w.addAccount("box", r);
+            fake.expireTokens();
+            key.expiresAt = 1;
+            expect((await w.methods.listFiles({ accountId: id, path: "/" })).returnValue).toBe(true);
+            expect(asked[asked.length - 1]).toMatchObject({ provider: "box", step: "refresh", refreshToken: expect.stringMatching(/^rt-box-/) });
+        } finally {
+            fake.boxSecret = undefined;
+        }
+    });
+
+    it("box's refresh through a busy relay waits as it asks; a refused one flags the account", async () => {
+        let answer: any = null;
+        // The exchange as the server does it (with the fake's own codes), the refreshes as `answer` says.
+        const relay = async (p: any) => {
+            if (p.step !== "exchange") return answer;
+            const form = new URLSearchParams({ grant_type: "authorization_code", code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri, client_id: "phoenix-test-box" });
+            const b = JSON.parse((await request({ method: "POST", url: fake.origin + "/oauth/box/token", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: form.toString() })).body);
+            return { returnValue: true, accessToken: b.access_token, refreshToken: b.refresh_token, tokenType: b.token_type, expiresIn: b.expires_in };
+        };
+        const signedIn = async () => {
+            const w = await world({ clients: { box: { ...fake.clients().box, relay: true } }, relay });
+            answer = null;
+            const r = await w.methods.signIn({ templateId: T.box });
+            expect(r.returnValue, JSON.stringify(r)).toBe(true);
+            const key = w.keys["key:" + r.credentials.common.oauthKey];
+            key.expiresAt = 1;
+            return { w, key, id: await w.addAccount("box", r) };
+        };
+        // 429 from the relay, Retry-After 120: the files and the account wait that long; the account is not flagged.
+        const { w, key, id } = await signedIn();
+        answer = { returnValue: false, errorCode: "RATE_LIMITED", errorText: "Too Many Requests", retryAfter: 120 };
+        const before = Date.now();
+        const l = await w.methods.listFiles({ accountId: id, path: "/" });
+        expect(l).toMatchObject({ returnValue: false, errorCode: E.RATE_LIMITED, errorText: expect.stringMatching(/token relay is busy/) });
+        expect(l.retryAt).toBeGreaterThanOrEqual(before + 120000);
+        // The sync does not ask before then.
+        const s = await w.methods.sync({ accountId: id });
+        expect(s).toMatchObject({ returnValue: true, skipped: "backoff" });
+        expect(s.retryAt).toBeGreaterThanOrEqual(before + 120000);
+        expect(key.refreshToken).toMatch(/^rt-box-/);
+        // The sync's own first refresh, busy: its reply carries the time, for the scheduler.
+        const second = await signedIn();
+        answer = { returnValue: false, errorCode: "RATE_LIMITED", errorText: "Too Many Requests", retryAfter: 120 };
+        const s2 = await second.w.methods.sync({ accountId: second.id });
+        expect(s2).toMatchObject({ returnValue: false, errorCode: "503_SERVICE_UNAVAILABLE" });
+        expect(s2.retryAt).toBeGreaterThanOrEqual(before + 120000);
+        // The provider refused the refresh token there: sign in again.
+        const third = await signedIn();
+        answer = { returnValue: false, errorCode: "PROVIDER_REFUSED", errorText: "The provider refused the grant." };
+        expect(await third.w.methods.listFiles({ accountId: third.id, path: "/" })).toMatchObject({ returnValue: false, errorCode: E.AUTH });
+        expect(await third.w.methods.sync({ accountId: third.id })).toMatchObject({ returnValue: false, errorCode: "401_UNAUTHORIZED" });
     });
 
     it("a refused sign-in (expired, revoked) is AUTH for the files and 401 for the account", async () => {

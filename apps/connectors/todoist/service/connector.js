@@ -15,8 +15,9 @@
 //     and secret are a setting of the image, /etc/palm/todoist/clients.json
 //     ({"todoist": {"clientId": "...", "clientSecret": "..."}};
 //     docs/DEVELOPER-APPS.md). Todoist's token exchange asks for the
-//     secret: it ships in that file, or goes through the token relay
-//     (OPEN-QUESTIONS Q49). Without it the page says "not available in this
+//     secret: it ships in that file, or goes through Phoenix's token relay
+//     ({"todoist": {"clientId": "...", "relay": true}}, OPEN-QUESTIONS Q49,
+//     Q123). Without it the page says "not available in this
 //     build" and offers the token only.
 //
 //   TASKS   two-way: the projects as com.palm.tasklist.todoist:1 lists
@@ -57,8 +58,10 @@ function settingOf(ctx) {
     });
 }
 
+// Todoist's token exchange asks for the secret: in the file, or through
+// Phoenix's token relay ("relay": true; kit.viaRelay).
 function clientOf(ctx) {
-    return kit.registeredClient(ctx, CLIENTS, "todoist", TD.OAUTH);
+    return kit.registeredClient(ctx, CLIENTS, "todoist", TD.OAUTH).then(function (c) { return c && c.clientSecret ? c : kit.viaRelay(ctx, c); });
 }
 
 // The account's API client: its token, or its OAuth key's.

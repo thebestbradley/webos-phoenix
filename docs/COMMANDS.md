@@ -699,7 +699,7 @@ CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ test
 
 What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-159`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-160`
 
 Every check (tools/ci-checks.sh):
 
@@ -933,7 +933,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,89
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-155 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-156 · .github/workflows/ci.yml:81-82 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -953,6 +953,12 @@ python3 tools/test-device-profiles.py
 
 ```sh
 python3 tools/test-wam-user-agent.py
+```
+
+The connectors' registrations (clients.json) in an image and the simulator:
+
+```sh
+python3 tools/test-connector-clients.py
 ```
 
 A browser's burst of connections while tools/serve-rootfs.py is busy:
@@ -1715,6 +1721,30 @@ Show the image's layout:
 
 ```sh
 python3 tools/install-rootfs.py out/rootfs --list
+```
+
+### The connectors' registrations
+
+Their public client ids, from a file outside the checkout; never a secret (a provider that needs one: `"relay": true`). For an image, `PHOENIX_CONNECTOR_CLIENTS = "/path/to/connector-clients.json"` in local.conf.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/connector-clients.py:28-32 · meta-phoenix/recipes-phoenix/phoenix-apps/phoenix-apps_git.bb:89-104`
+
+Check the file:
+
+```sh
+python3 tools/connector-clients.py connector-clients.json --check
+```
+
+The simulator's /etc/palm/<name>/clients.json (runtime/connector-settings/clients/):
+
+```sh
+python3 tools/connector-clients.py connector-clients.json --sim
+```
+
+With the image's files, /etc/palm/<name>/clients.json:
+
+```sh
+python3 tools/install-rootfs.py out/rootfs --connector-clients connector-clients.json
 ```
 
 ## Developer tools for a device (nova)
