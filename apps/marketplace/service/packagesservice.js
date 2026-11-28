@@ -186,7 +186,9 @@
 //   - a package whose app, package or service id is in RESERVED_NAMESPACES
 //     installs only from a Phoenix catalog the device ships with (its
 //     publisher), never from another catalog, a feed or a sideload
-//     (RESERVED_NAME); Phoenix's own apps are pushed by `nova push`;
+//     (RESERVED_NAME); Phoenix's own apps are pushed by `nova push`. Any
+//     catalog's web apps (org.webosphoenix.pwa.<name>, packaged here from
+//     the site's manifest) are the exception (reservedName);
 //   - a third-party connector's app (not firstParty) names only its own
 //     groups (its service's api.json's, named in its namespace, with only
 //     its service's methods) and THIRD_PARTY_APP_GROUPS, what the kit's
@@ -1042,9 +1044,16 @@ function createPackagesService(deps) {
         return RESERVED_NAMESPACES.filter(function (ns) { return id === ns || id.indexOf(ns + ".") === 0; })[0] || "";
     }
     // RESERVED_NAME for a checked package (check) from anywhere but a Phoenix
-    // catalog the device ships with (systemSource).
-    function reservedName(c, systemSource) {
+    // catalog the device ships with (systemSource). A catalog's web app
+    // (kind "pwa") is the exception for its ids under org.webosphoenix.pwa.:
+    // the catalog service names its sites so (server/marketplace,
+    // curated-pwas.json), another catalog running it too, and this service
+    // writes the package itself from the site's manifest (lib/pwa.js: no
+    // service, no requiredPermissions); no template or service reads by
+    // those names.
+    function reservedName(c, systemSource, entry) {
         if (!c.reserved || systemSource) return;
+        if (entry && entry.kind === "pwa" && /^org\.webosphoenix\.pwa\.[A-Za-z0-9-]+$/.test(c.app.id) && c.reserved.id === c.app.id) return;
         throw err("RESERVED_NAME", "The package uses " + c.reserved.id + ", one of the system's names (" + c.reserved.ns +
                   ".*): only Phoenix's own catalog installs those");
     }
@@ -1311,7 +1320,7 @@ function createPackagesService(deps) {
             var bytes = got[0];
             return check(bytes, entry, got[1], firstPartyEntry(s, entry), signInTrusted(s, entry, shipped)).then(function (c) {
                 appId = c.app.id;
-                reservedName(c, phoenixSource(sourceOf(s, entry.sourceId)));
+                reservedName(c, phoenixSource(sourceOf(s, entry.sourceId)), entry);
                 ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
                 var why = publisherProblem(load(), appId, entry, shipped);
