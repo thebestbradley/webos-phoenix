@@ -41,6 +41,9 @@ fake_qt() {
     echo "set(PACKAGE_VERSION \"$2\")" > "$1/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake"
 }
 mock() {  # mock NAME BODY: a program on the pretend computer's PATH
+    # Removed first: BIN's real programs are links to this computer's, and
+    # writing through one (mock id) would replace the real program.
+    rm -f "$BIN/$1"
     printf '#!/bin/sh\n%s\n' "$2" > "$BIN/$1"
     chmod +x "$BIN/$1"
 }
@@ -195,6 +198,21 @@ phoenix check --no-assistant
 check "--no-assistant leaves out the assistant's parts" \
     '[ $status = 0 ]' 'lacks "espeak-ng"' 'lacks "whisper"' 'lacks "llama"' 'lacks "wake word"' 'lacks "Kitten"' 'lacks "Qwen3"' \
     'has "install  Qt 6.11.3"'
+
+# Not root (a desktop's user, CI's runner): Qt goes into /opt with sudo, so
+# aqtinstall must be where root's Python finds it. A user's pip installs into
+# ~/.local, which sudo's Python (HOME=/root) never reads: "No module named
+# aqt". So a venv of its own, its python run with sudo, and removed with
+# sudo (root's run leaves root's __pycache__ in it).
+computer Linux
+mock id 'case "$1" in -u) echo 1000 ;; *) echo "uid=1000(user)" ;; esac'
+phoenix check
+check "Linux, not root, no Qt: aqtinstall in a venv that sudo runs" \
+    '[ $status = 0 ]' 'has "install  Qt 6.11.3 into $T/qtprefix (aqtinstall)"' \
+    'has "would run: python3 -m venv /.*phoenix-aqt"' 'has "would run: /.*phoenix-aqt.*/bin/pip install --quiet aqtinstall"' \
+    'has "would run: sudo /.*phoenix-aqt.*/bin/python -m aqt install-qt linux desktop 6.11.3"' \
+    'lacks "would run: python3 -m pip install --quiet --break-system-packages aqtinstall"' \
+    'lacks "would run: sudo python3 -m aqt"' 'has "would run: sudo rm -rf /.*phoenix-aqt"'
 
 computer Linux
 phoenix build --offline

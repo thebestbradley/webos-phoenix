@@ -476,13 +476,20 @@ linux_qt() {
     [ -z "$older" ] || echo "  note     Qt $(qt_version "$older") ($older) is older than the simulator's $QT_VERSION (its web engine)"
     installing "Qt $QT_VERSION into $QT_PREFIX (aqtinstall)" "about 700 MB download, 2.3 GB on disk"
     need_network "Qt $QT_VERSION"
-    # --break-system-packages: Ubuntu 24.04 marks its Python as externally
-    # managed; aqtinstall is a build tool, not system software.
-    run python3 -m pip install --quiet --break-system-packages aqtinstall
+    # aqtinstall in a venv of its own (python3-venv is in the apt list), its
+    # python run with sudo: a user's pip installs into ~/.local, which sudo's
+    # Python (HOME=/root) never reads ("No module named aqt"), and Ubuntu
+    # 24.04's own Python is externally managed. Removed after, with sudo:
+    # root's run leaves root's __pycache__ in it.
+    aqt_venv=${TMPDIR:-/tmp}/phoenix-aqt.$$
+    run rm -rf "$aqt_venv"
+    run python3 -m venv "$aqt_venv"
+    run "$aqt_venv/bin/pip" install --quiet aqtinstall
     run $SUDO mkdir -p "$QT_PREFIX"
-    run $SUDO python3 -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_PREFIX" \
+    run $SUDO "$aqt_venv/bin/python" -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$QT_PREFIX" \
         -m qtwebengine qtwebchannel qtpositioning qt5compat qtmultimedia qtshadertools
     run $SUDO rm -f aqtinstall.log
+    run $SUDO rm -rf "$aqt_venv"
 }
 
 linux_node() {
