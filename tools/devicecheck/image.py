@@ -194,6 +194,18 @@ def device_code(root):
                 yield p
 
 
+def lockfile_packages(root):
+    """The npm packages apps/package-lock.json installs (npm ci), by name."""
+    path = os.path.join(root, "apps", "package-lock.json")
+    if not os.path.isfile(path):
+        return set()
+    out = set()
+    for key in (read_json(path).get("packages") or {}):
+        if "node_modules/" in key:
+            out.add(key.rsplit("node_modules/", 1)[1])
+    return out
+
+
 def check(root):
     f = Findings(CHECKER)
     plan, unbuilt = install_plan(root)
@@ -256,6 +268,7 @@ def check(root):
                   "%s:%d" % (rel(root, p), line_of(text, m.start())))
 
     # Node services: what they require, inside the image.
+    locked = lockfile_packages(root)
     services = {}
     for dev in plan:
         m = re.match(r"^/usr/palm/services/([^/]+)/", dev)
@@ -290,6 +303,12 @@ def check(root):
                 if pkg.startswith("@phoenix/") and any("not built" in n for n in notes):
                     # A shared package not built in this tree: install-rootfs.py
                     # stops on it (strict) in the recipe; noted above.
+                    continue
+                if pkg in locked and any("the npm package %s is not installed" % pkg in n for n in notes):
+                    # In the apps' lockfile but not installed here (no npm ci):
+                    # where npm ci has run, install-rootfs.py copies it into the
+                    # service and tools/pack-apps-dist.sh packs it for the
+                    # recipe (test-install-rootfs.py checks that); noted above.
                     continue
                 f.add("require", "%s:%s" % (svc, pkg), "%s requires the package %s, which the image does not have "
                       "(not a Node built-in, not one of OSE's modules, not in its node_modules)" % (svc, pkg), where)

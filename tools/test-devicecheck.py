@@ -199,6 +199,33 @@ def main():
         for m in others:
             ok(not held(m), "Accounts may not call %s/%s (%s)" % (svc, m, ", ".join(held(m)) or "refused"))
 
+    # Accounts' sign-in groups that no provider on the image defines are
+    # allowlisted only for Phoenix's own catalog connectors (preinstalled.json
+    # firstParty: installed from the catalog, their sysbus files with them),
+    # each a group its package's api file defines: not a typo, and not a
+    # connector the image installs (luna would then find no gap: stale).
+    with open(os.path.join(REPO, "runtime", "rootfs.json"), encoding="utf-8") as f:
+        pre_path = json.load(f)["preinstalled"]
+    with open(os.path.join(REPO, pre_path), encoding="utf-8") as f:
+        pre = json.load(f)
+    catalog = {}
+    for e in pre.get("firstParty", []):
+        sysbus = os.path.join(REPO, e["from"], "service", "sysbus")
+        for fn in sorted(os.listdir(sysbus)) if os.path.isdir(sysbus) else []:
+            if fn.endswith(".api.json"):
+                with open(os.path.join(sysbus, fn), encoding="utf-8") as f:
+                    for g in json.load(f):
+                        catalog[g] = e["id"]
+    with open(os.path.join(REPO, "tools", "check-device-allowlist.json"), encoding="utf-8") as f:
+        allowlist = json.load(f)
+    prefix = "luna:unknown-group:com.palm.app.accounts:"
+    for key in sorted(k for k in allowlist if k.startswith(prefix)):
+        g = key[len(prefix):]
+        ok(g in catalog, "Accounts' %s, allowlisted, is a catalog connector's (%s)" % (g, catalog.get(g, "none")))
+    for g in sorted(set(accounts) & set(catalog)):
+        ok(prefix + g in allowlist, "Accounts' %s, %s's (a catalog connector, not on the image), is a known gap (C6)"
+           % (g, catalog[g]))
+
     # This repository, with its allowlist, as CI runs it.
     for c in CHECKERS:
         status, out = run(c, REPO)

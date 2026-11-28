@@ -227,6 +227,8 @@ def plan_npm_package(name, start, dest, plan, seen):
     if not src:
         not_built("%s: the npm package %s is not installed (cd apps && npm ci)" % (os.path.relpath(start, REPO), name))
         return
+    if src not in NPM_PACKAGES:
+        NPM_PACKAGES.append(src)
     with open(os.path.join(src, "package.json"), encoding="utf-8") as f:
         info = json.load(f)
     main_dir = os.path.dirname(os.path.normpath(info.get("main", "index.js"))) or "."
@@ -393,6 +395,10 @@ def device_appinfo(data):
 
 STRICT = True
 UNBUILT = []   # what plan(strict=False) could not install: apps and packages not built
+# The npm packages the services carry (plan_npm_package), from the
+# checkout's node_modules: not in git, so tools/pack-apps-dist.sh packs
+# them for the recipe with the built apps (--npm-packages).
+NPM_PACKAGES = []
 
 
 def not_built(message):
@@ -411,6 +417,7 @@ def plan(repo=None, strict=True):
         REPO = os.path.abspath(repo)
     STRICT = strict
     del UNBUILT[:]
+    del NPM_PACKAGES[:]
     try:
         final = build_plan()
     finally:
@@ -723,6 +730,8 @@ def main():
     ap.add_argument("--build", help="the manifest's build id (default: unstamped; --stamp reads /etc/os-release)")
     ap.add_argument("--compatible", help="the manifest's device type (RAUC's compatible), if it is for one")
     ap.add_argument("--repo", help="the checkout to install from (default: this one)")
+    ap.add_argument("--npm-packages", action="store_true",
+                    help="print the folders of the npm packages the services carry (for tools/pack-apps-dist.sh) and exit")
     args = ap.parse_args()
     global REPO
     if args.repo:
@@ -731,6 +740,11 @@ def main():
     if args.stamp:
         m = stamp(args.stamp, args.build, args.compatible)
         print("Stamped %s: build %s, %d files" % (MANIFEST, m["build"], len(m["files"])), file=sys.stderr)
+        return
+    if args.npm_packages:
+        plan()
+        for d in NPM_PACKAGES:
+            print(os.path.relpath(d, REPO))
         return
     if args.print_manifest:
         # What is not built is named ("unbuilt"), not fatal: nova decides.

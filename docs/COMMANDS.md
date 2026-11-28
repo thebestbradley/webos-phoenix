@@ -1705,7 +1705,7 @@ npx phoenix-connector test <folder>
 
 Then set `PHOENIX_APPS_DIST = "/path/to/apps-dist.tar.gz"` in local.conf.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/pack-apps-dist.sh:7-17 · tools/install-rootfs.py:28`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/pack-apps-dist.sh:7-19 · tools/install-rootfs.py:28`
 
 ```sh
 tools/pack-apps-dist.sh apps-dist.tar.gz
