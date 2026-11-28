@@ -87,16 +87,28 @@ Item {
         function test_datesPerLocale_data() {
             return [
                 { tag: "en-US", locale: "en-US", short: "6/6/09", long: "Saturday, June 6, 2009", day: "Saturday, June 6" },
-                { tag: "en-GB", locale: "en-GB", short: "06/06/2009", long: "Saturday, 6 June 2009", day: "Saturday, 6 June" },
+                // en-GB's long date has a comma after the day name in newer
+                // CLDR (Qt 6.11) and none in the CLDR of Qt 6.8.1, the
+                // device's: both are the region's own format.
+                { tag: "en-GB", locale: "en-GB", short: "06/06/2009", long: ["Saturday, 6 June 2009", "Saturday 6 June 2009"],
+                  day: ["Saturday, 6 June", "Saturday 6 June"] },
                 { tag: "de-DE", locale: "de-DE", short: "06.06.09", long: "Samstag, 6. Juni 2009", day: "Samstag, 6. Juni" },
                 { tag: "es-ES", locale: "es-ES", short: "6/6/09", long: "sábado, 6 de junio de 2009", day: "sábado, 6 de junio" },
                 { tag: "ja-JP", locale: "ja-JP", short: "2009/06/06", long: "2009年6月6日土曜日", day: "6月6日土曜日" },
             ];
         }
+        // One expected text, or the few a locale's CLDR versions give.
+        function compareText(actual, expected, what) {
+            if (Array.isArray(expected))
+                verify(expected.indexOf(actual) >= 0, (what || "") + " \"" + actual + "\" is one of " + JSON.stringify(expected));
+            else
+                compare(actual, expected, what);
+        }
+
         function test_datesPerLocale(data) {
-            compare(LF.shortDate(june6, data.locale), data.short);
-            compare(LF.longDate(june6, data.locale), data.long);
-            compare(LF.dayAndMonth(june6, data.locale), data.day);
+            compareText(LF.shortDate(june6, data.locale), data.short);
+            compareText(LF.longDate(june6, data.locale), data.long);
+            compareText(LF.dayAndMonth(june6, data.locale), data.day);
         }
 
         function test_withoutYear() {
@@ -143,9 +155,10 @@ Item {
         // Region: Region).
         function test_regionDecidesTheFormats() {
             status.localeInfo = info("en-US", "en-GB");
-            compare(findChild(shell, "systemMenuDate").label, "Saturday, 6 June 2009");
+            compareText(findChild(shell, "systemMenuDate").label, ["Saturday, 6 June 2009", "Saturday 6 June 2009"],
+                        "the region's (en-GB) date, not the language's (en-US: Saturday, June 6, 2009):");
             shell.lock();
-            compare(findChild(shell, "lockDate").text, "Saturday, 6 June");
+            compareText(findChild(shell, "lockDate").text, ["Saturday, 6 June", "Saturday 6 June"]);
         }
 
         // The lock screen's clock is pictures of 0-9 and the colon: Arabic's
