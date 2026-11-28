@@ -222,7 +222,13 @@ alerts.
    a 2 GB part held it for over a minute and its socket timed out).
 4. **Prepare**: `rauc info` (RAUC verifies the bundle's signature against
    the image's keyring), `compatible`, newer build, the feed's build; `rauc
-   install` writes the other slot; the running slot stays primary.
+   install` writes the other slot; the running slot stays primary. Only a
+   bundle RAUC refuses is thrown away: when RAUC's daemon does not answer
+   (`UPDATER_BUSY`) the download is kept and the next download prepares it
+   without fetching it. RAUC's view of the slots is asked once and kept
+   until the service changes it (install, mark-active, mark-good): while
+   RAUC writes a slot it answers nothing, and a status at every progress
+   tick waited 25 s each for D-Bus.
 5. **Install**: "Install Now" (battery at least 20% or charging) marks the
    prepared slot active and restarts; "Install Later" waits for the charger.
 6. **After the restart**: the service marks the running slot good (`rauc

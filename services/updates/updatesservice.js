@@ -267,6 +267,20 @@ function createUpdatesService(deps) {
     }
     function channelsOf(c) { return c && c.channels && c.channels.length ? c.channels : ["stable"]; }
 
+    // RAUC's view of the slots changes only when this service changes it
+    // (install, mark-active, mark-good) or with a restart, so it is asked
+    // once and kept until then. Asked at every status, every progress tick
+    // asked it again, and while RAUC writes a slot it answers nothing:
+    // `rauc status` waited for D-Bus to time out (25 s), and one such
+    // timeout in prepare threw a finished download away (the rollback
+    // test, 28 November 2026).
+    var slotsKept = null;
+    function slots() {
+        if (!slotsKept) slotsKept = deps.rauc.status().then(null, function (e) { slotsKept = null; throw e; });
+        return slotsKept;
+    }
+    function slotsChanged() { slotsKept = null; }
+
     function load() {
         var s = deps.state.load() || {};
         if (typeof s.autoDownload !== "boolean") s.autoDownload = true;
@@ -282,7 +296,7 @@ function createUpdatesService(deps) {
         service: SERVICE, servers: deps.servers, getBytes: function (url) { return getBytes(url); }, luna: deps.luna,
         crypto: deps.crypto, state: deps.state, now: now, log: log,
         device: function () {
-            return Promise.all([deps.rauc.status(), config()]).then(function (r) {
+            return Promise.all([slots(), config()]).then(function (r) {
                 return { channel: load().channel, compatible: r[0].compatible, build: r[0].booted.build };
             });
         }
@@ -306,7 +320,7 @@ function createUpdatesService(deps) {
     function status() {
         return config().then(function () {
             var s = load();
-            return Promise.all([deps.rauc.status(), deps.power().then(null, function () { return null; })]).then(function (r) {
+            return Promise.all([slots(), deps.power().then(null, function () { return null; })]).then(function (r) {
                 var rs = r[0];
                 var current = { name: rs.name || "webOS Phoenix", version: rs.booted.version, build: rs.booted.build };
                 var notes = systemNotes().filter(function (n) { return n.version === current.version; })[0];
@@ -392,13 +406,13 @@ function createUpdatesService(deps) {
     // device went back.
     function startup() {
         if (started) return started;
-        started = deps.rauc.status().then(function (rs) {
+        started = slots().then(function (rs) {
             if (rs.noSlot) {
                 unavailable = err("NOT_AVAILABLE", "System updates are not available on this boot: it did not start from one of the system's update slots");
                 return rs;
             }
             var good = deps.rauc.markGood
-                ? deps.rauc.markGood().then(function () { return true; }, function (e) { log("mark-good: " + e.message); return false; })
+                ? deps.rauc.markGood().then(function () { slotsChanged(); return true; }, function (e) { log("mark-good: " + e.message); return false; })
                 : true;
             return Promise.resolve(good).then(function (ok) {
                 // Dev push's overlays of other builds (docs/DEV-PUSH.md 4.6):
@@ -465,7 +479,7 @@ function createUpdatesService(deps) {
 
     function check() {
         return busy() || setLive("checking").then(function () {
-            return Promise.all([deps.rauc.status(), config()]);
+            return Promise.all([slots(), config()]);
         }).then(function (r) {
             var rs = r[0], c = r[1];
             var s = load();
@@ -608,10 +622,15 @@ function createUpdatesService(deps) {
     function prepare() {
         var s = load();
         var rel = s.available, file = s.downloaded.path;
-        return Promise.all([deps.rauc.status(), deps.rauc.info(file).then(null, function (e) {
+        return Promise.all([slots(), deps.rauc.info(file).then(null, function (e) {
+            // RAUC's daemon that did not answer is not a bad bundle.
+            if (/Timeout was reached|D-Bus|NoReply/i.test(e && e.message)) throw err("UPDATER_BUSY", "The system's updater did not answer: " + e.message);
             throw err("BAD_BUNDLE", "The update was refused: " + e.message);
         })]).then(null, function (e) {
-            discard(e);
+            // The bundle itself was refused: gone. RAUC that did not answer
+            // (busy, D-Bus): the download is kept, and the next download
+            // prepares it again without fetching it.
+            if (e && e.code === "BAD_BUNDLE") discard(e);
             throw e;
         }).then(function (r) {
             var rs = r[0], info = r[1];
@@ -625,9 +644,12 @@ function createUpdatesService(deps) {
                     live.progress = Math.max(0, Math.min(100, pct | 0));
                     notify();
                     ongoing("Preparing " + fullName(rel), live.progress);
-                }).then(null, function (e) { throw err("INSTALL_FAILED", "The update could not be written: " + e.message); });
+                }).then(slotsChanged, function (e) {
+                    slotsChanged();
+                    throw err("INSTALL_FAILED", "The update could not be written: " + e.message);
+                });
             }).then(function () {
-                return deps.rauc.markActive(rs.booted.slot);
+                return deps.rauc.markActive(rs.booted.slot).then(slotsChanged);
             }).then(function () {
                 var s2 = load();
                 s2.prepared = { build: info.build, version: info.version, slot: rs.other };
@@ -654,6 +676,7 @@ function createUpdatesService(deps) {
             }
             var s = load();
             return deps.rauc.markActive(s.prepared.slot).then(function () {
+                slotsChanged();
                 var s2 = load();
                 s2.restarting = { build: s2.prepared.build, version: s2.prepared.version };
                 save(s2);
