@@ -76,7 +76,7 @@
 //   setLocationRelay {enabled}    this device's "Use my other device's
 //                                 position" switch, off by default              Settings
 //
-// Errors: NOT_SET_UP, SIGNED_OUT, BUSY, UNSUPPORTED (signIn browser on a server
+// Errors: NOT_SET_UP, SIGNED_OUT, SIGNED_IN (signIn while signed in), BUSY, UNSUPPORTED (signIn browser on a server
 // that offers only the code), ACCESS_DENIED, EXPIRED,
 // CONNECTION_FAILED, BAD_SERVER, BAD_SIGNATURE, UNAUTHORIZED, FORBIDDEN,
 // RATE_LIMITED (retryAfter), QUOTA, NEEDS_DEVMODE, NOT_ALLOWED, BAD_PARAMS,
@@ -359,6 +359,10 @@ function createAccountService(deps) {
     function signIn(p) {
         var method = p.method === "browser" ? "browser" : "code";
         if (pending) return Promise.reject(err("BUSY", "A sign-in is in progress"));
+        // Signed in already: never a second set of tokens beside the kept ones
+        // (a browser sign-in's would stay in the OAuth service's key store,
+        // never revoked). Sign out first.
+        if (load().signedIn) return Promise.reject(err("SIGNED_IN", "This device is signed in already; sign out first"));
         return setUp().then(function (r) {
             return discovery(r).then(function (d) {
                 lastError = null;
