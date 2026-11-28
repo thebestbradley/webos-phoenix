@@ -120,12 +120,15 @@ resizes.
 ## Get the code
 
 ```sh
-git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git
+git clone --recurse-submodules --branch main https://github.com/thebestbradley/webos-phoenix.git
 cd webos-phoenix
 ```
 
-`main` has the current work. In a checkout from before October 2026, which
-used the `tbb/nice-maxwell-ps69wb` branch, switch back with
+`main` has the current work. Name it (`--branch main`): GitHub's default
+branch for this repository is still the old `tbb/nice-maxwell-ps69wb`, so a
+plain `git clone` checks out that branch, more than a hundred commits behind
+(`git branch` says which one you have). In such a checkout, or one from
+before October 2026, switch with
 `git checkout main && git pull && git submodule update --init`.
 
 ## On a Mac
@@ -320,6 +323,12 @@ macOS asks for microphone access the first time. Without a microphone,
 - **Enact Notes:** built when Node is 22 or 24.
 
 ## On Ubuntu 24.04 (desktop, VM or a cloud container)
+
+Disk: about 6 GB free. A fresh clone is 1.2 GB and 4.2 GB once built
+(apps/ with its npm packages and builds 2.6 GB, build/ with the
+assistant's models 1.2 GB), and Qt 6.11.3 takes 2.3 GB in `/opt/Qt`.
+`./phoenix` stops before it installs anything when the checkout's disk has
+less than a first build needs, and `./phoenix check` says so.
 
 | Command | What it does |
 | --- | --- |

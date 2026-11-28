@@ -213,8 +213,10 @@ it, as a UTM bundle with the same machine as `vm.sh`:
 scripts/make-utm.sh fairphone-fp6 --for mac     # out/Phoenix-fairphone-fp6-mac.utm
 ```
 
-Double-click the bundle to open it in UTM. It has the device's CPU count,
-memory and resolution, virtio-gpu-gl-pci, UTM's USB tablet and keyboard,
+Double-click the bundle to open it in UTM. It has the device's CPU count
+(at most the Mac's performance cores, UTM's own default, when it is made on
+the Mac: the Fairphone's 8 are 4 on an M1, whose other 4 are efficiency
+cores; `--cpus` to change it), memory and resolution, virtio-gpu-gl-pci, UTM's USB tablet and keyboard,
 Intel HD Audio, ssh on port 2222 and the console in UTM's serial window;
 `--help` lists the options, and the next section says what is in it and
 why. To change the image, make the bundle again (`--force` replaces it):

@@ -43,7 +43,7 @@ N = 'NODE_PATH="$(npm root -g)" node tools/'
 
 sec("Get the code", "phoenix-ember-glass-ui is webos-phoenix with the 2.0 shell: it takes 1.0's changes by merging webos-phoenix's main. The default apps build against the webos-phoenix commit named in `phoenix-default-apps/phoenix.pin.json`. Ember Glass checks its facade against phoenix-default-apps (`tools/facade-check/facade/SOURCE.json`). The 2.0 shell carries a copy of Ember Glass's tokens (`shell/qml/Phoenix/Shell/EmberGlass.qml`).")
 it("Clone webOS Phoenix with its submodules", "", B, "parent folder", "webos-phoenix/docs/GETTING-STARTED.md:123",
-   ["git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git && cd webos-phoenix"])
+   ["git clone --recurse-submodules --branch main https://github.com/thebestbradley/webos-phoenix.git && cd webos-phoenix"])
 it("Clone the private repos beside it", "They need your GitHub sign-in (a credential helper or an SSH key). The tools look for `../webos-phoenix` and `../phoenix-default-apps`.", B, "parent folder of webos-phoenix",
    "phoenix-default-apps/tools/lib/phoenix.mjs:30 · ember-glass-ui/tools/facade-check.mjs:17",
    [("git clone https://github.com/thebestbradley/phoenix-default-apps.git", "the rebuilt built-in apps"),

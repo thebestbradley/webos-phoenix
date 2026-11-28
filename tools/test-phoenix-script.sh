@@ -41,6 +41,9 @@ fake_qt() {
     echo "set(PACKAGE_VERSION \"$2\")" > "$1/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake"
 }
 mock() {  # mock NAME BODY: a program on the pretend computer's PATH
+    # Removed first: BIN's real programs are links to this computer's, and
+    # writing through one (mock id) would replace the real program.
+    rm -f "$BIN/$1"
     printf '#!/bin/sh\n%s\n' "$2" > "$BIN/$1"
     chmod +x "$BIN/$1"
 }
@@ -153,6 +156,25 @@ check "Linux, everything there: nothing to install" \
     'lacks "  install  "' 'has "would run: cmake -S .*-DCMAKE_PREFIX_PATH=$QT"' \
     'has "would run: cmake --build $BUILD --parallel"'
 
+# The disk: a first build adds about 3.5 GB to the checkout (apps/' packages
+# and builds, build/ and the assistant's models). Short of it, the script
+# says so before it starts, not with ENOSPC deep in the apps' build.
+# df -Pk: the checkout's file system, 1 GB free (in 1024-byte blocks).
+computer Linux
+QT_ASK=$QT
+mock df 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/x 100000000 99000000 1048576 99%% /\n"'
+phoenix build
+check "Linux, 1 GB free, no build yet: stops before installing, with what it needs" \
+    '[ $status = 1 ]' 'has "1024 MB free"' 'has "a first build needs about 3500 MB"' 'lacks "would run:"' \
+    'lacks "==> Building"'
+phoenix check
+check "Linux, 1 GB free: the dry run says so and goes on" \
+    '[ $status = 0 ]' 'has "note     1024 MB free"' 'has "a first build needs about 3500 MB"' 'has "Nothing to install"'
+mkdir -p "$BUILD" && echo "CMAKE_PREFIX_PATH:PATH=$QT" > "$BUILD/CMakeCache.txt"
+phoenix build --dry-run
+check "Linux, 1 GB free, built before: enough for a rebuild" \
+    '[ $status = 0 ]' 'lacks "MB free"'
+
 computer Linux
 QT_ASK=$QT
 phoenix build --dry-run
@@ -195,6 +217,21 @@ phoenix check --no-assistant
 check "--no-assistant leaves out the assistant's parts" \
     '[ $status = 0 ]' 'lacks "espeak-ng"' 'lacks "whisper"' 'lacks "llama"' 'lacks "wake word"' 'lacks "Kitten"' 'lacks "Qwen3"' \
     'has "install  Qt 6.11.3"'
+
+# Not root (a desktop's user, CI's runner): Qt goes into /opt with sudo, so
+# aqtinstall must be where root's Python finds it. A user's pip installs into
+# ~/.local, which sudo's Python (HOME=/root) never reads: "No module named
+# aqt". So a venv of its own, its python run with sudo, and removed with
+# sudo (root's run leaves root's __pycache__ in it).
+computer Linux
+mock id 'case "$1" in -u) echo 1000 ;; *) echo "uid=1000(user)" ;; esac'
+phoenix check
+check "Linux, not root, no Qt: aqtinstall in a venv that sudo runs" \
+    '[ $status = 0 ]' 'has "install  Qt 6.11.3 into $T/qtprefix (aqtinstall)"' \
+    'has "would run: python3 -m venv /.*phoenix-aqt"' 'has "would run: /.*phoenix-aqt.*/bin/pip install --quiet aqtinstall"' \
+    'has "would run: sudo /.*phoenix-aqt.*/bin/python -m aqt install-qt linux desktop 6.11.3"' \
+    'lacks "would run: python3 -m pip install --quiet --break-system-packages aqtinstall"' \
+    'lacks "would run: sudo python3 -m aqt"' 'has "would run: sudo rm -rf /.*phoenix-aqt"'
 
 computer Linux
 phoenix build --offline

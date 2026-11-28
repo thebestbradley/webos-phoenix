@@ -42,6 +42,10 @@ spec.loader.exec_module(cub)
 
 # make-utm.sh makes a qcow2 disk when there is a qemu-img (PHOENIX_UTM_QEMU_IMG)
 HAS_QEMU_IMG = shutil.which(os.environ.get("PHOENIX_UTM_QEMU_IMG", "qemu-img"))
+# The bundles below are made as on a computer that is not a Mac (CI's), where
+# make-utm.sh cannot know the Mac's cores; the cap is tested on its own.
+os.environ["PHOENIX_UTM_HOST_OS"] = "Linux"
+os.environ.pop("PHOENIX_UTM_HOST_PCORES", None)
 IDS = ["fairphone-fp6", "ayn-odin2portal", "pinephonepro", "pinetab2", "raspberrypi4-64"]
 failures = []
 checks = 0
@@ -67,9 +71,9 @@ def make(args, env=None):
     return run(["sh", MAKE] + args, env)
 
 
-def dry(args):
+def dry(args, env=None):
     """The plan's first line and config.plist, from --dry-run."""
-    code, out, err = make(args + ["--dry-run"])
+    code, out, err = make(args + ["--dry-run"], env)
     if code != 0:
         return code, None, None, err
     i = out.index("<?xml")
@@ -130,6 +134,30 @@ for device in IDS:
             check("%s: vm.sh's command line, then systemd's timeouts at %d s" % (tag, t),
                   append == ["%s systemd.default_timeout_start_sec=%d systemd.default_device_timeout_sec=%d"
                              % (base, t, t)], str(append))
+
+# ---- A Mac's performance cores ----------------------------------------------
+# Made on a Mac, --for mac gives the VM at most the Mac's performance cores:
+# UTM's own default (CPUCount 0: hw.perflevel0.physicalcpu on Apple silicon,
+# Configuration/UTMQemuConfiguration+Arguments.swift emulatedCpuCount). The
+# Fairphone's 8 on an 8-core M1 (4 performance, 4 efficiency) would put
+# vCPUs on the slow cores and leave none for QEMU's own threads, which draw
+# virgl's GL on the host.
+m1 = {"PHOENIX_UTM_HOST_OS": "Darwin", "PHOENIX_UTM_HOST_PCORES": "4"}
+code, plan, config, err = dry(["fairphone-fp6", "--for", "mac", "--image", "/img"], m1)
+check("--for mac on an M1 (4 performance cores): the Fairphone's 8 CPUs capped at 4",
+      code == 0 and config["System"]["CPUCount"] == 4 and config["System"]["MemorySize"] == 8192
+      and "4 CPUs" in plan and "4 performance cores" in err, (plan or "") + err)
+code, plan, config, err = dry(["pinetab2", "--for", "mac", "--image", "/img"], m1)
+check("--for mac on an M1: the PineTab2's 4 CPUs unchanged, nothing said",
+      code == 0 and config["System"]["CPUCount"] == 4 and "performance cores" not in err, (plan or "") + err)
+code, plan, config, err = dry(["fairphone-fp6", "--for", "mac", "--image", "/img", "--cpus", "8"], m1)
+check("--for mac on an M1: --cpus 8 is kept as asked", code == 0 and config["System"]["CPUCount"] == 8, (plan or "") + err)
+code, plan, config, err = dry(["fairphone-fp6", "--for", "ipad", "--image", "/img"], m1)
+check("--for ipad made on a Mac: the iPad's limit, not the Mac's cores",
+      code == 0 and config["System"]["CPUCount"] == 4 and "performance cores" not in err, (plan or "") + err)
+code, plan, config, err = dry(["fairphone-fp6", "--for", "mac", "--image", "/img"])
+check("--for mac made off a Mac: the device's 8, and a note to cap it on the Mac",
+      code == 0 and config["System"]["CPUCount"] == 8 and "--cpus" in err and "performance cores" in err, (plan or "") + err)
 
 # ---- The defaults and the options ------------------------------------------
 code, plan, config, err = dry([])

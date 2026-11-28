@@ -99,7 +99,11 @@ describe("AirPods", () => {
         await waitFor(async () => expect((await status()).devices[0].renamed).toBe("done"), { timeout: 3000 });
         await waitFor(() => expect(screen.getByTestId("ab-name").textContent).not.toContain("Renaming"));
         expect(screen.getByTestId("ab-recognition").textContent).toContain("Their Key");
-    });
+        // The runtime's AirPods take real time: pairing's steps 1500 + 1000 +
+        // 800 ms and the rename's 1200 ms (phoenix-runtime.js), 4.5 s of the
+        // 5 s default, so a busy machine timed it out (./phoenix test --quick
+        // on 4 cores); and the pairing's own wait above is 6 s.
+    }, 15000);
 
     it("says when the AirPods keep their own name, or take it when they connect", async () => {
         const device = (await status()).devices[0] as EarbudsDevice;

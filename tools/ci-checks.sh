@@ -157,6 +157,7 @@ checks() {
     check php-marketplace "Marketplace catalog service (PHP)" --needs php php server/marketplace/tests/run.php
     check php-updates "Update feed publisher (server/updates, PHP)" --needs php php server/updates/tests/run.php
     check phoenix-script "The one command (./phoenix), in its dry runs on a pretend Linux and Mac" sh tools/test-phoenix-script.sh
+    check run-if-changed "The web apps' build runs only when apps/ changed (shell/cmake/run-if-changed.sh)" sh tools/test-run-if-changed.sh
     check services-syntax "The device services' JavaScript parses (node --check)" services_syntax
     check typecheck "Web apps (React + TypeScript): typecheck" apps_typecheck
     check unit-tests "Web apps: unit tests (vitest)" apps_unit_tests
