@@ -147,6 +147,7 @@ checks() {
     check device-firmware "Firmware joined and put into an image (tools/device-firmware.py)" python3 tools/test-device-firmware.py
     check device-profiles "The device profiles: their device.json files, the VM's choice at boot" python3 tools/test-device-profiles.py
     check wam-user-agent "The device's web app user agent (WebAppMgr's conf.sh)" python3 tools/test-wam-user-agent.py
+    check connector-clients "The connectors' registrations in an image and the simulator (clients.json)" python3 tools/test-connector-clients.py
     check usb-debug "Developer Mode's USB debugging link (phoenix-usb-debug)" python3 tools/test-usb-debug.py
     check serve-rootfs "serve-rootfs.py answers a browser's burst of connections while busy" python3 tools/test-serve-rootfs.py
     check nova-bundle "Dev bundles: the image's manifest, the bundle maker, the device's checks (tools/nova)" node tools/test-nova-bundle.cjs

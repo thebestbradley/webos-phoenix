@@ -98,8 +98,9 @@ device, not yet run"):
   TPM/TEE); the bar shows the host the sign-in started at, not later
   navigations (WebAppMgr tells the shell no address: Q38); the OAuth
   drives wait for Phoenix's registrations (docs/DEVELOPER-APPS.md,
-  OPEN-QUESTIONS Q17, Q76-Q78) and providers that need a client secret
-  for the token broker (Q49).
+  OPEN-QUESTIONS Q17, Q77) and, for providers that need a client secret,
+  the token relay's secrets on the server (built 28 November 2026,
+  Q49, Q78: docs/SYNERGY-CONNECTORS.md "The token relay").
 - 🟡 **P2** Drives (docs/SHARE-AND-FILES.md "Drives"; built in the simulator).
   SFTP done 11 October 2026 (`com.webosphoenix.drive.sftp`: Phoenix's own
   SSH-2 and SFTP v3 client on the audited @noble libraries, a password or a
@@ -109,8 +110,9 @@ device, not yet run"):
   drives in the original picker (SF1 lists the media indexer's kinds); the
   viewers' save back and Photos' album source (SYNERGY-MODERN.md 3.3);
   keeping a drive's files on the device on purpose (only the cache of what
-  was opened); the image's `/etc/palm/drives/clients.json` setting
-  (OPEN-QUESTIONS Q76); SFTP keys with a passphrase (Q110), one-time codes,
+  was opened); the registrations themselves (the image's
+  `/etc/palm/drives/clients.json` is built from `PHOENIX_CONNECTOR_CLIENTS`
+  since 28 November 2026, Q76); SFTP keys with a passphrase (Q110), one-time codes,
   certificates and jump hosts (Q113), search on an SFTP drive (SFTP has no
   search; the drive answers `UNSUPPORTED`, as S3 does), and SFTP over a device's
   own sockets (the kit's `nodeNet`, tested in Node only).
@@ -135,7 +137,9 @@ device, not yet run"):
   November 2026; Microsoft, Google, Zoom, LinkedIn and
   Slack, and Sign In with Todoist and with Bluesky, wait on Phoenix's
   registrations (docs/DEVELOPER-APPS.md "The accounts", OPEN-QUESTIONS Q17,
-  Q120, Q123), the token relay with the OAuth service's broker (Q49, Q122) and
+  Q120, Q123), the token relay's secrets on the server (built 28 November
+  2026 for Box, Todoist and LinkedIn; Slack's https callback and Zoom's
+  Basic authentication still to do: Q49, Q122) and
   its sheet for the AT Protocol (Q121). Gmail in Email with an app password
   and Google Drive with the person's choice of access are built (27 November
   2026); a real Gmail account needs mojomail on a device, and Drive's "All

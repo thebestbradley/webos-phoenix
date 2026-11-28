@@ -8,7 +8,7 @@
 // kept in the key store, never handed to a page.
 //
 //   authorize {authorizationEndpoint, tokenEndpoint, clientId, clientSecret?,
-//              scope, redirectUri?, revocationEndpoint?, owner?}
+//              scope, redirectUri?, revocationEndpoint?, owner?, relay?}
 //       shows the provider's sign-in page in the browser sheet (its address
 //       bar visible; the caller cannot read the page), waits for the
 //       redirect, checks `state`, exchanges the code with the PKCE
@@ -18,6 +18,16 @@
 //       provider's page), "401_UNAUTHORIZED" (the code was not accepted),
 //       "TIMEOUT" (nothing came back for ten minutes), "BAD_PARAMS" (a
 //       redirect this device cannot receive)
+//       relay: a provider's name on Phoenix's token relay (Phoenix-Web-
+//       Services POST /v1/oauth-broker/<relay>/exchange and /refresh,
+//       docs/SYNERGY-CONNECTORS.md "The token relay"), for a provider whose
+//       token endpoint asks for the client secret, which stays on the
+//       server: this device still shows the page, receives the redirect and
+//       keeps the PKCE verifier; the code, the verifier and the redirect go
+//       to the relay through the account service (env.relay), which adds
+//       the device's Phoenix token; tokenEndpoint is then not used and no
+//       clientSecret is sent or kept. Refreshes go the same way. Without a
+//       relay here: errorCode "NOT_AVAILABLE"
 //   token {keyId, refresh?} -> {accessToken, tokenType, expiresAt} (refreshed
 //                              when it has expired and a refresh token is kept;
 //                              refresh: true renews it now, when the provider
@@ -32,7 +42,7 @@
 //                           SYNERGY-MODERN.md 4.4: "the per-device client
 //                           secret goes into the key store"); value null
 //                           deletes it
-//   redirectUri {}          -> {redirectUri, fixedRedirectUri}: where this
+//   redirectUri {}          -> {redirectUri, fixedRedirectUri, relay}: where this
 //                              device's sign-ins come back to, for a client
 //                              registration. On a device redirectUri is the
 //                              RFC 8252 loopback address without a port
@@ -42,7 +52,8 @@
 //                              fixedRedirectUri the same with the service's
 //                              fixed port (for providers that match exactly:
 //                              docs/DEVELOPER-APPS.md); in the simulator's
-//                              sheet both are its signed-in.html
+//                              sheet both are its signed-in.html; relay:
+//                              whether authorize takes `relay` here
 //   pending {session}       the Sign In card's page only: the address of
 //                           the sign-in it was launched for (signincard.js)
 //   wipe {}                 the system only (Erase): every key and client
@@ -68,6 +79,11 @@
 //   card {pending(p, caller)}  optional: the Sign In card's question
 //   crypto {randomBytes(n) -> Uint8Array, sha256(bytes) -> Promise<Uint8Array>}
 //   redirectUri, fixedRedirectUri  the addresses above
+//   relay({provider, step: "exchange", code, codeVerifier, redirectUri} |
+//         {provider, step: "refresh", refreshToken}) -> Promise<the account
+//       service's tokenRelay reply: {returnValue, accessToken, refreshToken,
+//       tokenType, expiresIn, scope} or {returnValue: false, errorCode}>
+//       optional: Phoenix's token relay (above)
 //   mayActFor(caller, owner) -> bool, mayWipe(caller) -> bool, now(), log()
 
 "use strict";
@@ -135,6 +151,25 @@ function createOAuthService(env) {
         });
     }
 
+    // The relay's answer as a token endpoint's body; its refusals as
+    // postToken's (PROVIDER_REFUSED: the code or refresh token was not
+    // accepted; UNKNOWN_PROVIDER: the server holds no secret for it).
+    function viaRelay(provider, params) {
+        return Promise.resolve(env.relay(Object.assign({ provider: provider }, params))).then(function (r) {
+            if (!r || r.returnValue === false || typeof r.accessToken !== "string" || !r.accessToken) {
+                var code = r && r.errorCode;
+                var e = new Error("Phoenix's token relay: " + ((r && r.errorText) || "no access token"));
+                e.errorCode = code === "PROVIDER_REFUSED" || code === "BAD_REQUEST" ? "401_UNAUTHORIZED"
+                    : code === "UNKNOWN_PROVIDER" || code === "NOT_FOUND" ? "NOT_AVAILABLE"
+                    : code === "PROVIDER_UNAVAILABLE" || code === "SERVER_ERROR" ? "500_SERVER_ERROR"
+                    : typeof code === "string" && code ? code : "UNKNOWN_ERROR";
+                throw e;
+            }
+            return { access_token: r.accessToken, refresh_token: r.refreshToken || undefined, token_type: r.tokenType || "Bearer",
+                     expires_in: r.expiresIn || undefined, scope: r.scope || "" };
+        });
+    }
+
     function keep(rec, body) {
         rec.accessToken = String(body.access_token);
         rec.tokenType = String(body.token_type || "Bearer");
@@ -161,7 +196,7 @@ function createOAuthService(env) {
 
     return {
         redirectUri: function () {
-            return Promise.resolve(ok({ redirectUri: env.redirectUri, fixedRedirectUri: env.fixedRedirectUri || env.redirectUri }));
+            return Promise.resolve(ok({ redirectUri: env.redirectUri, fixedRedirectUri: env.fixedRedirectUri || env.redirectUri, relay: !!env.relay }));
         },
 
         pending: function (p, caller) {
@@ -181,7 +216,11 @@ function createOAuthService(env) {
         authorize: function (p, caller) {
             return wrap(Promise.resolve().then(function () {
                 var owner = ownerOf(p, caller);
-                ["authorizationEndpoint", "tokenEndpoint", "clientId"].forEach(function (k) {
+                var relay = p.relay === undefined || p.relay === null || p.relay === "" ? null : p.relay;
+                if (relay !== null && (typeof relay !== "string" || !/^[a-z0-9-]{1,40}$/.test(relay)))
+                    throw Object.assign(new Error("relay: a provider's name"), { errorCode: "BAD_PARAMS" });
+                if (relay && !env.relay) throw Object.assign(new Error("Phoenix's token relay is not available in this build"), { errorCode: "NOT_AVAILABLE" });
+                (relay ? ["authorizationEndpoint", "clientId"] : ["authorizationEndpoint", "tokenEndpoint", "clientId"]).forEach(function (k) {
                     if (!/^https?:\/\//.test(String(p[k] || "")) && k !== "clientId") throw Object.assign(new Error(k + " must be an http(s) address"), { errorCode: "BAD_PARAMS" });
                     if (!p[k]) throw Object.assign(new Error(k + " is required"), { errorCode: "BAD_PARAMS" });
                 });
@@ -207,14 +246,18 @@ function createOAuthService(env) {
                     if (q.state !== state) throw Object.assign(new Error("The answer is not of this sign-in (state)"), { errorCode: "401_UNAUTHORIZED" });
                     if (q.error) throw Object.assign(new Error(q.error_description || q.error), { errorCode: q.error === "access_denied" ? "ACCESS_DENIED" : "401_UNAUTHORIZED" });
                     if (!q.code) throw Object.assign(new Error("No code in the answer"), { errorCode: "401_UNAUTHORIZED" });
+                    if (relay) return viaRelay(relay, { step: "exchange", code: q.code, codeVerifier: verifier, redirectUri: redirectUri });
                     return postToken(p.tokenEndpoint, {
                         grant_type: "authorization_code", code: q.code, redirect_uri: redirectUri, client_id: p.clientId,
                         client_secret: p.clientSecret, code_verifier: verifier
                     });
                 }).then(function (body) {
                     var keyId = b64url(env.crypto.randomBytes(18));
-                    var rec = keep({ owner: owner, tokenEndpoint: p.tokenEndpoint, revocationEndpoint: p.revocationEndpoint || "",
-                                     clientId: p.clientId, clientSecret: p.clientSecret || "", created: now() }, body);
+                    // Through the relay: no secret here, and no revocation
+                    // (the provider asks for the secret there too).
+                    var rec = keep(relay ? { owner: owner, relay: relay, tokenEndpoint: "", revocationEndpoint: "", clientId: p.clientId, clientSecret: "", created: now() }
+                                         : { owner: owner, tokenEndpoint: p.tokenEndpoint, revocationEndpoint: p.revocationEndpoint || "",
+                                             clientId: p.clientId, clientSecret: p.clientSecret || "", created: now() }, body);
                     return Promise.resolve(env.keystore.put("key:" + keyId, rec)).then(function () {
                         return ok({ keyId: keyId, scope: rec.scope, tokenType: rec.tokenType });
                     });
@@ -227,8 +270,9 @@ function createOAuthService(env) {
                 var fresh = !rec.expiresAt || rec.expiresAt - 60000 > now();
                 if (!rec.refreshToken || (fresh && p.refresh !== true))
                     return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
-                return postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
-                                                      client_id: rec.clientId, client_secret: rec.clientSecret }).then(function (body) {
+                return (rec.relay ? viaRelay(rec.relay, { step: "refresh", refreshToken: rec.refreshToken })
+                    : postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
+                                                     client_id: rec.clientId, client_secret: rec.clientSecret })).then(function (body) {
                     keep(rec, body);
                     return Promise.resolve(env.keystore.put("key:" + p.keyId, rec)).then(function () {
                         return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });

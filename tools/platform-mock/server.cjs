@@ -502,7 +502,17 @@ function start(opts) {
             if (x[2] && req.method === "POST") { c.expiresAt = iso(now() + 3 * DAY); return send(res, 200, { channelId: x[1], expiresAt: c.expiresAt }); }
             if (!x[2] && req.method === "DELETE") { st.channels.delete(x[1]); return send(res, 204, null); }
         }
-        if ((x = m(/^v1\/oauth-broker\/([a-z0-9-]+)\/(redeem|refresh)$/)) && req.method === "POST") {
+        if ((x = m(/^v1\/oauth-broker\/([a-z0-9-]+)\/(redeem|refresh|exchange)$/)) && req.method === "POST") {
+            // The token relay (Phoenix-Web-Services OAuthTokenRelayController): its allow-list, the
+            // device's loopback redirect and an RFC 7636 verifier.
+            if (x[2] !== "redeem" && ["box", "linkedin", "todoist"].indexOf(x[1]) < 0) return error(res, 404, "The relay does not sign in to this provider.", "UNKNOWN_PROVIDER");
+            if (x[2] === "exchange") {
+                if (typeof b.code !== "string" || !b.code || !/^[A-Za-z0-9._~-]{43,128}$/.test(String(b.code_verifier || "")) ||
+                    !/^http:\/\/127\.0\.0\.1(:[0-9]{1,5})?\/oauth\/callback$/.test(String(b.redirect_uri || "")))
+                    return error(res, 422, "code, code_verifier and the loopback redirect_uri are required", "VALIDATION");
+                if (b.code === "refused") return error(res, 400, "The provider refused the grant.", "PROVIDER_REFUSED");
+                return send(res, 200, { access_token: "provider_at_" + rand(4), refresh_token: "provider_rt_" + rand(4), token_type: "bearer", expires_in: 3600 });
+            }
             if (x[2] === "redeem") {
                 const h = st.broker.get(b.handle);
                 if (!h || h.expires < now()) return error(res, 404, "No such handle", "NOT_FOUND");

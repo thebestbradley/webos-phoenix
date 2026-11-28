@@ -240,6 +240,9 @@ function createFakeDrives(options) {
         }
         if (rest === "token" && req.method === "POST") {
             const f = new URLSearchParams(body.toString("utf8"));
+            // Box's token endpoint asks for the client secret, PKCE or not (fake.boxSecret: as Box does).
+            if (provider === "box" && fake.boxSecret && (f.get("client_secret") !== fake.boxSecret || f.get("client_id") !== "phoenix-test-box"))
+                return send(res, 401, { error: "invalid_client", error_description: "The client credentials are not valid" });
             if (f.get("grant_type") === "authorization_code") {
                 const c = codes.get(f.get("code"));
                 codes.delete(f.get("code"));

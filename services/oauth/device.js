@@ -14,6 +14,8 @@
 //       launchCard(params), closeCard()  the application manager's launch
 //                                   and closeByAppId of the card -> Promise
 //       bar(info | null),           the card's bar for the shell
+//       relay(params),              optional: Phoenix's token relay, through
+//                                   the account service (oauthservice.js)
 //       mayWipe(caller), fixedPort, timeoutMs, log })
 //     -> {methods, card, keystore}
 //   methods: oauthservice.js's, by name, (params, caller) -> Promise<reply>;
@@ -68,6 +70,7 @@ function createDeviceOAuth(o) {
         },
         redirectUri: "http://" + loopbackLib.HOST + loopbackLib.PATH,
         fixedRedirectUri: "http://" + loopbackLib.HOST + ":" + fixedPort + loopbackLib.PATH,
+        relay: o.relay,
         mayActFor: o.mayActFor,
         mayWipe: o.mayWipe || function () { return false; },
         now: o.now,

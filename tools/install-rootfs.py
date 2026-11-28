@@ -47,6 +47,10 @@ dev bundle.
     tools/install-rootfs.py DESTDIR --only LIST
                                      only the device paths in LIST (a file, - for
                                      standard input), the shell's too (nova's staging)
+    ... --connector-clients FILE     also the connectors' registrations,
+                                     /etc/palm/<name>/clients.json, from FILE (outside
+                                     the checkout; tools/connector-clients.py): public
+                                     client ids, never secrets. Without it, none.
 """
 
 import argparse
@@ -450,9 +454,10 @@ def build_plan():
         if target.startswith("server/"):
             continue
         # The simulator's demo servers (chat.example: the Jabber connector's
-        # fake server) and its connector settings (runtime/connector-settings:
-        # a device's come from the image's recipe, never from the tree).
-        if prefix.startswith("/usr/share/phoenix/demo/") or prefix == "/etc/phoenix/connectors/":
+        # fake server) and its connector settings and registrations
+        # (runtime/connector-settings: a device's come from the image's
+        # recipe, never from the tree: --connector-clients).
+        if prefix.startswith("/usr/share/phoenix/demo/") or target.startswith("runtime/connector-settings/"):
             continue
         # The shared packages the simulator's service loader finds by name:
         # a device has a copy in each service that needs one (plan_service).
@@ -719,6 +724,22 @@ def make_manifest(final, build="unstamped", compatible=None, repo=None):
     return out
 
 
+def add_connector_clients(final, path):
+    """The connectors' registrations from path (tools/connector-clients.py)
+    into the plan, as generated files."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("connector_clients", os.path.join(os.path.dirname(os.path.abspath(__file__)), "connector-clients.py"))
+    lib = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lib)
+    try:
+        made = lib.load(path)
+    except lib.Invalid as e:
+        sys.exit("install-rootfs --connector-clients: %s" % e)
+    for dev, data in made.items():
+        GENERATED[dev] = data
+        final[dev] = "generated: the connectors' registrations (--connector-clients)"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("destdir", nargs="?")
@@ -732,6 +753,7 @@ def main():
     ap.add_argument("--repo", help="the checkout to install from (default: this one)")
     ap.add_argument("--npm-packages", action="store_true",
                     help="print the folders of the npm packages the services carry (for tools/pack-apps-dist.sh) and exit")
+    ap.add_argument("--connector-clients", metavar="FILE", help="the connectors' registrations (tools/connector-clients.py)")
     args = ap.parse_args()
     global REPO
     if args.repo:
@@ -758,6 +780,8 @@ def main():
         ap.error("DESTDIR is needed")
 
     final, _ = plan(strict=not args.only)
+    if args.connector_clients:
+        add_connector_clients(final, args.connector_clients)
 
     if args.list:
         for dev in sorted(final):
@@ -777,8 +801,7 @@ def main():
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst, "wb") as f:
                 f.write(content(dev, everything[dev]))
-            if dev not in GENERATED:
-                os.chmod(dst, 0o755 if file_mode(os.stat(everything[dev]).st_mode) == "0755" else 0o644)
+            os.chmod(dst, 0o644 if dev in GENERATED else 0o755 if file_mode(os.stat(everything[dev]).st_mode) == "0755" else 0o644)
         return
 
     for dev, src in sorted(final.items()):
@@ -787,6 +810,7 @@ def main():
         if dev in GENERATED:
             with open(dst, "wb") as f:
                 f.write(GENERATED[dev])
+            os.chmod(dst, 0o644)
             continue
         if dev.startswith(("/usr/palm/applications/", "/media/cryptofs/apps/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) \
                 and dev.endswith(".html") or APPINFO.match(dev):

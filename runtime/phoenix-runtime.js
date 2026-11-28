@@ -14078,6 +14078,9 @@
                         randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
                         sha256: function (bytes) { return subtle.digest("SHA-256", bytes).then(function (d) { return new Uint8Array(d); }); }
                     },
+                    // Phoenix's token relay, as on a device (services/oauth/service.js):
+                    // the account service adds the account's token.
+                    relay: function (params) { return nodeServiceLuna(SERVICE).call("luna://org.webosphoenix.service.account/tokenRelay", params); },
                     // A connector's sign-in page (its template's customUI app)
                     // signs in for the template's service.
                     mayActFor: function (caller, owner) {

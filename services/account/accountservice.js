@@ -63,8 +63,11 @@
 //   pushRegister {provider, endpoint, p256dh, auth, clientState?}
 //                                 -> {channelId, url, expiresAt}                 connectors
 //   pushRenew {channelId}, pushDrop {channelId}                                  connectors
-//   tokenRelay {provider, step: "authorizeUrl" | "redeem" | "refresh", ...}
-//                                 the OAuth broker (PLATFORM.md 6.5.4, Q49)      the OAuth service, connectors
+//   tokenRelay {provider, step: "exchange" | "refresh" | "authorizeUrl" | "redeem", ...}
+//                                 the token relay (PLATFORM.md 6.5.4, Q49):      the OAuth service only
+//                                 exchange {code, codeVerifier, redirectUri},
+//                                 refresh {refreshToken} -> {accessToken,
+//                                 refreshToken, tokenType, expiresIn, scope}
 //   assistantProvider {}          -> {baseUrl, apiKey (the access token),
 //                                 models}: an OpenAI-compatible provider         the assistant
 //   locationRelay {}              -> {enabled, sharing, position | null, reason}:
@@ -105,6 +108,8 @@ var CALLERS = {
     backupSummary: ["org.webosphoenix.service.backup"].concat(SETTINGS),
     assistantProvider: ["org.webosphoenix.assistant"],
     locationRelay: ["com.webos.service.location"].concat(SETTINGS),
+    // The provider's tokens go only to the OAuth service, which keeps them.
+    tokenRelay: ["org.webosphoenix.service.oauth"],
     setLocationRelay: SETTINGS
 };
 
@@ -623,9 +628,13 @@ function createAccountService(deps) {
         return encodeURIComponent(p.channelId);
     }
 
-    // The OAuth broker (PLATFORM.md 6.5.4): for providers whose token
-    // exchange needs a client secret. The PKCE pair stays between the device
-    // and the broker; the broker keeps the tokens two minutes under a handle.
+    // The token relay (PLATFORM.md 6.5.4; Phoenix-Web-Services
+    // OAuthTokenRelayController): for providers whose token exchange needs a
+    // client secret. exchange: the device ran the authorization request
+    // (PKCE, its loopback redirect) and hands the code with its verifier;
+    // refresh: the refresh token; the server adds the secret, keeps nothing.
+    // authorizeUrl and redeem: the broker's own callback for providers that
+    // take only an https redirect (Slack; not on the server yet).
     function tokenRelay(p) {
         p = p || {};
         if (typeof p.provider !== "string" || !/^[a-z0-9-]{1,40}$/.test(p.provider)) return Promise.reject(err("BAD_PARAMS", "provider"));
@@ -636,6 +645,11 @@ function createAccountService(deps) {
                 return { returnValue: true, url: r.api + base + "authorize?" + form({ code_challenge: p.codeChallenge, code_challenge_method: "S256",
                                                                                       state: p.state, redirect_uri: p.redirectUri, scope: p.scope }) };
             }
+            if (p.step === "exchange") {
+                if (typeof p.code !== "string" || !p.code || typeof p.codeVerifier !== "string" || !p.codeVerifier || typeof p.redirectUri !== "string")
+                    throw err("BAD_PARAMS", "code, codeVerifier and redirectUri");
+                return apiJson("POST", base + "exchange", { code: p.code, code_verifier: p.codeVerifier, redirect_uri: p.redirectUri }).then(relayTokens);
+            }
             if (p.step === "redeem") {
                 if (!p.handle || !p.codeVerifier) throw err("BAD_PARAMS", "handle and codeVerifier");
                 return apiJson("POST", base + "redeem", { handle: p.handle, code_verifier: p.codeVerifier }).then(relayTokens);
@@ -644,7 +658,7 @@ function createAccountService(deps) {
                 if (!p.refreshToken) throw err("BAD_PARAMS", "refreshToken");
                 return apiJson("POST", base + "refresh", { refresh_token: p.refreshToken }).then(relayTokens);
             }
-            throw err("BAD_PARAMS", "step: authorizeUrl, redeem or refresh");
+            throw err("BAD_PARAMS", "step: exchange, refresh, authorizeUrl or redeem");
         });
     }
     function relayTokens(b) {
