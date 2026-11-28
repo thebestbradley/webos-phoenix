@@ -255,6 +255,18 @@ describe("pairing and pinned keys over TLS 1.3", () => {
         c.close();
     });
 
+    it("installs an app's package over the pinned connection, as the computer whose key it is", async () => {
+        const { code } = core.pairStart();
+        const { deviceKey } = await pairOnce(code);
+        const got: Any[] = [];
+        core.installApp = async (bytes: Buffer, from: Any) => { got.push({ bytes: Buffer.from(bytes).toString(), from }); return { appId: "com.example.mine", version: "1.0.0", skipped: [] }; };
+        const c = await connect(deviceKey);
+        const r = await c.request({ op: "install" }, Buffer.from("IPK"));
+        expect(r.result).toEqual({ appId: "com.example.mine", version: "1.0.0", skipped: [] });
+        expect(got).toEqual([{ bytes: "IPK", from: { key: computer.publicKey, name: "Laptop" } }]);
+        c.close();
+    });
+
     it("a computer whose key a signed revocation list names loses its open connections and is refused at the next", async () => {
         const { code } = core.pairStart();
         const { deviceKey } = await pairOnce(code);

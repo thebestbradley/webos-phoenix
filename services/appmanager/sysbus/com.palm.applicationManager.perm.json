@@ -1,7 +1,9 @@
 {
     "com.palm.applicationManager": [
         "application.operation",
-        "application.launcher"
+        "application.launcher",
+        "devmode.query",
+        "phoenix.devmode.query"
     ],
     "com.webos.surfacemanager": [
         "phoenix.appmanager.query",

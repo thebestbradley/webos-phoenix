@@ -40,6 +40,24 @@
 //       which the sheet opens to compose, is in the package
 //   C16 the template's sign-up link (signUp: {url?, servers?: [{name,
 //       url}]}, written from the definition's signUp): https addresses only
+//   C17 a sign-in page of its own (validator.customUI) only in Phoenix's own
+//       connectors (firstParty): Accounts shows the page in a frame of its
+//       card, so the page calls with Accounts' groups, which hold every
+//       Phoenix connector's sign-in group (docs/DEVICE-AUDIT.md). Until each
+//       page runs as its own connector (docs/ROADMAP.md, per-connector
+//       sign-in isolation), a third-party connector uses the standard
+//       sign-in: Accounts' user name and password, sent to its validator.
+//   C18 a third-party connector's (not firstParty) bus groups, least
+//       privilege: its service's perm.json claims only groups of its own
+//       and THIRD_PARTY_GROUPS; a group of its own is one its api.json
+//       defines, named in its namespace, listing only its service's
+//       methods (luna-hub's groups are global and joined across packages,
+//       so a group named like another's, or listing another service's
+//       methods, would claim theirs); the perm file names only its
+//       service; its groups.json sets the trust of its own groups only
+//       and leaves the connector protocol's (SHARED_GROUPS) at oem.
+//       Phoenix's own connectors are checked against what their calls
+//       need instead (tools/check-luna.py, tools/test-devicecheck.py).
 //
 // files: the package's files by path relative to the app's folder.
 
@@ -110,6 +128,72 @@ function serviceOf(address: unknown): string | null {
     return m ? m[1] : null;
 }
 
+/**
+ * Phoenix's own connector: its app id is in Phoenix's namespace and it is
+ * checked with Phoenix's namespaces. The catalogs give those only to
+ * Phoenix's packages (server/marketplace Catalog::submitPackage: an admin's
+ * upload; a developer's org.webosphoenix.* id is refused there and in
+ * Phoenix-Web-Services), and the devices trust them from preinstalled.json
+ * (apps/marketplace packagesservice.js firstPartyEntry).
+ */
+export const PHOENIX_NAMESPACE = "org.webosphoenix";
+
+export function isFirstParty(appId: string, namespaces: string[]): boolean {
+    return appId.indexOf(PHOENIX_NAMESPACE + ".") === 0 && namespaces.indexOf(PHOENIX_NAMESPACE) >= 0;
+}
+
+/**
+ * C18: the groups a third-party connector's service may claim besides its
+ * own (docs/SYNERGY-SDK.md "Validating and packing"). Each is one the kit's
+ * calls need (KIT_CALLS in tools/devicecheck/luna.py) and that the service
+ * providing it confines to the caller's own data; every other group is
+ * refused, by name.
+ *
+ *   database.operation      db8 (com.palm.db): each kind's permissions decide
+ *                           who reads or writes it, and C10/C11 keep the
+ *                           package's kinds and permissions its own
+ *   tempdatabase.operation  the same for com.palm.tempdb (C10/C11 cover its kinds)
+ *   activity.operation      the activity manager: the kit's sync schedule and
+ *                           db8 watches (create, cancel, complete)
+ *   accounts.transport      the connector protocol (SHARED_GROUPS): the kit
+ *                           calls its own service's sync; C9's outbound lets
+ *                           the service reach no other connector
+ *   phoenix.accounts.info   getAccountInfo alone; phoenix.accounts.read-credentials
+ *                           readCredentials alone: the kit reads each account it
+ *                           works on (service.ts accountContext). Which accounts:
+ *                           the template's readPermissions, checked per caller
+ *                           (third_party/app-services com.palm.service.accounts
+ *                           utils.js hasPermission, exact ids, no list means no
+ *                           one); C5 keeps a third party's ids in its namespace
+ *   oauth.signin            the OAuth service (ctx.oauth, kit.oauthSignIn): a key
+ *                           belongs to the caller that made it (services/oauth
+ *                           oauthservice.js owned, ownerOf)
+ *   notification.operation  ctx.notify: createToast and createAlert only; reading
+ *                           or closing others' is notification.management
+ *
+ * Not on the list, so refused: the whole accounts service
+ * (phoenix.appservices.accounts: create, change, delete any account),
+ * phoenix.accounts.list (listAccounts answers every account, no
+ * readPermissions), phoenix.ongoing (set takes any app id, clear any row),
+ * oauth.card and oauth.erase, every connector's own groups (phoenix.<name>.signin,
+ * phoenix.<name>.messaging, <name>.account, ...) and groups no service defines
+ * (accounts.operation, messaging.operation: a later definition would hand
+ * every holder its methods).
+ */
+export const THIRD_PARTY_GROUPS = ["database.operation", "tempdatabase.operation", "activity.operation", "accounts.transport",
+                                   "phoenix.accounts.info", "phoenix.accounts.read-credentials", "oauth.signin", "notification.operation"];
+
+/**
+ * The connector protocol's groups: every connector's api.json adds its
+ * methods to them (Accounts holds accounts.transport, the Assistant
+ * phoenix.connector.share), so their names are not a developer's. Their
+ * trust is the system's, oem.
+ */
+export const SHARED_GROUPS = ["accounts.transport", "phoenix.connector.share"];
+
+/** C17's answer to a third-party connector's own sign-in page. */
+export const THIRD_PARTY_SIGNIN = "Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in";
+
 function inNamespace(id: string, namespaces: string[]): boolean {
     return namespaces.some((ns) => id === ns || id.indexOf(ns + ".") === 0);
 }
@@ -143,6 +227,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
     if (!out.version) errors.push("C1 appinfo.json: no version");
     if (!(info.value.phoenix && info.value.phoenix.hidden)) warnings.push("C1 appinfo.json: a connector's app is usually hidden (\"phoenix\": {\"hidden\": true})");
     const namespaces = (options && options.namespaces && options.namespaces.length) ? options.namespaces : [appId.split(".").slice(0, 2).join(".")];
+    const firstParty = isFirstParty(appId, namespaces);
 
     // C12 native code
     Object.keys(files).forEach((p) => { if (isNative(p, files[p])) errors.push("C12 native code is not allowed: " + p); });
@@ -267,6 +352,9 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
             else if (!files[String(v.customUI.name || "")]) errors.push("C7 " + id + ": the sign-in page " + v.customUI.name + " is not in the app");
         }
 
+        // C17 a sign-in page of its own: Phoenix's own connectors only
+        if (v && typeof v === "object" && v.customUI !== undefined && v.customUI !== null && !firstParty) errors.push("C17 " + id + ": " + THIRD_PARTY_SIGNIN);
+
         // C8 capability providers
         const seen: Record<string, boolean> = {};
         tpl.capabilityProviders.forEach((cp: any) => {
@@ -294,6 +382,55 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
                 }
                 const ext: string[] = Array.isArray(kinds[kind].extends) ? kinds[kind].extends : kinds[kind].extends ? [kinds[kind].extends] : [];
                 if (!ext.some((e) => generics.indexOf(e) >= 0)) errors.push("C10 " + where + ": " + kind + " must extend one of " + generics.join(", "));
+            });
+        });
+    }
+
+    // C18 a third-party connector's groups (THIRD_PARTY_GROUPS, SHARED_GROUPS)
+    if (!firstParty && service && ID.test(service)) checkGroups();
+    function checkGroups() {
+        const ns = namespaces.join(", ");
+        const own: string[] = [];
+        const apiPath = "service/sysbus/" + service + ".api.json";
+        const api = json(files, apiPath);
+        if (files[apiPath] && (!api.ok || !api.value || typeof api.value !== "object" || Array.isArray(api.value))) errors.push("C18 " + apiPath + ": not valid JSON (an object: each group and its methods)");
+        else if (api.ok) Object.keys(api.value).forEach((g) => {
+            const shared = SHARED_GROUPS.indexOf(g) >= 0;
+            if (!shared && !inNamespace(g, namespaces))
+                errors.push("C18 the api.json's group " + g + " is not in the namespace " + ns + ": name a group of your own in it (" + SHARED_GROUPS.join(" and ") + " are the connector protocol's)");
+            const methods = api.value[g];
+            const others = Array.isArray(methods) ? methods.filter((m: unknown) => typeof m !== "string" || m.indexOf(service + "/") !== 0) : [methods];
+            others.forEach((m: unknown) => errors.push("C18 the api.json's group " + g + " lists " + JSON.stringify(m) + ": a connector's groups list only its service's methods (" + service + "/<method>)"));
+            if (!shared && inNamespace(g, namespaces) && !others.length) own.push(g);
+        });
+        const claims = "a third-party connector claims only its own groups (its api.json's, named in " + ns + ") and " + THIRD_PARTY_GROUPS.join(", ");
+        Object.keys(files).sort().filter((p) => /^service\/sysbus\/[^/]+\.perm\.json$/.test(p)).forEach((p) => {
+            const perm = json(files, p);
+            if (!perm.ok || !perm.value || typeof perm.value !== "object" || Array.isArray(perm.value)) { errors.push("C18 " + p + ": not valid JSON (an object: the service and the groups it claims)"); return; }
+            Object.keys(perm.value).forEach((name) => {
+                if (name !== service) { errors.push("C18 " + p + ": claims groups for " + name + "; a connector's perm file names only its service, " + service); return; }
+                const groups = perm.value[name];
+                if (!Array.isArray(groups)) { errors.push("C18 " + p + ": " + service + "'s groups must be a list"); return; }
+                groups.forEach((g: unknown) => {
+                    if (typeof g !== "string" || (own.indexOf(g) < 0 && THIRD_PARTY_GROUPS.indexOf(g) < 0))
+                        errors.push("C18 " + service + " may not claim the group " + (typeof g === "string" ? g : JSON.stringify(g)) + ": " + claims);
+                });
+            });
+        });
+        Object.keys(files).sort().filter((p) => /^service\/sysbus\/[^/]+\.groups\.json$/.test(p)).forEach((p) => {
+            const gr = json(files, p);
+            if (!gr.ok || !gr.value || typeof gr.value !== "object" || Array.isArray(gr.value)) { errors.push("C18 " + p + ": not valid JSON (an object: each group and its trust levels)"); return; }
+            Object.keys(gr.value).forEach((g) => {
+                const v = gr.value[g];
+                if (g === "allowedNames") {
+                    if (!Array.isArray(v) || v.length !== 1 || v[0] !== service) errors.push("C18 " + p + ": allowedNames must be [\"" + service + "\"]");
+                } else if (SHARED_GROUPS.indexOf(g) >= 0) {
+                    if (!Array.isArray(v) || v.length !== 1 || v[0] !== "oem") errors.push("C18 " + p + ": the trust of " + g + " is the system's, [\"oem\"]; a connector may not change it");
+                } else if (own.indexOf(g) < 0) {
+                    errors.push("C18 " + p + ": sets the trust of " + g + ", not a group of the package's own (its api.json's, named in " + ns + ")");
+                } else if (!Array.isArray(v) || !v.length || v.some((t: unknown) => typeof t !== "string")) {
+                    errors.push("C18 " + p + ": the trust of " + g + " must be a list of trust levels");
+                }
             });
         });
     }

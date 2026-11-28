@@ -37,7 +37,10 @@ do_install:append() {
     install -d ${D}${sysconfdir}/rauc
     mv ${D}${nonarch_libdir}/rauc/system.conf ${D}${sysconfdir}/rauc/system.conf
     mv ${D}${nonarch_libdir}/rauc/$(basename ${RAUC_KEYRING_FILE}) ${D}${sysconfdir}/rauc/keyring.pem
-    rmdir --ignore-fail-on-non-empty ${D}${nonarch_libdir}/rauc
+    # Nothing else of this recipe's is in /usr/lib: an empty directory left
+    # there fails do_package (installed-vs-shipped, Revision 38).
+    rmdir ${D}${nonarch_libdir}/rauc
+    rmdir --ignore-fail-on-non-empty ${D}${nonarch_libdir}
     # system.conf names the keyring where it now is
     grep -q '^path=/etc/rauc/keyring.pem$' ${D}${sysconfdir}/rauc/system.conf || \
         bbfatal "files/${MACHINE}/system.conf: [keyring] path must be /etc/rauc/keyring.pem"

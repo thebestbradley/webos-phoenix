@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as kit from "./index";
 import { conformanceChecks, runConformance, type FakeServer } from "./conformance";
-import { checkConnector, type Files } from "./tools/checks";
+import { checkConnector, THIRD_PARTY_GROUPS, type Files } from "./tools/checks";
 import { readIpk, writeIpk } from "./tools/ipk";
 import { checkIpk, pack, readFolder } from "./tools/package";
 import { main } from "./tools/cli";
@@ -355,6 +355,51 @@ describe("package checks (the Marketplace's cases)", () => {
         expect(r.errors.length).toBeGreaterThan(0);
         expect(r.errors.every((e) => /^C6 com\.webosphoenix\.webcal: the icon \/usr\/palm\/public\//.test(e))).toBe(true);
     });
+
+    // C17: a sign-in page of its own runs in Accounts' frame, with Accounts'
+    // groups, so only Phoenix's own connectors may have one for now.
+    const PAGES = ["apps/connectors/bluesky", "apps/connectors/deltachat", "apps/connectors/drives", "apps/connectors/google",
+                   "apps/connectors/linkedin", "apps/connectors/matrix", "apps/connectors/microsoft", "apps/connectors/slack",
+                   "apps/connectors/todoist", "apps/connectors/xmpp", "apps/connectors/zoom", "apps/fediverse", "apps/telegram"];
+    for (const dir of PAGES) {
+        it("Phoenix's own " + dir + " keeps its sign-in page; as a third party's it is refused (C17)", () => {
+            const files = readFolder(join(REPO, dir));
+            const own = checkConnector(files, { namespaces: ["org.webosphoenix", "com.webosphoenix"] });
+            expect(own.errors.filter((e) => /^C17 /.test(e))).toEqual([]);
+            // The same package under a developer's id: every template with a page is refused.
+            const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8"));
+            const theirs = Object.assign({}, files, { "appinfo.json": new Uint8Array(Buffer.from(JSON.stringify(Object.assign({}, info, { id: "org.example.copy" })))) });
+            const refused = checkConnector(theirs, { namespaces: ["org.webosphoenix", "com.webosphoenix", "org.example"] }).errors.filter((e) => /^C17 /.test(e));
+            expect(refused.length).toBe(own.templates.length);
+            expect(refused[0]).toMatch(/Custom sign-in pages from third-party connectors aren't supported yet; use the connector kit's standard sign-in$/);
+        });
+    }
+
+    // C18: Phoenix's own connectors hold what their calls need (check-luna,
+    // test-devicecheck); the same files under a developer's id claim groups
+    // a third party may not (other connectors' and Accounts' narrow ones),
+    // and their un-namespaced groups would join another package's.
+    for (const dir of PAGES) {
+        it("Phoenix's own " + dir + " keeps its groups; as a third party's they are refused (C18)", () => {
+            const files = readFolder(join(REPO, dir));
+            expect(checkConnector(files, { namespaces: ["org.webosphoenix", "com.webosphoenix"] }).errors.filter((e) => /^C18 /.test(e))).toEqual([]);
+            const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8"));
+            const theirs = Object.assign({}, files, { "appinfo.json": new Uint8Array(Buffer.from(JSON.stringify(Object.assign({}, info, { id: "org.example.copy" })))) });
+            const refused = checkConnector(theirs, { namespaces: ["org.webosphoenix", "com.webosphoenix", "org.example"] }).errors.filter((e) => /^C18 /.test(e));
+            expect(refused.some((e) => /may not claim the group phoenix\.accounts\.list|is not in the namespace/.test(e))).toBe(true);
+        });
+    }
+
+    it("C18 names the refused group and what a third party may claim", () => {
+        const r = checkConnector(caseFiles(cases.base, { "service/sysbus/org.example.service.foo.perm.json": { "org.example.service.foo": ["database.operation", "phoenix.telegram.signin"] } }));
+        expect(r.errors).toEqual(["C18 org.example.service.foo may not claim the group phoenix.telegram.signin: a third-party connector claims only its own groups " +
+            "(its api.json's, named in org.example) and " + THIRD_PARTY_GROUPS.join(", ")]);
+    });
+
+    it("the News Feed example (a third party's) uses the standard sign-in", () => {
+        const r = checkConnector(readFolder(join(REPO, "apps", "shared", "connector-kit", "examples", "feeds")));
+        expect(r.errors).toEqual([]);
+    });
 });
 
 // ---- The CLI and the .ipk -------------------------------------------------------------------
@@ -398,7 +443,7 @@ describe("phoenix-connector", () => {
             const info = () => JSON.parse(readFileSync(join(w, "appinfo.json"), "utf8"));
             expect(info().phoenix.shareTargets).toEqual([expect.objectContaining({ types: ["text/plain", "text/uri-list", "image/*"], label: "wall",
                 connector: expect.objectContaining({ templateId: "org.example.wall", service: "org.example.service.wall" }) })]);
-            expect(info().requiredPermissions).toContain("wall.share");
+            expect(info().requiredPermissions).toContain("org.example.service.wall.share");
             expect(readFileSync(join(w, "index.html"), "utf8")).toMatch(/share\/compose\.js/);
             expect(readFileSync(join(w, "share", "compose.js"), "utf8")).toMatch(/\/share", \{ accountId/);
             expect(await main(["validate", w], io)).toBe(0);

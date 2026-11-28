@@ -3096,6 +3096,41 @@ developer apps' cards close as it turns off. On a device OSE's
 `setDevMode` restarts it, so the same follows from the restart.
 `tools/test-apps.cjs` runs the developer apps with Developer Mode on.
 
+The rule is the owner's (27 November 2026: demo and test apps "Hide unless
+Developer Mode"), and a release image follows it too:
+
+- **One flag.** Whether an app is a developer app is its `appinfo.json`
+  saying `"phoenix": {"developer": true}`, nothing else: no list of ids in
+  the launcher. Phoenix's own developer apps say so in their own file.
+- **Apps Phoenix does not own.** The test, demo and example apps the
+  platform's layers put on an image (OSE's YouTube test page,
+  `com.webos.app.test.youtube`, and its QML examples) are listed in one
+  file, `meta-phoenix/conf/developer-apps.json`, each with why.
+  `phoenix-developer-apps.bbclass` writes the same flag into their
+  `appinfo.json` as the image's rootfs is finished
+  (`meta-phoenix/lib/phoenix/developerapps.py`; an id the image does not
+  have is skipped, an `appinfo.json` it cannot rewrite fails the image).
+  An account's sign-in page is not a test app: LuneOS's IM connectors'
+  (`com.palm.app.teams` and the rest) say `"visible": false`, which keeps
+  them out of the launcher and Just Type while Accounts can still open
+  them, so they are not listed.
+- **On a device** the shell's launcher (`LsmWindowSource`) reads each app's
+  `appinfo.json` from SAM's `listApps` and gives its entry the developer
+  requirement, as the simulator does, and `LsmSystemStatus` follows
+  `getDevMode {subscribe}`, so the launcher, the dock and Just Type change
+  as Developer Mode does. The application manager's `searchApps` (Just
+  Type, the Assistant) and `listLaunchPoints` (the Assistant's apps) leave
+  the developer apps out while it is off (`services/appmanager`), and an
+  app's list to pick an app from (Settings > Clipboard's apps) uses
+  `appPicker.list()` (`@phoenix/luna`), which leaves out the hidden apps
+  and, while Developer Mode is off, the developer apps. `apps.list()` still
+  names them all (an app's title by its id). `appPicker` is an export of its
+  own, not part of `apps`, so only the apps that import it bundle the
+  Developer Mode read and need its group.
+- **Opening one by id** still works on a device (SAM's `launch`; the image
+  regression suite opens Notification Lab that way); only the simulator's
+  window source refuses it.
+
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;
 the Marketplace sets it after its own check). In the simulator the app's

@@ -18,6 +18,10 @@ SRC_URI:append:arm = " file://phoenix-hardware-arm.cfg"
 # and what OSE and Phoenix need of a kernel (files/phoenix-ose.cfg, as the
 # phones' kernels have it).
 SRC_URI:append:phoenix-vm-arm64 = " file://phoenix-vm.cfg file://phoenix-ose.cfg"
+# The other hypervisors' disks, displays and buses, for the A/B disk
+# under VMware, Parallels, VirtualBox, Apple Virtualization, libvirt and
+# Hyper-V (files/phoenix-vm-hypervisors.cfg)
+SRC_URI:append:phoenix-vm-arm64 = " file://phoenix-vm-hypervisors.cfg"
 # The yocto-kernel-cache's BSP for it is qemuarm64's: KMACHINE defaults to
 # MACHINE (kernel-yocto.bbclass:17), and the cache has no
 # phoenix-vm-arm64-standard.scc, which do_kernel_metadata would stop on
