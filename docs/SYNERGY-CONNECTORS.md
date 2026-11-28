@@ -873,7 +873,8 @@ Connections with `status: "experimental"` and a sign-up link, and in the
 device's pre-installed list as a catalog entry (installed by those who want
 it). Without its registration an account type stays listed and its sign-in
 page says "&lt;Provider&gt; is not available in this build"; Todoist and
-Bluesky have sign-ins that need none and work fully today. What each
+Bluesky have sign-ins that need none and work fully today (`beta` since
+28 November 2026: "Verified for launch" below). What each
 provider asks of Phoenix: [DEVELOPER-APPS.md](DEVELOPER-APPS.md) "The
 accounts".
 
@@ -976,6 +977,50 @@ reaches the organizer: Microsoft's connector sends Graph's `accept`,
 `decline` or `tentativelyAccept`, Google's the attendees with
 `sendUpdates=all`, CalDAV the attendee's `PARTSTAT` (the kit's
 `answerChanged`). Zoom's `createMeeting` is still called by nothing.
+
+### Verified for launch (28 November 2026)
+
+The connectors that need no provider registration, walked as a person
+would in Chromium against the stand-ins (and against real servers where
+the test has one): Connections, the sign-in page with a wrong password
+and then the right one, the data in its app, a change made each way, and
+the account removed in Accounts with its own Remove Account (confirmed),
+its data gone with it.
+
+| Connector | Tests | Walked end to end | Status |
+| --- | --- | --- | --- |
+| **Todoist** (API token) | vitest; `test-connectors.cjs` | Yes: a wrong token says "Todoist did not accept the token"; projects as lists in Tasks, a task added and one ticked reach Todoist; removed, its records go | `beta` (was `experimental`) |
+| **Bluesky** (app password) | vitest; `test-connectors.cjs` | Yes: a wrong app password says Bluesky did not accept it; contacts, a direct message answered from Messaging, notifications, a post from the share sheet; removed, its records go | `beta` (was `experimental`) |
+| **Nextcloud** | vitest; `test-drives.cjs` | Yes: Login Flow v2 (no password typed; with an app password instead, the WebDAV path below), Files, Save to Files, the file picker, uploads, offline | `beta` (kept) |
+| **ownCloud** | vitest (shares WebDAV's code) | Yes (walked; WebDAV's steps in `test-drives.cjs` cover its code): wrong password refused, folders in Files, a file put on the server shows at Refresh, a folder made in Files is on the server, Remove Account | `beta` (kept) |
+| **WebDAV** | vitest; `test-drives.cjs` 9 | Yes, as ownCloud | `beta` (kept) |
+| **S3** (MinIO preset) | vitest; `test-drives.cjs` 9 | Yes, as ownCloud | `beta` (kept) |
+| **SFTP** | vitest; `test-sftp.cjs` (with OpenSSH's sshd) | Yes: the demo server and a real OpenSSH: host key trusted, a key made or pasted, files both ways, a changed host key refused, removed with its key | `beta` (kept) |
+| **XMPP** | vitest; `test-xmpp.cjs`; `test-xmpp-server.cjs` (Prosody) | Yes: wrong password "The server did not accept that Jabber ID and password." (Prosody's 401, and the page's text), roster, chats both ways, pictures, presence, removed | `beta` (kept) |
+| **Matrix** | vitest; `test-matrix.cjs` | Yes: wrong password "The homeserver did not accept that Matrix ID and password.", rooms, a chat both ways, pictures, removed | `beta` (kept) |
+| **Delta Chat** | vitest; `test-deltachat.cjs` | Yes, on the simulator's demo core, whose page says it takes any password at chatmail.example (a wrong password is refused by the real core: vitest) | `beta` (kept) |
+
+Fixed in this pass: Todoist's and Bluesky's sign-in pages opened on an
+orange "Sign In with &lt;Provider&gt; is not available in this build ...
+(docs/DEVELOPER-APPS.md)" above the field that works. The kit's
+`oauthOption` now leaves an unregistered Sign In out where the page has
+another way in (the token, the app password) and keeps the box only where
+there is none (Google, Microsoft, LinkedIn, Zoom, Slack; the drives' OAuth
+ones, Box, Dropbox, OneDrive, Google Drive, in their own page). Todoist's
+catalog summary no longer offers "or on Todoist's own page". (The
+screenshot of Bluesky's sign-in below predates this.)
+
+Open, by severity:
+
+- **Medium.** A change made on the device reaches the provider at the next
+  sync, not at once ("Known limits" above).
+- **Low.** "Connection failed" for a server that is not there (the
+  original's own text, `AccountError`, enyo-1.0 accounts `errors.js`); it
+  does not say to check the address.
+- **Low.** The simulator's chat demo servers take any password for a name
+  they have not seen, and each page's runtime has its own, so a wrong
+  password is only refused in the simulator once the name has signed in on
+  that page; real servers refuse it (Prosody, vitest).
 
 Screenshots from phoenix-sim with the stand-ins:
 [Bluesky's sign-in](screenshots/connectors-bluesky-signin.png),

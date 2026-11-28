@@ -18,7 +18,9 @@
 //   5. receipts (XEP-0184) from a client that sends them.
 //
 //   node tools/test-xmpp-server.cjs          (skips when Prosody is not installed:
-//                                             apt install prosody, about 4 MB)
+//                                             apt install prosody, about 4 MB;
+//                                             fails instead under CI=true, so CI
+//                                             cannot stop running it unnoticed)
 //
 // Needs the connector kit built (cd apps && npm run build -w @phoenix/connector-kit).
 
@@ -51,6 +53,10 @@ function which(cmd) {
 
 async function main() {
     if (!which("prosody") || !which("prosodyctl")) {
+        if (process.env.CI) {
+            console.error("FAIL Prosody is not installed (apt install prosody): CI must run this test, not skip it");
+            process.exit(1);
+        }
         console.log("skip: Prosody is not installed (apt install prosody)");
         return;
     }

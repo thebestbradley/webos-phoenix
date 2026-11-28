@@ -215,9 +215,11 @@ jobs:
 
       # ffmpeg: the web tests ran with it in the one-job CI (the feedback
       # sounds' check installed it first); Voice Memos converts with it.
+      # prosody: tools/test-xmpp-server.cjs's real XMPP server (it fails
+      # under CI without it, rather than skip).
       - uses: ./.github/actions/setup
         with:
-          apt: ffmpeg
+          apt: ffmpeg prosody
           apps-built: 'true'
           playwright: 'true'
 

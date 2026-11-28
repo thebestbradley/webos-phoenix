@@ -78,6 +78,21 @@ export function notAvailable(name: string, what?: string): Error {
                 " here (docs/DEVELOPER-APPS.md)", "NOT_AVAILABLE");
 }
 
+/** What a sign-in page (ConnectorWizard.js, providerInfo's `oauth`) says of "Sign In with <provider>". */
+export interface OAuthOption { available: boolean; label?: string; reason?: string }
+
+/**
+ * providerInfo's `oauth`: Sign In with the provider when it is available.
+ * When it is not (no registration in this build), a page with another way
+ * in (otherWay: a token, an app password typed in) leaves it out, so the
+ * page opens on what works, not on a warning; a page with none says why
+ * (its reason: notAvailable's "... is not available in this build").
+ */
+export function oauthOption(option: OAuthOption, otherWay: boolean): OAuthOption | null {
+    if (option.available) return option;
+    return otherWay ? null : option;
+}
+
 async function lunaOk(ctx: BaseContext, uri: string, params: Json): Promise<Json> {
     const r = await ctx.luna.call(uri, params);
     if (r && r.returnValue === false) throw fail(r.errorText || uri + " failed", String(r.errorCode || "UNKNOWN_ERROR"));

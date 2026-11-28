@@ -193,7 +193,8 @@ module.exports = kit.defineConnector({
                 return {
                     name: "Zoom",
                     help: "Your upcoming Zoom meetings in Calendar, each with where to join. Meetings open in the browser.",
-                    oauth: c ? { available: true, label: "Sign In with Zoom" } : { available: false, reason: notAvailable().message },
+                    // Sign In is the only way in: without the registration, the page says why.
+                    oauth: kit.oauthOption(c ? { available: true, label: "Sign In with Zoom" } : { available: false, reason: notAvailable().message }, false),
                     privacy: "Your meetings go between this device and Zoom." + (c && c.broker ? " Zoom's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing (docs/PLATFORM.md 6.5.4)." : "")
                 };
             });

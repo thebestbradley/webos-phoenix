@@ -308,7 +308,8 @@ module.exports = kit.defineConnector({
                 return {
                     name: "Google",
                     help: "Your Google Calendar, Contacts and Tasks, kept in step both ways. Sign in on Google's own page. (Google Drive is a drive in Files; Gmail is an Email account.)",
-                    oauth: c ? { available: true, label: "Sign In with Google" } : { available: false, reason: kit.notAvailable("Google").message },
+                    // Sign In is the only way in: without the registration, the page says why.
+                    oauth: kit.oauthOption(c ? { available: true, label: "Sign In with Google" } : { available: false, reason: kit.notAvailable("Google").message }, false),
                     privacy: "Your data goes between this device and Google only; no Phoenix server is in between."
                 };
             });

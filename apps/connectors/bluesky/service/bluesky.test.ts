@@ -214,13 +214,13 @@ describe("Bluesky", () => {
     it("offers Sign In with Bluesky only with Phoenix's client address and the system's sheet", async () => {
         const none = await world({ dir: DIR, def, config: config(false), kindParents });
         const i1 = await none.methods.providerInfo({});
-        expect(i1.oauth.available).toBe(false);
-        expect(i1.oauth.reason).toMatch(/not available in this build/);
+        // The app password signs in: no Sign In with Bluesky, and no warning.
+        expect(i1.oauth).toBeNull();
+        expect(JSON.stringify(i1)).not.toMatch(/not available/);
         expect(i1.fields.map((f: any) => f.name)).toEqual(["username", "password"]);
         const noSheet = await world({ dir: DIR, def, config: config(true), kindParents });
         const i2 = await noSheet.methods.providerInfo({});
-        expect(i2.oauth.available).toBe(false);
-        expect(i2.oauth.reason).toMatch(/sign-in sheet/);
+        expect(i2.oauth).toBeNull();
         expect((await noSheet.methods.signIn({ username: "anna.test" })).errorCode).toBe("NOT_AVAILABLE");
         const yes = await world({ dir: DIR, def, config: config(true), kindParents, handlers: sheetHandler([]) });
         expect((await yes.methods.providerInfo({})).oauth).toEqual({ available: true, label: "Sign In with Bluesky" });

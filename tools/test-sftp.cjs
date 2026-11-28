@@ -140,6 +140,11 @@ async function main() {
         }
     }
     const haveSshd = !!sshdPath() && !!which("ssh-keygen");
+    if (!haveSshd && process.env.CI) {
+        // CI installs it (.github/actions/setup): without it the real server's part would go quiet.
+        console.error("FAIL OpenSSH's sshd or ssh-keygen is not installed (apt install openssh-server): CI must run the real server's part");
+        process.exit(1);
+    }
     if (!haveSshd) console.log("note: OpenSSH's sshd is not installed (apt install openssh-server): only the demo server's part runs");
     const { chromium } = loadPlaywright();
     fs.mkdirSync(outDir, { recursive: true });

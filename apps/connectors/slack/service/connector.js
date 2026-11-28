@@ -312,7 +312,8 @@ module.exports = kit.defineConnector({
                 return {
                     name: "Slack",
                     help: "Your Slack direct messages and channels in Messaging, and your workspace's people in Contacts. Until Phoenix's Slack app is in the Slack Marketplace, Slack lets it read one conversation a minute: new messages come in slowly.",
-                    oauth: o.available ? { available: true, label: "Sign In with Slack" } : { available: false, reason: o.reason },
+                    // Sign In is the only way in: without the registration, the page says why.
+                    oauth: kit.oauthOption(o.available ? { available: true, label: "Sign In with Slack" } : { available: false, reason: o.reason }, false),
                     privacy: "Your messages go between this device and Slack. Slack's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing. Your workspace's admins can read what Slack keeps."
                 };
             });
