@@ -68,7 +68,12 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The catalog the device ships with: Phoenix's own connector is installed
+    // from it, as on a device; a sideload's own sign-in page is not framed
+    // (rule C17 on the device, packagesservice.js checkSignInPage).
+    const phoenix = await servers.startPhoenixDevice();
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     ...phoenix.rootfsArgs], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -102,15 +107,8 @@ async function main() {
         await page.waitForFunction(() => !!window.__phoenixRuntime);
         const { pack } = require(path.join(REPO, "apps/shared/connector-kit/lib/tools/package.js"));
         const packed = pack(path.join(REPO, "apps/connectors/matrix"), outDir, { namespaces: ["org.webosphoenix", "com.webosphoenix"] });
-        const ipkB64 = fs.readFileSync(packed.file).toString("base64");
-        await page.evaluate((b64) => __phoenixRuntime.tmpFiles.write("/tmp/matrix.ipk", Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), ipkB64);
-        await page.evaluate(() => { localStorage.setItem("phoenix:devMode", "true"); });
-        const installed = await page.evaluate(() => new Promise((res) => {
-            const b = new PalmServiceBridge();
-            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 30 || r.statusValue === 24) res(r); };
-            b.call("luna://com.webos.appInstallService/install", JSON.stringify({ id: "org.webosphoenix.matrix", ipkUrl: "/tmp/matrix.ipk", subscribe: true, developerMode: true }));
-        }));
-        if (!check(installed.statusValue === 30, "the Matrix connector installs")) throw new Error("not installed");
+        const installed = await phoenix.install(context, origin, packed.file, "org.webosphoenix.matrix");
+        if (!check(installed.state === "installed", "the Matrix connector installs from the Phoenix catalog the device ships with, without Developer Mode (" + (installed.errorText || "ok") + ")")) throw new Error("not installed");
         await page.reload();
         await page.waitForFunction(() => !!window.__phoenixRuntime);
 
@@ -197,6 +195,7 @@ async function main() {
     } finally {
         if (browser) await browser.close();
         rootfs.kill();
+        await phoenix.stop();
         fs.rmSync(installedDir, { recursive: true, force: true });
     }
     console.log(failures ? `\n${failures} check(s) failed; screenshots in ${outDir}` : `\nall checks passed; screenshots in ${outDir}`);

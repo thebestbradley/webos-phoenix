@@ -149,7 +149,12 @@ async function main() {
     const port = await servers.freePort();
     const origin = `http://127.0.0.1:${port}`;
     const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-installed-"));
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
+    // The catalog the device ships with: Phoenix's own connector is installed
+    // from it, as on a device; a sideload's own sign-in page is not framed
+    // (rule C17 on the device, packagesservice.js checkSignInPage).
+    const phoenix = await servers.startPhoenixDevice();
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir,
+                                     ...phoenix.rootfsArgs], { stdio: "ignore" });
     const appUrl = (id, params, file) => `${origin}/usr/palm/applications/${id}/${file || "index.html"}` +
         (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
     let browser;
@@ -191,14 +196,8 @@ async function main() {
         const inside = readIpk(new Uint8Array(ipk)).files.map((f) => f.path);
         check(inside.some((p) => /service\/node_modules\/@noble\/curves\/ed25519\.js$/.test(p)) && !inside.some((p) => /node_modules\/@noble\/[^/]+\/(src|esm)\//.test(p)),
               "the package carries its SSH client's npm packages, their CommonJS only (" + Math.round(packed.size / 1024) + " KB)");
-        await page.evaluate((b64) => __phoenixRuntime.tmpFiles.write("/tmp/drives.ipk", Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), ipk.toString("base64"));
-        await page.evaluate(() => { localStorage.setItem("phoenix:devMode", "true"); });
-        const installed = await page.evaluate(() => new Promise((res) => {
-            const b = new PalmServiceBridge();
-            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 30 || r.statusValue === 24) res(r); };
-            b.call("luna://com.webos.appInstallService/install", JSON.stringify({ id: "org.webosphoenix.drives", ipkUrl: "/tmp/drives.ipk", subscribe: true, developerMode: true }));
-        }));
-        if (!check(installed.statusValue === 30, "the drives' package installs (" + (installed.details && installed.details.reason || "") + ")")) throw new Error("not installed");
+        const installed = await phoenix.install(context, origin, packed.file, "org.webosphoenix.drives");
+        if (!check(installed.state === "installed", "the drives' package installs from the Phoenix catalog the device ships with, without Developer Mode (" + (installed.errorText || "ok") + ")")) throw new Error("not installed");
         await page.reload();
         await page.waitForFunction(() => !!window.__phoenixRuntime);
         const tpl = (await luna(page, "luna://com.palm.service.accounts/listAccountTemplates", { capability: "DOCUMENTS" })).results || [];
@@ -421,6 +420,7 @@ async function main() {
     } finally {
         if (browser) await browser.close();
         rootfs.kill();
+        await phoenix.stop();
         if (sshd) await sshd.stop();
         fs.rmSync(installedDir, { recursive: true, force: true });
         fs.rmSync(work, { recursive: true, force: true });
