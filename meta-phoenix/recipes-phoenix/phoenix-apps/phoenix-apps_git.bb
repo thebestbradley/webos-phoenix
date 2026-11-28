@@ -86,11 +86,33 @@ PHOENIX_SITE_URL ?= ""
 # take; empty: only computers paired with the device and keys it was
 # granted.
 PHOENIX_DEVPUSH_KEY ?= ""
+# The connectors' registrations with their providers (Dropbox, Microsoft,
+# Google, Box, ...; docs/CONNECTOR-REGISTRATIONS.md): their public client
+# ids, which are not in the repository, in one JSON file outside it, named
+# in local.conf or site.conf:
+#   PHOENIX_CONNECTOR_CLIENTS = "/home/builder/phoenix/connector-clients.json"
+# ({"drives": {"dropbox": {"clientId": "..."}, "box": {"clientId": "...",
+# "relay": true}}, "microsoft": {...}, ...}: tools/connector-clients.py).
+# Each becomes /etc/palm/<name>/clients.json (0644, readable: a client id is
+# public). Never a client secret: tools/connector-clients.py refuses one; a
+# provider that needs its secret signs in through Phoenix's token relay
+# ("relay": true). Unset: no file, and those connectors say "not available
+# in this build".
+PHOENIX_CONNECTOR_CLIENTS ??= ""
+# Reinstalled when the file or its name changes.
+do_install[vardeps] += "PHOENIX_CONNECTOR_CLIENTS"
+do_install[file-checksums] += "${@'%s:True' % d.getVar('PHOENIX_CONNECTOR_CLIENTS') if d.getVar('PHOENIX_CONNECTOR_CLIENTS') else ''}"
 
 do_install() {
     # --manifest: /usr/share/phoenix/manifest.json, "unstamped" (the image
     # stamps it with its build: phoenix-devpush.bbclass; docs/DEV-PUSH.md 8.1).
-    ${PYTHON} ${S}/tools/install-rootfs.py ${D} --manifest
+    # --connector-clients: the connectors' registrations (above), if any.
+    if [ -n "${PHOENIX_CONNECTOR_CLIENTS}" ]; then
+        set -- --connector-clients "${PHOENIX_CONNECTOR_CLIENTS}"
+    else
+        set --
+    fi
+    ${PYTHON} ${S}/tools/install-rootfs.py ${D} --manifest "$@"
     # The simulator's servers.json (this computer's servers) is replaced
     # with the image's.
     ${PYTHON} ${S}/tools/servers-json.py ${D}${sysconfdir}/palm/phoenix/servers.json \

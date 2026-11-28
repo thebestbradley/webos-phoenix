@@ -74,6 +74,10 @@ check("/etc/palm/activities/applications/com.palm.app.clock/com.palm.app.clock.u
       and "/etc/palm/activities/services/com.palm.service.contacts/com.palm.service.contacts.sortorder.json" in paths,
       "activities: apps' and services' where the configurator reads them")
 
+# The connectors' registrations come only from the build's file
+# (--connector-clients, tools/test-connector-clients.py), never the tree.
+check(not any(re.match(r"^/etc/palm/[^/]+/clients\.json$", p) for p in paths), "no clients.json from the checkout")
+
 # The device services this work added.
 for name in ("org.webosphoenix.shellhost", "com.palm.applicationManager", "org.webosphoenix.dropshare",
              "org.webosphoenix.accessories"):

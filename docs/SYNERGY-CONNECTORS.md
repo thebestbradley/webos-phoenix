@@ -546,6 +546,82 @@ Chromium and phoenix-sim; not yet run on hardware.
   fake provider and the fake Mastodon server), `shell/tests-device/tst_lsm.qml`
   and `shell/tests/tst_signinbar.qml` (the bar).
 
+**The token relay** (28 November 2026; OPEN-QUESTIONS Q49, Q78, Q123).
+Some providers' token endpoints ask for the client secret even with PKCE
+(Box, Todoist, LinkedIn; Zoom and Slack too), and a secret cannot ship in
+an image: anyone can read it there. For those the secret stays on
+Phoenix's server, which does only the token-endpoint calls:
+
+```
+device: authorize as for any provider (PKCE S256, state, its loopback redirect, the Sign In card)
+device ──POST /v1/oauth-broker/<provider>/exchange {code, code_verifier, redirect_uri}──► relay   (Bearer: the device's Phoenix token)
+relay  ──POST the provider's token endpoint, with Phoenix's client_id and client_secret──► provider
+relay  ◄── tokens ──  provider;   device ◄── the same tokens ── relay   (nothing stored there)
+device ──POST /v1/oauth-broker/<provider>/refresh {refresh_token}──► relay ──► provider   (the same way)
+```
+
+- **Device**: a connector's `clients.json` entry says `"relay": true` and
+  holds no secret (`{"box": {"clientId": "...", "relay": true}}`). The kit's
+  `viaRelay` (`apps/shared/connector-kit/src/registered.ts`) and the
+  drives' `clientOf` pass `relay: "<provider>"` to the OAuth service's
+  `authorize` (`services/oauth/oauthservice.js`), which still shows the
+  page and keeps the verifier, hands the code to the account service's
+  `tokenRelay` (`services/account/accountservice.js`, the OAuth service
+  its only caller; it adds the device's Phoenix token), keeps the tokens in
+  its sealed store with no secret, and refreshes the same way. A key made
+  through the relay is not revoked at the provider on sign-out (the
+  provider asks for the secret there too): it is deleted here. Without the
+  relay in a build (the OAuth service's `redirectUri` says `relay`), or
+  without a Phoenix account signed in, such a provider is "not available"
+  or fails with the account service's reason.
+- **Server** (Phoenix-Web-Services `OAuthTokenRelayController`,
+  `App\Domain\Account\OAuthTokenRelay`, its `docs/OAUTH-TOKEN-RELAY.md`):
+  only a token of the account scope bound to a registered device; only the
+  providers on its list, each with its token endpoint fixed in code (Box,
+  Todoist, LinkedIn): the device names a provider, never an address, so it
+  is no open proxy; `redirect_uri` only this device's loopback address
+  (`http://127.0.0.1[:port]/oauth/callback`) and a real RFC 7636 verifier;
+  no other field taken; redirects not followed; the provider's own error
+  text not passed on; 10 calls a minute and 200 a day per account. It
+  stores nothing and logs only the provider, the grant and the provider's
+  HTTP status. The secrets are the server's configuration
+  (`services.relay.<provider>.client_id` and `client_secret`), never in a
+  repository.
+- **Slack** takes only an https redirect, so it needs the broker's own
+  callback (PLATFORM.md 6.5.4, steps 1 to 6), not built; it is not on the
+  relay's list. **Zoom** wants the secret by HTTP Basic (Q122) and is not
+  on it yet either.
+- **Tests**: `services/oauth/oauth.test.ts` "Phoenix's token relay" (a
+  stand-in provider that asks for the secret, the relay in the test),
+  `services/account/accountservice.test.ts` (the exchange and refresh
+  against `tools/platform-mock`), `apps/shared/connector-kit/src/pim.test.ts`
+  (`"relay": true`), `apps/connectors/drives/service/drives.test.ts` (Box
+  through the relay, and refused without it); Phoenix-Web-Services
+  `tests/Feature/OAuthTokenRelayTest.php`; and end to end,
+  `apps/connectors/drives/service/relay-e2e.test.ts`: the drives, the OAuth
+  and account services against a real Phoenix-Web-Services (`php -S`) and
+  the Box stand-in (`PWS_DIR=... npx vitest run
+  connectors/drives/service/relay-e2e.test.ts`; skipped without it).
+
+**The registrations in an image and the simulator** (28 November 2026;
+OPEN-QUESTIONS Q76). Each connector reads `/etc/palm/<name>/clients.json`
+(`drives`, `microsoft`, `google`, `todoist`, `bluesky`, `linkedin`,
+`slack`, `zoom`, `x`). They come from one JSON file outside the
+repository, `{"<name>": {"<provider>": {"clientId": ...}}}`:
+`PHOENIX_CONNECTOR_CLIENTS = "/path/connector-clients.json"` in local.conf
+or site.conf (meta-phoenix `phoenix-apps`, whose `do_install` passes it to
+`tools/install-rootfs.py --connector-clients`; reinstalled when the file
+changes), and in the simulator `tools/connector-clients.py FILE --sim`,
+which writes `runtime/connector-settings/clients/<name>/clients.json`
+(served at `/etc/palm/<name>/`, git-ignored). `tools/connector-clients.py`
+checks the file: known connectors and providers, a client id each, and no
+secret (only Google's installed-app one, which Google says is not
+confidential); a provider that needs its secret says `"relay": true`.
+Unset, no file is installed and those connectors say "not available in
+this build". Tested by `tools/test-connector-clients.py` (the recipe's
+`do_install` run in sh, install-rootfs placing the files, the simulator
+serving them).
+
 ### 4.2 Keep
 
 Template format and `capabilityProviders`; the callbacks; db8 kinds
