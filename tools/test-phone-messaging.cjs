@@ -337,10 +337,16 @@ async function main() {
         check(unread === 0, "opening the conversation marks it read");
 
         // ---- Reply in the conversation --------------------------------------------------------------------------
-        await msg.fill("[data-testid='message-input']", "Perfect");
+        // A reply longer than the field (it wraps and scrolls in the field's one line).
+        const longReply = "Perfect, see you at the harbor at noon then, I will bring the charts";
+        await msg.fill("[data-testid='message-input']", longReply);
         await msg.keyboard.press("Enter");
-        await msg.waitForSelector(".bubble.out >> text=Perfect");
+        await msg.waitForSelector(".bubble.out >> text=" + longReply);
         check((await msg.locator(".bubble").count()) === 3, "the reply joins the conversation");
+        // Seen in phoenix-sim on a phone: after a long reply the empty field
+        // still showed its last line, so its hint read "here..." only.
+        check(await msg.evaluate(() => { const t = document.querySelector("[data-testid='message-input']"); return t.value === "" && t.scrollTop === 0; }),
+              "the field is empty and back at its first line after sending");
 
         // ---- Picture message (MMS): attach from the picture picker, send, receive ---------------------------------
         const luna = (page, uri, params) => page.evaluate(([u, p]) => new Promise((res) => {

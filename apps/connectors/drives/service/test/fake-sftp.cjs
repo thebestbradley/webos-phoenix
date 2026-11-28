@@ -548,8 +548,20 @@ function createFakeSftp(options) {
 
 // The simulator's demo server: files.example, where any name signs in with
 // any password into a home folder with a few files (runtime "Drives").
+// The simulator's files.example. Each page that reaches it makes its own
+// (the sign-in page in Accounts, the page keeping the drives'
+// connections), so its host key is fixed, as a real server's is: one made
+// afresh each time read as a changed key, and the account trusted at
+// sign-in refused every connection after it. A demo's key, for this
+// in-memory stand-in only; never a real server's.
+var DEMO_SEED = new Uint8Array(32).map(function (_, i) { return (i * 37 + 11) & 0xff; });
+function demoHostKey() {
+    var C = require("../lib/ssh/crypto");
+    return { type: "ssh-ed25519", seed: DEMO_SEED, pub: C.ed25519.publicOf(DEMO_SEED), comment: "files.example" };
+}
+
 function demoServer(o) {
-    var s = createFakeSftp(Object.assign({ host: "files.example", acceptAny: true, users: {} }, o || {}));
+    var s = createFakeSftp(Object.assign({ host: "files.example", acceptAny: true, users: {}, hostKey: demoHostKey() }, o || {}));
     return s;
 }
 

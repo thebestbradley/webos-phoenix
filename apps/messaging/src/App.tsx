@@ -24,7 +24,7 @@
 // conversation with that number or buddy if there is one, else a new
 // message to them, with the person's name.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { db, messaging, personDisplayName, type MessagePart, type Person } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
@@ -72,6 +72,20 @@ function Messaging() {
     }, [intent, threadsKnown]);
 
     useBack(() => { setView({ kind: "list" }); return true; }, view.kind !== "list");
+
+    // The open conversation deleted elsewhere (its account removed in
+    // Accounts takes its conversations with it): back to the list, not a
+    // blank conversation with a field that sends nowhere. Only one the list
+    // has had: a conversation just made (Compose's onSent) or named by a
+    // notification can be open before the list's query has it.
+    const listed = useRef(new Set<string>());
+    useEffect(() => {
+        (threads ?? []).forEach((t) => { if (t._id) listed.current.add(t._id); });
+        if (view.kind === "thread" && threads && listed.current.has(view.id) && !threads.some((t) => t._id === view.id)) {
+            listed.current.delete(view.id);
+            setView({ kind: "list" });
+        }
+    }, [threads, view]);
 
     // A buddy tapped: their conversation, or a new message to them.
     const openBuddy = (r: Recipient) => {
