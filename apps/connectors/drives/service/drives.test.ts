@@ -394,18 +394,21 @@ describe("drives as places of the file manager (drives.ts)", () => {
                                                                                      config: { server: fake.origin } }), "nc1");
         // The device's file manager for its own files, over the same memory.
         const CACHE = "/media/internal/.phoenix/drive-cache";
-        const dirs = new Set<string>();
+        const dirs = new Set<string>(["/media", "/media/internal"]);
         const local: any = {
             list: async (p: any) => ({ returnValue: true, path: p.path, entries: Object.keys(w.files.data).filter((k) => k.replace(/\/[^/]*$/, "") === p.path)
                 .map((k) => ({ name: k.replace(/^.*\//, ""), path: k, type: "file", size: w.files.data[k].length, mtime: 0, mode: 0o644 })) }),
             stat: async (p: any) => (w.files.data[p.path] ? { returnValue: true, entry: { name: p.path.replace(/^.*\//, ""), path: p.path, type: "file",
                                                                                           size: w.files.data[p.path].length, mtime: 0 } }
                 : { returnValue: false, errorCode: 1, errorText: "No such file" }),
-            // As the device's: one level, and only once; the transfer folder
-            // starts out missing, as on a new device (the drives service's
-            // downloads make the cache's other folders).
+            // As the device's: one level, and only once; on a new device
+            // /media/internal/.phoenix and the transfer folder are missing
+            // (the drives service's downloads make the cache's other folders).
             mkdir: async (p: any) => {
                 if (dirs.has(p.path)) return { returnValue: false, errorCode: E.EXISTS, errorText: "Already exists: " + p.path };
+                const up = p.path.replace(/\/[^/]*$/, "");
+                if (up.indexOf("/media/internal/") === 0 && !dirs.has(up))
+                    return { returnValue: false, errorCode: 1, errorText: "ENOENT: no such file or directory, mkdir '" + p.path + "'" };
                 dirs.add(p.path);
                 return { returnValue: true, path: p.path };
             },

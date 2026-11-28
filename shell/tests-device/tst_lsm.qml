@@ -150,10 +150,16 @@ Item {
             compare(again.length, 1);
             compare(again[0].params.id, "com.palm.systemui");
             compare(again[0].params.preload, "partial");
+            // Closed again at once (still short of memory): not again within
+            // the gap, but again once it has passed.
+            windows.bootAppRestartGapMs = 300;
             windows.bootAppEvent({ returnValue: true, appId: "com.palm.systemui", event: "stop" });
-            wait(50);
+            wait(100);
             compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 1, "not again within the gap");
+            tryCompare(windows, "_bootAppsDue", [], 2000);
+            compare(FakeBus.find("com.webos.applicationManager", "/launch").length, 2, "again after the gap");
             windows.bootAppRestartMs = 5000;
+            windows.bootAppRestartGapMs = 60000;
         }
 
         function test_launchAndStatusGoToTheBus() {
