@@ -90,6 +90,7 @@
         "/usr/palm/public/accounts/com.palm.othermail/images/": {"othermail32.png":[2,3],"othermail48.png":[2,3]},
         "/usr/palm/public/accounts/com.palm.palmprofile/images/": {"mypalm-32x32.png":[2,3],"mypalm-48x48.png":[2,3],"sms-32x32.png":[2,3],"sms-48x48.png":[2,3]},
         "/usr/palm/public/accounts/com.palm.pop/images/": {"popmail32.png":[2,3],"popmail48.png":[2,3]},
-        "/usr/palm/public/accounts/com.webosphoenix.dav/images/": {"dav-32x32.png":[2,3],"dav-48x48.png":[2,3]}
+        "/usr/palm/public/accounts/com.webosphoenix.dav/images/": {"dav-32x32.png":[2,3],"dav-48x48.png":[2,3]},
+        "/usr/palm/public/accounts/com.webosphoenix.icloud/images/": {"icloud-32x32.png":[2,3],"icloud-48x48.png":[2,3]}
     }
 }

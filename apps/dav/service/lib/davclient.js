@@ -15,6 +15,13 @@
 // over HTTP (runtime/phoenix-runtime.js, block "CardDAV and CalDAV").
 // Redirects are followed here, keeping the method, so every transport can
 // return 3xx responses as they are.
+//
+// options.services {carddav, caldav}: a provider whose contacts and
+// calendars are on hosts of their own (an account preset, lib/presets.js:
+// iCloud's contacts.icloud.com and caldav.icloud.com). Each service's
+// principal is then looked for on its own host only, and the home sets the
+// principals name may be on other hosts again (iCloud's per-user
+// pNN-contacts / pNN-caldav partitions), which every later request follows.
 
 "use strict";
 
@@ -94,7 +101,12 @@ function createClient(options) {
     var request = options.request;
     var auth = "Basic " + base64((options.username || "") + ":" + (options.password || ""));
     var log = options.log || function () {};
-    var server = normalizeServer(options.serverUrl);
+    var services = null;
+    if (options.services) {
+        services = {};
+        Object.keys(options.services).forEach(function (k) { services[k] = normalizeServer(options.services[k]); });
+    }
+    var server = normalizeServer(options.serverUrl || (services && (services.carddav || services.caldav)));
 
     function call(method, url, headers, body, hops) {
         var h = { Authorization: auth };
@@ -148,9 +160,11 @@ function createClient(options) {
     // the user typed.
     function findPrincipal(service) {
         var candidates = [];
-        var origin = new URL(server).origin;
+        var base = services ? services[service] : server;
+        if (!base) return Promise.resolve(null);
+        var origin = new URL(base).origin;
         candidates.push(origin + "/.well-known/" + service);
-        candidates.push(server);
+        candidates.push(base);
         var i = 0;
         function next() {
             if (i >= candidates.length) return Promise.resolve(null);
@@ -161,7 +175,9 @@ function createClient(options) {
                 if (p) return { principal: p, context: list.url };
                 return next();
             }, function (e) {
-                if (e.status === 401) throw e;
+                // A preset's host that does not answer at all is that host's
+                // problem (not found, refused, TLS), not a missing service.
+                if (e.status === 401 || (services && !e.status)) throw e;
                 log("discovery: " + url + ": " + e.message);
                 return next();
             });
@@ -208,7 +224,8 @@ function createClient(options) {
     // A URL that is itself an address book or calendar is used as the only one.
     function discover() {
         var result = { serverUrl: server, addressbooks: [], calendars: [] };
-        return propfind(server, 0, ["d:resourcetype", "d:displayname", "cs:getctag", "d:sync-token",
+        // A preset's hosts are service roots, never a collection themselves.
+        var probe = services ? Promise.resolve([]) : propfind(server, 0, ["d:resourcetype", "d:displayname", "cs:getctag", "d:sync-token",
                                     "d:supported-report-set", "cal:supported-calendar-component-set", "ical:calendar-color"])
             .then(function (list) {
                 var item = list[0], rt = item && prop(item, NS.DAV, "resourcetype");
@@ -219,12 +236,16 @@ function createClient(options) {
                 if (e.status === 401 || !e.status) throw e;
                 // Servers may refuse PROPFIND on "/" (only the well-known URIs work).
                 log("discovery: " + server + ": " + e.message);
-            })
+            });
+        return probe
             .then(function () {
                 if (result.addressbooks.length || result.calendars.length) return result;
                 return Promise.all([findPrincipal("carddav"), findPrincipal("caldav")]).then(function (found) {
                     var principals = found.filter(Boolean).map(function (f) { return f.principal; });
-                    if (!principals.length) throw DavError("No CardDAV or CalDAV service found at " + server, 404, "NO_DAV_SERVICE");
+                    if (!principals.length) {
+                        throw DavError("No CardDAV or CalDAV service found at " +
+                                       (services ? Object.keys(services).map(function (k) { return services[k]; }).join(" and ") : server), 404, "NO_DAV_SERVICE");
+                    }
                     // Card and cal principals are the same on most servers.
                     var unique = principals.filter(function (p, i) { return principals.indexOf(p) === i; });
                     result.principalUrl = unique[0];

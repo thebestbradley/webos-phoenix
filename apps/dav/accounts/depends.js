@@ -5,5 +5,6 @@ enyo.depends(
     "$enyo-lib/accounts/",
     "DavWizard.js",
     "WebcalWizard.js",
+    "IcloudWizard.js",
     "wizard.css"
 );

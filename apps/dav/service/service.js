@@ -20,6 +20,7 @@ var path = require("path");
 var Service = require("webos-service");
 var davservice = require("./davservice");
 var synckit = require("@phoenix/synckit");
+var presets = require("./lib/presets");
 
 var PHOTO_DIR = "/media/internal/.phoenix/dav-photos";
 
@@ -46,6 +47,10 @@ var methods = davservice.createDavService({
     },
     request: synckit.createRequest(),
     savePhoto: savePhoto,
+    // The image's hosts for the account presets (lib/presets.js), if it names any.
+    presetHosts: function () {
+        try { return JSON.parse(fs.readFileSync(path.join("/etc/palm", presets.CONFIG_FILE), "utf8")); } catch (e) { return null; }
+    },
     log: function (msg) { console.log("[dav] " + msg); }
 });
 

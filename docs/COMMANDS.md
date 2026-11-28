@@ -1339,6 +1339,12 @@ The original apps' art at pixel ratios 2 and 3:
 NODE_PATH="$(npm root -g)" node tools/test-hidpi.cjs
 ```
 
+ICloud contacts and calendars against a stand-in of its servers (needs Radicale):
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-icloud-sync.cjs
+```
+
 Search your phone in phoenix-sim (python3 tools/get-index-model.py first: its model and llama-server):
 
 ```sh

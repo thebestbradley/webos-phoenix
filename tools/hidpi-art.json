@@ -1243,6 +1243,14 @@
             ]
         },
         {
+            "name": "icloud",
+            "art": "apps/dav/public/accounts/com.webosphoenix.icloud/images",
+            "upscale": [
+                { "art": "icloud-32x32.png", "method": "downscale", "source": "apps/dav/art/icloud-1024.png" },
+                { "art": "icloud-48x48.png", "method": "downscale", "source": "apps/dav/art/icloud-1024.png" }
+            ]
+        },
+        {
             "name": "fediverse",
             "art": "apps/fediverse/public/accounts/com.webosphoenix.fediverse/images",
             "upscale": [

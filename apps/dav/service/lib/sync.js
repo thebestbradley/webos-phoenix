@@ -96,6 +96,8 @@ function fileName(href) {
 // ---- The engine ---------------------------------------------------------------------
 
 // ctx: { db, request, accountId, username, password, localTz?, log?,
+//        services? ({carddav, caldav}: a preset's hosts, lib/presets.js),
+//        providers? ({CONTACTS, CALENDAR}: a preset's capability provider ids),
 //        tempdb? (for com.palm.account.syncstate:1), linkPersons? (default true),
 //        savePhoto?(key, dataUrl) -> Promise<localPath> }
 function createEngine(ctx) {
@@ -106,8 +108,8 @@ function createEngine(ctx) {
     var stats;
 
     function client(serverUrl) {
-        return davclient.createClient({ request: ctx.request, serverUrl: serverUrl, username: ctx.username,
-                                        password: ctx.password, log: log });
+        return davclient.createClient({ request: ctx.request, serverUrl: ctx.services ? null : serverUrl,
+                                        services: ctx.services, username: ctx.username, password: ctx.password, log: log });
     }
 
     function one(query) { return db.find(query).then(function (r) { return r[0] || null; }); }
@@ -117,7 +119,7 @@ function createEngine(ctx) {
     }
 
     function setSyncState(capability, state, error) {
-        return synckit.setSyncState(ctx.tempdb, accountId, CAPABILITY_PROVIDERS[capability], state, error, log);
+        return synckit.setSyncState(ctx.tempdb, accountId, (ctx.providers || CAPABILITY_PROVIDERS)[capability], state, error, log);
     }
 
     // Stores the server, principal and home sets (after checkCredentials /
@@ -267,7 +269,23 @@ function createEngine(ctx) {
 
     // ---- Applying server copies ----------------------------------------------------
 
+    // A contact group kept as a vCard of its own (Apple's way: iCloud, and
+    // macOS Contacts on any CardDAV server: X-ADDRESSBOOKSERVER-KIND:group with
+    // its members as X-ADDRESSBOOKSERVER-MEMBER; vCard 4's KIND:group, RFC 6350
+    // 6.1.4). Contacts has no groups, so it is kept as it is on the server and
+    // never shown as a person.
+    function isGroupCard(data) {
+        return /^(?:[A-Za-z0-9-]+\.)?(?:X-ADDRESSBOOKSERVER-KIND|KIND)[;:](?:[^\r\n]*:)?\s*group\s*$/im.test(String(data || ""));
+    }
+
     function applyContact(col, res, item, existing) {
+        if (isGroupCard(res.data)) {
+            var drop = existing && !existing._del ? db.del([existing._id]) : Promise.resolve();
+            return drop.then(function () {
+                if (existing && !existing._del) stats.contactsRemoved.push(existing._id);
+                return saveItem(col, res, item, "", 0, {}, true);
+            });
+        }
         var parsed = vcard.toContact(res.data);
         var fields = parsed.contact;
         var photo = fields.photos[0];

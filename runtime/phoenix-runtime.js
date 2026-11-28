@@ -4199,7 +4199,8 @@
             "/usr/palm/public/accounts/com.palm.imap/com.palm.imap.json",
             "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json",
             "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
-            "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
+            "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
+            "/usr/palm/public/accounts/com.webosphoenix.icloud/com.webosphoenix.icloud.json"
         ];
         // (The simulated Jabber template that was here is the Jabber connector's now: apps/connectors/xmpp.)
         var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
@@ -14755,6 +14756,15 @@
                 methods = davservice.createDavService({
                     luna: luna,
                     request: request,
+                    // The account presets' hosts (iCloud's; apps/dav/service/lib/presets.js),
+                    // if the image's /etc/palm/dav/presets.json names others: the
+                    // simulator's store "systemConfig:dav/presets.json" first (the
+                    // tests' stand-ins), as the connectors' settings.
+                    presetHosts: function () {
+                        var kept = store.get("systemConfig:dav/presets.json", null);
+                        if (kept) return kept;
+                        try { return JSON.parse(PalmSystem.getResource("/etc/palm/dav/presets.json") || "null"); } catch (e) { return null; }
+                    },
                     log: function (m) { console.info("[dav] " + m); }
                 });
             }
