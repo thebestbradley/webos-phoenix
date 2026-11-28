@@ -28,11 +28,13 @@ password manager.
    `/etc/palm/<name>/clients.json`, through `ctx.systemConfig`
    (`apps/shared/connector-kit/src/device.ts:84`, `registered.ts:57`;
    the drives their own copy, `apps/connectors/drives/service/connector.js:99`).
-   No build setting or recipe installs these files yet (Q76: nothing in
-   `meta-phoenix` writes them), nor does `servers.json` carry them, and
-   no token relay serves them. So, today:
-   - **Image:** put the file in place by hand (mode 0644), or add a
-     recipe that installs it from a file outside the repository.
+   One JSON file outside the repository holds every connector's public
+   ids, and the build writes each `clients.json` from it (Q76, #122):
+   `tools/connector-clients.py` checks it (no secrets; `"relay": true`
+   instead) and `PHOENIX_CONNECTOR_CLIENTS` in `local.conf` or
+   `site.conf` points meta-phoenix's `phoenix-apps` at it.
+   - **Image:** set `PHOENIX_CONNECTOR_CLIENTS`; unset, nothing is
+     installed and the connectors say "not available in this build".
    - **Simulator:** in a page's devtools,
      `localStorage.setItem("phoenix:systemConfig:<name>/clients.json", JSON.stringify({...}))`
      (`runtime/phoenix-runtime.js:14093`). Turn on the Sign In card
@@ -240,7 +242,7 @@ sign-in (XOAUTH2) after.** Nothing to register for the app password.
 | Redirect URI | `http://127.0.0.1:47613/oauth/callback` (exact match, port included) |
 | Scopes | `root_readwrite` ("Read and write all files and folders stored in Box", `drives/service/lib/box.js:261`) |
 | Gates | None for personal accounts; an enterprise whose admin turned off unpublished apps must enable it. Listing in the Box Integrations directory is optional |
-| Secret | **Yes.** The code takes `clientSecret` from `drives/clients.json` (`drives/service/connector.js:443`), readable on the image; the alternative, the token relay, does not exist yet (Q78, below) |
+| Secret | **Yes, on Phoenix's server only:** the token relay (webos-phoenix #122, Phoenix-Web-Services #29) adds it to the token exchange, so no secret ships on a device. codex sets `RELAY_BOX_CLIENT_ID` and `RELAY_BOX_CLIENT_SECRET` on the server |
 
 1. https://app.box.com/developers/console, **Create New App**,
    **Custom App**, **User Authentication (OAuth 2.0)**, name `webOS Phoenix`.
@@ -249,9 +251,9 @@ sign-in (XOAUTH2) after.** Nothing to register for the app password.
 3. OAuth 2.0 Redirect URIs: `http://127.0.0.1:47613/oauth/callback`.
 4. Application Scopes: **Read and write all files and folders stored in Box**.
    Save Changes.
-5. The setting, `drives/clients.json`:
-   `"box": {"clientId": "<client id>", "clientSecret": "<client secret>"}`
-   (or decide Q78: the secret through a relay instead).
+5. The setting, `drives/clients.json`: `"box": {"clientId": "<client id>", "relay": true}`.
+   The **Client Secret** goes to codex for the server (never in the file,
+   the board or the repository).
 
 ## C7. iCloud (contacts, calendars, mail with an app-specific password)
 
