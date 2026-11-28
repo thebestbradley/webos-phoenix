@@ -265,9 +265,13 @@ async function main() {
         const item = (hist.items || []).find((h) => h.destFile === "field-guide.pdf");
         check(!!item && item.state === "completed" && item.fileExistsOnFilesys === true && JSON.parse(item.recordString).ticket === item.ticket,
             "download: the history lists it as the browser reads it again");
-        // A type no app opens: the browser says so, as on webOS.
+        // A type no app opens, where getResourceInfo has no handler: the browser
+        // says so, as on webOS (isis-browser BrowserApp.js:402-406). Not a web
+        // address: there LunaSysMgr's last try is the scheme's handler, the
+        // browser, which downloads the file instead (BrowserApp.js:391-394;
+        // tools/test-appmanager.cjs checks that answer).
         await page.evaluate(() => {
-            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/zip", "https://example.org/a.zip");
+            document.querySelector("object[type='application/x-palm-browser']").eventListener.mimeNotSupported("application/x-nosuchtype", "file:///media/internal/a.nosuchtype");
         });
         check(!!await waitFor(() => page.getByText("Cannot open MIME type").first().isVisible()), "download: a type nothing opens says \"Cannot open MIME type\"");
         await page.locator(".enyo-popup:visible .enyo-button").first().click();
