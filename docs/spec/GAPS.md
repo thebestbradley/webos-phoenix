@@ -136,7 +136,10 @@ device, not yet run"):
   Slack, and Sign In with Todoist and with Bluesky, wait on Phoenix's
   registrations (docs/DEVELOPER-APPS.md "The accounts", OPEN-QUESTIONS Q17,
   Q120, Q123), the token relay with the OAuth service's broker (Q49, Q122) and
-  its sheet for the AT Protocol (Q121). Still to do: Outlook mail (Q124); an
+  its sheet for the AT Protocol (Q121). Gmail in Email with an app password
+  and Google Drive with the person's choice of access are built (27 November
+  2026); a real Gmail account needs mojomail on a device, and Drive's "All
+  your Drive" Google's approval (Q77). Still to do: Outlook mail (Q124); an
   edit made on the device goes up at the next sync, as the kit has no watch
   on local changes (mojomail's IMAP had one); Zoom's `createMeeting` from
   Calendar and the Assistant; the Fastmail and Nextcloud presets (iCloud's

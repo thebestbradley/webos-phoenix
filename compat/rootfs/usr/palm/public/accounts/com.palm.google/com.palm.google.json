@@ -1,0 +1,36 @@
+[
+	{
+		"templateId": "com.palm.google",
+		"loc_name": "Gmail",
+		"loc_usernameLabel": "email address",
+		"icon": {
+			"loc_32x32": "/usr/palm/public/accounts/com.palm.imap/images/imapmail32.png",
+			"loc_48x48": "/usr/palm/public/accounts/com.palm.imap/images/imapmail48.png"
+		},
+		"hidden": false,
+		"validator": {"customUI": {"appId": "com.palm.app.email", "name": "accounts/wizard.html"}, "address": "palm://com.palm.imap/validateAccount"},
+		"readPermissions": ["com.palm.app.email", "com.palm.imap", "com.palm.smtp"],
+		"writePermissions": ["com.palm.app.email"],
+		"capabilityProviders": [
+			{
+				"capability": "MAIL",
+				"id": "com.palm.google.mail",
+				"icon": {
+					"loc_32x32": "/usr/palm/public/accounts/com.palm.imap/images/imapmail32.png",
+					"loc_48x48": "/usr/palm/public/accounts/com.palm.imap/images/imapmail48.png"
+				},
+				"config": {
+					"server": "imap.gmail.com", "port": 993, "encryption": "ssl",
+					"smtpConfig": {"server": "smtp.gmail.com", "port": 465, "encryption": "ssl", "useSmtpAuth": true},
+					"syncFrequencyMins": 15
+				},
+				"implementation": "palm://com.palm.imap/",
+				"onCreate": "palm://com.palm.imap/accountCreated",
+				"onDelete": "palm://com.palm.imap/accountDeleted",
+				"onEnabled": "palm://com.palm.imap/accountEnabled",
+				"onCredentialsChanged": "palm://com.palm.imap/credentialsChanged",
+				"subKind": "com.palm.imap.email:1"
+			}
+		]
+	}
+]

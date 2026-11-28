@@ -39,6 +39,21 @@ JSON files cannot say why they are here, so they are listed here:
   left out: it is usually a picture on the USB drive, which a backup does
   not hold.
 
+- `rootfs/usr/palm/public/accounts/com.palm.google/com.palm.google.json`:
+  Gmail as Email's own account type, as the original had it (the Google
+  template's MAIL capability, served by the IMAP transport with Google's
+  servers; its shape is the one in core-apps `com.palm.app.accounts/mock/`
+  `accountsFirstLaunch_firstLaunch_accounts_templates_listAccountTemplates.json`).
+  The original came with HP's closed Google connector, so it is missing
+  from the open-source release. Phoenix's is mail only, titled "Gmail",
+  validated by the IMAP transport (`palm://com.palm.imap/validateAccount`)
+  with an app password; its id is the original's because Email's wizard
+  finds Gmail's servers by it (`AccountWizard.js` protocol `GOOGLE`) and
+  mojomail treats such an account as Gmail's (`ImapAccount::IsGoogle`).
+  Its icons are the IMAP template's. Listed among the built-in templates by
+  `runtime/rootfs.json`'s mounts; the sign-in it opens is
+  `com.palm.app.email/accounts/source/phoenix-gmail.js`.
+
 Sounds cannot say why they are here either:
 
 - `rootfs/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3`:

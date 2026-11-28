@@ -18,7 +18,15 @@
 //      (INCREMENTAL_SYNC, then IDLE);
 //   5. com.palm.pop/parseEmlMessage reads an .eml file: headers, the body,
 //      the alternative, an attachment, in the file cache; a file outside
-//      what apps may read is refused.
+//      what apps may read is refused;
+//   6. Gmail with an app password, added as a person adds it (Preferences &
+//      Accounts, Add Account, Gmail: compat/rootfs's com.palm.google and
+//      accounts/source/phoenix-gmail.js) against stand-ins for Google's
+//      servers: the sign-in asks for an app password and links Google's
+//      page; the Google account's own password is refused with what to do;
+//      Manual Setup has Google's servers; the app password makes the account
+//      (com.palm.google, imap.gmail.com 993 SSL, smtp.gmail.com 465 SSL, the
+//      server's folders), and mail sent from it lands in its Sent Mail.
 //
 //   node tools/test-email.cjs [--tablet] [--out DIR]
 
@@ -165,6 +173,99 @@ async function main() {
         check(none.returnValue === false && none.errorText === "Invalid query string", "no filePath: \"Invalid query string\"");
 
         await page.screenshot({ path: path.join(outDir, "email.png") });
+
+        // 6. Gmail with an app password, as a person adds it: Preferences &
+        //    Accounts, Add Account, Gmail, the address and password. Google's
+        //    servers are stand-ins (the store's "mailServerStandIns": the
+        //    simulated transports' validateAccount answers as they would).
+        const IMAP_ASP = "NO [ALERT] Application-specific password required: https://support.google.com/accounts/answer/185833 (Failure)";
+        const SMTP_ASP = "534-5.7.9 Application-specific password required. For more information, go to https://support.google.com/mail/?p=InvalidSecondFactor";
+        const GMAIL_USER = "phoenix.tester@gmail.com", APP_PASSWORD = "abcdefghijklmnop", GOOGLE_PASSWORD = "my-google-password";
+        await page.evaluate(([user, app, google, imapAsp, smtpAsp]) => {
+            localStorage.setItem("phoenix:mailServerStandIns", JSON.stringify({
+                "imap.gmail.com": { logins: { [user]: app, "you@example.org": app }, refusals: { [google]: imapAsp }, refusal: "NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)",
+                                    folders: [{ name: "[Gmail]/Drafts", special: "drafts" }, { name: "[Gmail]/Sent Mail", special: "sent" },
+                                              { name: "[Gmail]/Trash", special: "trash" }, { name: "[Gmail]/Spam" }, { name: "[Gmail]/All Mail" }] },
+                "smtp.gmail.com": { logins: { [user]: app, "you@example.org": app }, refusals: { [google]: smtpAsp }, refusal: "535-5.7.8 Username and Password not accepted." }
+            }));
+        }, [GMAIL_USER, APP_PASSWORD, GOOGLE_PASSWORD, IMAP_ASP, SMTP_ASP]);
+        await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "MailApp").showPreferences());
+        await page.waitForFunction(() => { const m = Object.values(enyo.$).find((c) => c.kindName === "MasterSettings"); return m && m.$.preferences; });
+        await page.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "MasterSettings").showAddAccount());
+        const gmailItem = page.getByText("Gmail", { exact: true });
+        check(await gmailItem.waitFor({ state: "visible", timeout: 10000 }).then(() => true, () => false), "Add Account lists Gmail beside Email Account");
+        await page.screenshot({ path: path.join(outDir, "gmail-1-add-account.png") });
+        await gmailItem.click();
+        const wizardFrame = await until(async () => page.frames().find((f) => /accounts\/wizard\.html/.test(f.url())), 10000);
+        await wizardFrame.waitForFunction(() => window.enyo && enyo.$ && Object.values(enyo.$).some((c) => c.kindName === "SimpleConfig" && c.account));
+        const wizardText = await wizardFrame.evaluate(() => document.body.innerText);
+        check(/APP PASSWORD/.test(wizardText) && /2-Step Verification/.test(wizardText) && /Make an app password at myaccount\.google\.com/.test(wizardText),
+              "Gmail's sign-in asks for an APP PASSWORD and says how to make one (2-Step Verification)");
+        // The link opens Google's page in the browser (the application manager's open).
+        await wizardFrame.evaluate(() => {
+            window.__opened = [];
+            __phoenixRuntime.services["com.palm.applicationManager"]["/open"] = (p, reply) => { window.__opened.push(p.target); reply({ returnValue: true }); };
+        });
+        await wizardFrame.locator(".phoenix-gmail-link").click();
+        const linkOpened = await until(() => wizardFrame.evaluate(() => window.__opened[0]), 3000);
+        check(linkOpened === "https://myaccount.google.com/apppasswords", `the link opens https://myaccount.google.com/apppasswords (${linkOpened})`);
+        await page.screenshot({ path: path.join(outDir, "gmail-2-sign-in.png") });
+        const emailInput = wizardFrame.locator("#cRUDAccounts_simpleConfig_email_input");
+        const passInput = wizardFrame.locator("#cRUDAccounts_simpleConfig_password_input");
+        const signIn = wizardFrame.locator("#cRUDAccounts_simpleConfig_createButton");
+        const dialog = async () => (await wizardFrame.locator("#cRUDAccounts_errorDialog").isVisible()) &&
+            wizardFrame.evaluate(() => document.getElementById("cRUDAccounts_errorDialog").innerText);
+        await emailInput.fill(GMAIL_USER);
+        // The Google account's own password: refused, and said why.
+        await passInput.fill(GOOGLE_PASSWORD);
+        await signIn.click();
+        const refused = await until(dialog, 15000);
+        check(!!refused && /Gmail needs an app password/.test(refused) && /myaccount\.google\.com\/apppasswords/.test(refused) &&
+              /Application-specific password required/.test(refused) && /Make an App Password/.test(refused),
+              "the Google password is refused: \"Gmail needs an app password\", how to make one, and Google's own words");
+        await page.screenshot({ path: path.join(outDir, "gmail-3-refused.png") });
+        await wizardFrame.getByText("OK", { exact: true }).click();
+        // A wrong app password: Google's "Invalid credentials".
+        await passInput.fill("wrongwrongwrongw");
+        await signIn.click();
+        const wrong = await until(dialog, 15000);
+        check(!!wrong && /Google did not accept the app password/.test(wrong) && /Invalid credentials/.test(wrong), "a wrong app password: \"Google did not accept the app password\"");
+        await wizardFrame.getByText("OK", { exact: true }).click();
+        // Manual Setup has Google's servers in it.
+        await wizardFrame.getByText("Manual Setup", { exact: true }).click();
+        const manual = await wizardFrame.evaluate(() => ["inHost", "inPort", "inEncryption", "outHost", "outPort", "outEncryption", "inUser"]
+            .map((n) => document.getElementById("cRUDAccounts_manualConfig_" + n + (/Encryption/.test(n) ? "" : "_input")))
+            .map((el) => el ? (el.value !== undefined && el.tagName === "INPUT" ? el.value : el.innerText.trim()) : null));
+        check(manual[0] === "imap.gmail.com" && manual[1] === "993" && manual[3] === "smtp.gmail.com" && manual[4] === "465" && manual[6] === GMAIL_USER,
+              `Manual Setup is filled with Google's servers, the address as the user name (${JSON.stringify(manual)})`);
+        await page.screenshot({ path: path.join(outDir, "gmail-4-manual.png") });
+        await wizardFrame.evaluate(() => Object.values(enyo.$).find((c) => c.kindName === "CRUDAccounts").showSimpleConfig());
+        // The app password, as Google shows it (with spaces): taken.
+        await passInput.fill("abcd efgh ijkl mnop");
+        await signIn.click();
+        const confirm = page.locator("#mailApp_masterSettings_addAccountView_modifyAccountView_createAccountButton");
+        check(await confirm.waitFor({ state: "visible", timeout: 15000 }).then(() => true, () => false), "the app password is taken; Accounts asks to create the account");
+        await confirm.click();
+        const gmailAccount = await until(async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.account:1",
+            where: [{ prop: "templateId", op: "=", val: "com.palm.google" }] } })).results || [])[0], 8000);
+        check(gmailAccount && gmailAccount.username === GMAIL_USER, `the account is Gmail's (com.palm.google), named by the address (${gmailAccount && gmailAccount.username})`);
+        const gmailCreds = gmailAccount && await call("luna://com.palm.service.accounts/readCredentials", { accountId: gmailAccount._id, name: "common" });
+        check(gmailCreds && gmailCreds.credentials && gmailCreds.credentials.password === APP_PASSWORD, "its password is the app password, without the spaces");
+        const gmailMail = gmailAccount && await until(async () => ((await call("palm://com.palm.db/find", { query: { from: "com.palm.mail.account:1",
+            where: [{ prop: "accountId", op: "=", val: gmailAccount._id }] } })).results || [])[0], 8000);
+        check(gmailMail && gmailMail._kind === "com.palm.imap.account:1" && gmailMail.server === "imap.gmail.com" && gmailMail.port === 993 &&
+              gmailMail.encryption === "ssl" && gmailMail.username === GMAIL_USER && gmailMail.smtpConfig.server === "smtp.gmail.com" &&
+              gmailMail.smtpConfig.port === 465 && gmailMail.smtpConfig.encryption === "ssl",
+              `the IMAP transport's account: imap.gmail.com 993 SSL, smtp.gmail.com 465 SSL, the address as the user name (${gmailMail && JSON.stringify([gmailMail.server, gmailMail.port, gmailMail.smtpConfig])})`);
+        const sentFolder = gmailMail && ((await call("palm://com.palm.db/get", { ids: [gmailMail.sentFolderId] })).results || [])[0];
+        check(sentFolder && sentFolder.serverFolderName === "[Gmail]/Sent Mail", `its folders are the server's ([Gmail]/Sent Mail is Sent: ${sentFolder && sentFolder.displayName})`);
+        const viaGmail = gmailMail && await call("palm://com.palm.smtp/sendMail", { accountId: gmailAccount._id,
+            email: { subject: "From Gmail", to: [{ addr: "alex.rivera@example.com", type: "to" }], parts: [{ type: "body", mimeType: "text/html", content: "<p>Hi</p>" }] } });
+        check(viaGmail && viaGmail.returnValue && (await get(viaGmail._id)).folderId === gmailMail.sentFolderId, "mail sent from it is in its Sent Mail");
+        check(await until(() => page.evaluate((id) => !!enyo.application.accounts.getAccount(id), gmailAccount._id), 8000),
+              "Email lists the Gmail account");
+        await page.screenshot({ path: path.join(outDir, "gmail-5-accounts.png") });
+
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
         await browser.close();
     } finally {

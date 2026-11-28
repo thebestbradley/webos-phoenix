@@ -132,13 +132,15 @@ The same registration later serves Outlook and Teams (SYNERGY-CONNECTORS.md 7), 
 | Console | https://console.cloud.google.com, a project; APIs & Services: enable the **Google Drive API**; OAuth consent screen (External); Credentials, OAuth client ID, **Desktop app** |
 | Client | Desktop: PKCE; its "client secret" is not secret (Google says so for installed apps) and ships in `clients.json` |
 | Redirect URI | Desktop clients take loopback addresses without registering them |
-| Scopes | `https://www.googleapis.com/auth/drive.file` (the default): the files Phoenix made or the user opened with it. **Non-sensitive**: no security assessment |
-| Full drive (`"scope": "drive"`) | `https://www.googleapis.com/auth/drive` is **restricted**: Google's app verification plus a yearly third-party security assessment (CASA, paid to the assessor) before more than 100 test users can sign in. Off until it is funded and passed (OPEN-QUESTIONS Q77) |
+| Scopes | The person chooses when adding the account (the owner, 27 November 2026). "Files you open with Phoenix": `https://www.googleapis.com/auth/drive.file`, the files Phoenix made and those picked for it in Google's Picker, which the sign-in shows (`trigger_onepick=true`, Google's [desktop and mobile Picker](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker)). **Non-sensitive**: no security assessment. "All your Drive": `https://www.googleapis.com/auth/drive` |
+| Full drive | `https://www.googleapis.com/auth/drive` is **restricted**: Google's app verification plus a yearly third-party security assessment (CASA, paid to the assessor) before more than 100 test users can sign in (OPEN-QUESTIONS Q77). Offered all the same; the sign-in page says Google must approve Phoenix first, until the registration says `"scope": "drive"` (approved) |
 | Verification | For `drive.file`: brand verification of the consent screen (homepage, privacy policy on the project's domain, verified in Search Console) |
 | Cost | Free for `drive.file`; the CASA assessment for `drive` |
 
 With `drive.file`, Files shows what Phoenix uploaded and what the user
-picked with it, not the whole Drive: its sign-in page says so.
+picked with it, not the whole Drive: its sign-in page says so. A picked
+file whose folder Phoenix may not see is at the top of the drive; signing
+in again from the account picks more, or changes the choice.
 
 ### Box
 

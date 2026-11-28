@@ -1,5 +1,6 @@
 // Phoenix compat overlay: the Email account wizard's original depends.js
-// plus ../css/phoenix-compat.css (phone layout). Nothing else is changed.
+// plus ../css/phoenix-compat.css (phone layout) and source/phoenix-gmail.js
+// (Gmail with an app password: see that file). Nothing else is changed.
 //
 // @@@LICENSE
 //
@@ -30,6 +31,7 @@ enyo.depends(
     "source/ManualConfig.js",
     "source/SimpleConfig.js",
     "source/CRUDAccounts.js",
+    "source/phoenix-gmail.js", // Phoenix: see that file
     "../util/util.js",
     "../facades/Email.js",
     "../controls/",

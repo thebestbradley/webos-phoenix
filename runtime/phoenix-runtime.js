@@ -4198,6 +4198,7 @@
             "/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json",
             "/usr/palm/public/accounts/com.palm.imap/com.palm.imap.json",
             "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json",
+            "/usr/palm/public/accounts/com.palm.google/com.palm.google.json",
             "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
             "/usr/palm/public/accounts/com.webosphoenix.icloud/com.webosphoenix.icloud.json"
@@ -4422,6 +4423,9 @@
                 account._rev = put.results[0].rev;
                 credentials.set(account._id, p.credentials || (p.password ? { common: { password: p.password } } : undefined));
                 reply(ok({ result: account }));
+                // The transports are told in the background (handlers/create.js:226-234).
+                dispatch("palm://com.palm.service.accounts/notifyAccountCreated", { accountId: account._id, config: p.config },
+                         function () {}, { cancelled: function () { return false; } });
             },
             "/modifyAccount": function (p, reply) {
                 var account = getAccount(p.accountId), changes = p.object || {};
@@ -4472,7 +4476,30 @@
             },
             "/hasCredentials": function (p, reply) { reply(ok({ value: !!credentials.get(p.accountId) })); },
             "/setApplication": function (p, reply) { reply(ok({})); },
-            "/notifyAccountCreated": function (p, reply) { reply(ok({})); },
+            // handlers/notify-created.js: a second after, each of the account's
+            // capability providers' onCreate with the wizard's config (the
+            // mail transports make their account from it), then onEnabled.
+            "/notifyAccountCreated": function (p, reply) {
+                reply(ok({}));
+                setTimeout(function () {
+                    var account = getAccount(p.accountId), template = account && templateFor(account.templateId);
+                    if (!template) return;
+                    var ids = (account.capabilityProviders || []).map(function (c) { return c.id; });
+                    var cps = (template.capabilityProviders || []).filter(function (cp) { return ids.indexOf(cp.id) >= 0; });
+                    var calls = cps.filter(function (cp) { return cp.onCreate; })
+                        .map(function (cp) { return [cp.onCreate, { accountId: p.accountId, config: p.config }]; })
+                        .concat(cps.filter(function (cp) { return cp.onEnabled; }).map(function (cp) {
+                            return [cp.onEnabled, { accountId: p.accountId, capabilityProviderId: cp.id, enabled: true }];
+                        }));
+                    (function next(i) {
+                        if (i >= calls.length) return;
+                        dispatch(calls[i][0], calls[i][1], function (r) {
+                            if (!r || r.returnValue === false) console.warn("[phoenix-runtime] " + calls[i][0] + " failed: " + toJson(r));
+                            next(i + 1);
+                        }, { cancelled: function () { return false; } });
+                    })(0);
+                }, 1000);
+            },
             "/notifyAccountDeleted": function (p, reply) { reply(ok({})); }
         });
 
@@ -5171,7 +5198,42 @@
             reply(ok({ _id: id, emailId: id }));
         }
 
+        // ---- validateAccount (the account wizard's check of a server and login) ----
+        // Answered as mojomail's validators answer: the settings and the
+        // credentials to keep ({common} for IMAP and POP, {smtp} for SMTP;
+        // ImapValidator.cpp:150-200, SmtpValidator.cpp:110-140), or a failure
+        // with the transport's error and the server's own line
+        // (ImapValidator.cpp:283-310: errorCode, mailErrorCode, errorText).
+        // There is no mail server here, so a login is taken as given, unless
+        // the store has a stand-in for the server ("mailServerStandIns":
+        // {"<host>": {logins: {"<user>": "<password>"}, refusals:
+        // {"<password>": "<line>"}, refusal: "<line>"}}, which
+        // tools/test-email.cjs sets for Gmail's servers): then only its
+        // logins are taken, and any other is refused as the server refuses
+        // it, BAD_USERNAME_OR_PASSWORD (1000, "401_UNAUTHORIZED") with that
+        // server's line (mojomail LoginCommand.cpp:86-103 does so for any NO
+        // to LOGIN). The user name logged in with is the config's, as the
+        // transports use it (the wizard tries the address, then the part
+        // before the @: AccountWizard.js:309-343).
+        function validateAccount(credentialsName) {
+            return function (p, reply) {
+                var config = (p && p.config) || {};
+                var standIn = store.get("mailServerStandIns", {})[String(config.server || "").toLowerCase()];
+                if (standIn) {
+                    var user = String(config.username || p.username || "").toLowerCase(), logins = standIn.logins || {};
+                    if (!Object.prototype.hasOwnProperty.call(logins, user) || logins[user] !== p.password) {
+                        var line = (standIn.refusals || {})[p.password] || standIn.refusal || "Invalid credentials";
+                        return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", mailErrorCode: 1000, errorText: line });
+                    }
+                }
+                var credentials = {};
+                credentials[credentialsName] = { password: p.password };
+                reply(ok({ protocolSettings: clone(p), credentials: credentials }));
+            };
+        }
+
         register(["com.palm.smtp"], {
+            "/validateAccount": validateAccount("smtp"),
             "/sendMail": function (p, reply) { saveEmail(p, !!p.draft, reply); },
             "/saveDraft": function (p, reply) { saveEmail(p, true, reply); },
             "*": function (p, reply) { reply(ok({})); }
@@ -5530,8 +5592,62 @@
             }, { cancelled: function () { return true; }, onCancel: null });
         }
 
+        // ---- A new account (the account wizard's), as the transports make it ----
+        // mojomail's IMAP transport, told an account was created (its
+        // template's onCreate, with the wizard's config), stores its
+        // com.palm.imap.account:1 from that config and the account's user name
+        // (ImapBusDispatcher.cpp:192-205 and 405-490,
+        // ImapAccountAdapter::GetImapAccountFromPayload: server, port,
+        // encryption, the login's user name; sync every 15 minutes and 7 days
+        // of mail unless the config says otherwise), and the SMTP transport
+        // adds the smtpConfig (SmtpBusDispatcher::AccountCreated). The
+        // account's Inbox and Outbox are made at once
+        // (CreateDefaultFoldersCommand.cpp:112-145), its other folders come
+        // from the server's list on the first sync. There is no server here:
+        // the folders are those a stand-in for the server lists
+        // ("mailServerStandIns" {"<host>": {folders: [{name, special}]}},
+        // Gmail's "[Gmail]/Sent Mail" and so on), or else the usual Drafts,
+        // Sent and Trash. POP keeps them all on the device (Inbox, Drafts,
+        // Outbox, Sent, Trash: PopAccountEnableCommand.cpp:143-174).
+        var SPECIAL_FOLDERS = { drafts: "draftsFolderId", sent: "sentFolderId", trash: "trashFolderId" };
+        function createMailAccount(transport, p) {
+            var owner = getObject(p.accountId);
+            var config = p.config || {};
+            if (!owner || !config.server) return null;
+            var pop = transport === "com.palm.pop", kind = pop ? "com.palm.pop" : "com.palm.imap";
+            var standIn = store.get("mailServerStandIns", {})[String(config.server).toLowerCase()] || {};
+            var serverFolders = !pop && standIn.folders || [{ name: "Drafts", special: "drafts" }, { name: "Sent", special: "sent" },
+                                                            { name: "Trash", special: "trash" }];
+            var smtp = clone(config.smtpConfig || {});
+            delete smtp.password;
+            var account = { _kind: kind + ".account:1", accountId: p.accountId, templateId: owner.templateId,
+                            username: config.username || owner.username, email: config.email || owner.username,
+                            server: config.server, port: Number(config.port) || (pop ? 995 : 993), encryption: config.encryption || "ssl",
+                            syncFrequencyMins: config.syncFrequencyMins !== undefined ? config.syncFrequencyMins : 15,
+                            syncWindowDays: config.syncWindowDays !== undefined ? config.syncWindowDays : 7,
+                            smtpConfig: smtp };
+            var folders = [{ name: "INBOX", displayName: "Inbox", special: "inbox", favorite: true }]
+                .concat(serverFolders.map(function (f) {
+                    return { name: f.name, displayName: f.name.slice(f.name.lastIndexOf("/") + 1), special: f.special };
+                }))
+                .concat([{ name: "Outbox", displayName: "Outbox", special: "outbox", local: true }]);
+            var ids = callNow("palm://com.palm.db/reserveIds", { count: folders.length }).ids;
+            folders.forEach(function (f, i) {
+                f._id = ids[i];
+                if (f.special) account[SPECIAL_FOLDERS[f.special] || f.special + "FolderId"] = f._id;
+            });
+            callNow("palm://com.palm.db/put", { objects: [account].concat(folders.map(function (f) {
+                var o = { _id: f._id, _kind: kind + ".folder:1", accountId: p.accountId, parentId: null, displayName: f.displayName,
+                          favorite: !!f.favorite, delimiter: "/", selectable: true };
+                if (!f.local && !pop) o.serverFolderName = f.name;
+                return o;
+            })) });
+            return mailAccount(p.accountId);
+        }
+
         function transportMethods(transport) {
             return {
+                "/validateAccount": validateAccount("common"),
                 "/downloadMessage": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
                 "/downloadAttachment": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
                 // A folder's sync (the app opening it, pull to refresh), the
@@ -5546,8 +5662,8 @@
                     if (account) sync(transport, p.accountId, account.inboxFolderId, false);
                 },
                 "/accountCreated": function (p, reply) {
+                    var account = p.accountId && (mailAccount(p.accountId) || createMailAccount(transport, p));
                     reply(ok({}));
-                    var account = p.accountId && mailAccount(p.accountId);
                     if (account) sync(transport, p.accountId, account.inboxFolderId, true);
                 },
                 // accountEnabled, accountUpdated, credentialsChanged, ...: nothing to do.
