@@ -371,6 +371,16 @@ jobs:
         timeout-minutes: 10
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-signin-card-sim.cjs --out app-tests/signin-card-sim
 
+      # Every character typed: the virtual keyboard into web pages
+      # (shell/tests-web), and a hardware keyboard (US, German, French,
+      # through Xvfb's keymap) into Just Type, an Enyo 1.0 app, the
+      # Browser's address bar, a React app and the lock screen.
+      - name: Typing in the simulator
+        timeout-minutes: 15
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-typing-sim.cjs --out app-tests/typing-sim-phone
+          xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-typing-sim.cjs --tablet --no-qml --out app-tests/typing-sim-tablet
+
       # The Assistant on accounts connected through Synergy: the real
       # Todoist, Bluesky and Jabber connectors against their stand-ins and
       # the simulator's demo server.

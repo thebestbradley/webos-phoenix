@@ -191,7 +191,10 @@ var PX = {
     dotCom: [Key.DotCom, Key.DotNet, Key.DotEdu, Key.DotOrg, Key.DotCoUK],
     url: [Key.ColonSlashSlash, Key.HTTPColonSlashSlash, Key.HTTPSColonSlashSlash],
     commaQuestion: keys(",?¿"),
-    periodExclamation: keys(".!•…¡")
+    periodExclamation: keys(".!•…¡"),
+    // Phoenix: the order of the "..." key's popup (Keymap.moreChars); a
+    // character not listed goes after these.
+    more: keys("<>[]{}\\|~^_`\"/?,;:!@#$%&*()-+='")
 };
 
 // Phoenix: the phone's bottom row is resized so its bordered keys fit
@@ -234,12 +237,18 @@ function phoneQwerty() {   // sQwerty (:156-161)
 
 function phoneQwertz() {   // sQwertz (:208-213)
     return [
-        pairs(1, "QWERTZUIOP", "1234567890", [null, null, X.E, X.R, X.T, X.Z, X.U, X.I, X.O, X.P]).concat(nokeys(2)),
-        [K(-0.5, code("A"), code("!"), X.A)]
-            .concat(pairs(1, "ASDFGHJKL", "!@#$%&*()", [X.A, X.S, X.D, null, X.G, null, null, null, X.L]))
-            .concat([K(-0.5, code("L"), code(")"), X.L), NOKEY()]),
-        [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, code("Y"), code(";"), X.Y)]
-            .concat(pairs(1, "YXCVBNM", ";:=+-'\"", [X.Y, null, X.C, null, null, X.N, X.M]))
+        // Phoenix: the symbols' long presses QWERTY's (PhoneKeymap.cpp:
+        // 62-97); the plugin's QWERTZ and AZERTY had none (:200-300), so
+        // a German or French phone keyboard had no "€" nor "£".
+        pairs(1, "QWERTZUIOP", "1234567890", [null, null, X.E, X.R, X.T, X.Z, X.U, X.I, X.O, X.P],
+              [PX.q1, PX.q2, PX.q3, PX.q4, PX.q5, PX.q6, PX.q7, PX.q8, PX.q9, PX.q0]).concat(nokeys(2)),
+        [K(-0.5, code("A"), code("!"), X.A, PX.exclam)]
+            .concat(pairs(1, "ASDFGHJKL", "!@#$%&*()", [X.A, X.S, X.D, null, X.G, null, null, null, X.L],
+                          [PX.exclam, PX.at, PX.numberSign, PX.dollar, PX.percent, PX.ampersand, PX.asterisk, PX.parenLeft, PX.parenRight]))
+            .concat([K(-0.5, code("L"), code(")"), X.L, PX.parenRight), NOKEY()]),
+        [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, code("Y"), code(";"), X.Y, PX.semicolon)]
+            .concat(pairs(1, "YXCVBNM", ";:=+-'\"", [X.Y, null, X.C, null, null, X.N, X.M],
+                          [PX.semicolon, PX.colon, PX.equal, PX.plus, PX.minus, PX.apostrophe, PX.quoteDbl]))
             .concat([K(-0.25, Key.Backspace), K(1.25, Key.Backspace), NOKEY()]),
         phoneBottomRow(1.25, 1.5)
     ];
@@ -247,13 +256,17 @@ function phoneQwertz() {   // sQwertz (:208-213)
 
 function phoneAzerty() {   // sAzerty (:275-280)
     return [
-        pairs(1, "AZERTYUIOP", "1234567890", [X.A, null, X.E, X.R, X.T, X.Y, X.U, X.I, X.O, X.P])
+        // Phoenix: the symbols' long presses QWERTY's, as QWERTZ's above.
+        pairs(1, "AZERTYUIOP", "1234567890", [X.A, null, X.E, X.R, X.T, X.Y, X.U, X.I, X.O, X.P],
+              [PX.q1, PX.q2, PX.q3, PX.q4, PX.q5, PX.q6, PX.q7, PX.q8, PX.q9, PX.q0])
             .concat([K(-0.5, code("P"), code("]")), NOKEY()]),
         [K(-0.5, code("Q"), code("<"))]
-            .concat(pairs(1, "QSDFGHJKLM", "!@#$%&*()^", [null, X.S, X.D, null, X.G, null, null, null, X.L, X.M]))
+            .concat(pairs(1, "QSDFGHJKLM", "!@#$%&*()^", [null, X.S, X.D, null, X.G, null, null, null, X.L, X.M],
+                          [PX.exclam, PX.at, PX.numberSign, PX.dollar, PX.percent, PX.ampersand, PX.asterisk, PX.parenLeft, PX.parenRight, null]))
             .concat([NOKEY()]),
         [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, Key.Shift, Key.ToggleLanguage, null, "languages")]
-            .concat(pairs(1, "WXCVBN", ";:=+-'", [null, null, X.C, null, null, X.N]))
+            .concat(pairs(1, "WXCVBN", ";:=+-'", [null, null, X.C, null, null, X.N],
+                          [PX.semicolon, PX.colon, PX.equal, PX.plus, PX.minus, PX.apostrophe]))
             // The twelfth cell: none (sAzerty lists eleven, :295, and C++
             // fills the rest of the row with zeros: no key, no width).
             .concat([K(1.5, code("'"), code("@")), K(-0.25, Key.Backspace), K(1.25, Key.Backspace), NOKEY()]),
@@ -286,7 +299,7 @@ function phoneCustom(azerty) {
     var before = azerty ? commaQuestion : commaSlash;
     var after = azerty ? periodExclamation : periodQuestion;
     var emoticons = K(w, Key.EmoticonOptions, Key.EmoticonOptions, PX.emoticons, PX.emoticons);
-    var more = K(w, Key.MorePopup, Key.MorePopup);
+    var more = K(w, Key.MorePopup, Key.MorePopup);   // extended: Keymap.moreChars
     var at = K(1, code("@"));
     var dotCom = K(1, Key.DotCom, Key.DotCom, PX.dotCom);
     var slash = K(1, code("/"));
@@ -777,9 +790,14 @@ Keymap.prototype.setEditorState = function (state, force) {
         }
     } else {
         var c = this.isSymbolActive() ? this.custom.symbol : emojiAllowed(type) ? this.custom.plain : this.custom.plainNoEmoji;
-        if (type === FieldType.Email)
+        // E-mail and URL fields' keys (:552-568). Phoenix: on the letters'
+        // page only; their symbol page has the symbol page's own ("...",
+        // below), where the plugin kept the field's there too, so a German
+        // or French e-mail field could not type "_" nor an AZERTY URL field
+        // "?" at all.
+        if (type === FieldType.Email && !this.isSymbolActive())
             c = this.custom.email;
-        else if (type === FieldType.URL)
+        else if (type === FieldType.URL && !this.isSymbolActive())
             c = this.custom.url;
         var sx = this.family.spaceX;
         var spaceWeight = SPACE_KEY_WEIGHT - c[1].w - c[2].w;
@@ -994,11 +1012,52 @@ Keymap.prototype.extendedChars = function (x, y) {
     } else {
         ext = wkey.ext;
     }
+    // Phoenix: the phone's "..." key: what the field's keyboard cannot type
+    // otherwise (moreChars).
+    if (!this.tablet && wkey.key === Key.MorePopup)
+        return this.moreChars();
     // Keyboard combos (languages): one per enabled keyboard, with two or
     // more (keyboardCombosChanged).
     if (ext === "languages")
         return this.comboKeys.length > 1 ? this.comboKeys : null;
     return ext && ext.length > 0 ? ext : null;
+};
+
+// Phoenix: the phone's "..." key (cKey_MorePopup, on the symbol page
+// beside the space bar). The plugin drew it and did nothing with it
+// (PhoneKeymap.cpp:306 gives it no extended keys, PhoneKeyboard.cpp's
+// handleKey no case), and the phone's pages and long presses leave out
+// printable ASCII ("|" and ">" on QWERTY; QWERTZ's and AZERTY's symbol
+// keys have no long presses, PhoneKeymap.cpp:200-300; an AZERTY URL field
+// has no "?"). Its popup is the printable ASCII this field's keyboard has
+// on no other key, in PX.more's order: every character can be typed.
+Keymap.prototype.moreChars = function () {
+    if (this._moreFor === this.family.name + "/" + this.editorState.type + "/" + this.rows)
+        return this._more;
+    var have = {};
+    function add(list) {
+        for (var i = 0; list && i < list.length; ++i)
+            if (isUnicodeKey(list[i]))
+                have[lower(chr(list[i]))] = have[upper(chr(list[i]))] = true;
+    }
+    function addKey(k) { add([k.key, k.alt]); add(k.ext); add(k.altExt); }
+    var last = this.rows - 1;
+    for (var y = 0; y < last; ++y)
+        for (var x = 0; x < this.columns; ++x)
+            addKey(this.layout[y][x]);
+    var type = this.editorState.type;
+    var pages = [type === FieldType.Email ? this.custom.email : type === FieldType.URL ? this.custom.url : this.custom.plain,
+                 this.custom.symbol];
+    pages.forEach(function (c) { c.forEach(addKey); });
+    var out = [];
+    for (var c = 0x21; c < 0x7f; ++c)
+        if (!have[chr(c)])
+            out.push(c);
+    function rank(k) { var i = PX.more.indexOf(k); return i < 0 ? 0x100 + k : i; }
+    out.sort(function (a, b) { return rank(a) - rank(b); });
+    this._moreFor = this.family.name + "/" + type + "/" + this.rows;
+    this._more = out.length ? out : null;
+    return this._more;
 };
 
 // getKeyDisplayString (phone :911-992, tablet :546-636).
