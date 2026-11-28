@@ -24,6 +24,8 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git/shell"
 
 inherit qt6-cmake
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
 
 # The shell is QML, plus one small compiled module (Phoenix.Native, e.g.
 # delivering the Back key to apps), installed with Qt's QML modules.

@@ -44,6 +44,8 @@ PV = "0.1.0+git"
 S = "${WORKDIR}/git"
 
 inherit allarch python3native
+# Without the Finder files a Mac's checkout has (phoenix-no-macos-files.bbclass).
+inherit phoenix-no-macos-files
 
 # The system sounds' raw PCM twins (below): mpg123 decodes the MP3s.
 DEPENDS = "mpg123-native"

@@ -119,6 +119,24 @@ def main():
         ok(not [i for i in ids if "strong_1.0.bb" in i], "a download with a sha512sum is pinned: %s" % ids)
         ok([i for i in ids if i.startswith("recipes:unpinned:bare_1.0.bb")], "a download without a sum is not")
 
+    # macos-files: an image, and a recipe that installs from this repository,
+    # inherit phoenix-no-macos-files (a Mac's .DS_Store stops do_package).
+    with tempfile.TemporaryDirectory() as tree:
+        lic = 'LICENSE = "MIT"\nLIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"\n'
+        src = 'SRC_URI = "git://github.com/thebestbradley/webos-phoenix.git;protocol=https;branch=main"\nSRCREV = "0"\n'
+        for sub, fn, body in (("recipes-core/images", "bare-image.bb", 'inherit core-image\n'),
+                              ("recipes-core/images", "good-image.bb", 'inherit core-image phoenix-no-macos-files\n'),
+                              ("recipes-phoenix/x", "bare_git.bb", lic + src + 'inherit cmake\n'),
+                              ("recipes-phoenix/x", "good_git.bb", lic + src + 'inherit cmake\ninherit phoenix-no-macos-files\n'),
+                              ("recipes-support/y", "other_1.0.bb", lic + 'SRC_URI = "git://example.org/y.git;branch=main"\nSRCREV = "0"\n')):
+            os.makedirs(os.path.join(tree, "meta-phoenix", sub), exist_ok=True)
+            with open(os.path.join(tree, "meta-phoenix", sub, fn), "w") as f:
+                f.write(body)
+        status, out = run("recipes", tree, "--allowlist", "none")
+        ids = sorted(x["id"] for x in out["new"] if x["id"].startswith("recipes:macos-files:")) if out else []
+        ok(ids == ["recipes:macos-files:bare-image.bb", "recipes:macos-files:bare_git.bb"],
+           "macos-files: an image and a recipe of this repository without phoenix-no-macos-files, only: %s" % ids)
+
     # install-rootfs.py: each app gets its ACG files, as meta-webos writes them.
     import importlib.util
     spec = importlib.util.spec_from_file_location("install_rootfs", os.path.join(TOOLS, "install-rootfs.py"))

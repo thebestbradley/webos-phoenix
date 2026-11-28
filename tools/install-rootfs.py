@@ -67,6 +67,15 @@ SKIP_NAMES = {".git", ".gitignore", ".gitmodules", "node_modules", "spec", "spec
               "eris_config.json", "runner.html", "jasminerunner.html", ".DS_Store"}
 
 
+def macos_file(name):
+    """A file macOS's Finder leaves in a folder a Mac has shown: .DS_Store
+    (the folder's view), AppleDouble ._* files (metadata, on a disk that is
+    not APFS or HFS+) and .localized. Never installed: a stray one stopped
+    phoenix-apps' do_package (installed-vs-shipped) twice on 28 November
+    2026 (meta-phoenix's phoenix-no-macos-files.bbclass deletes them too)."""
+    return name in (".DS_Store", ".localized") or name.startswith("._")
+
+
 def load_config():
     with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
         return json.load(f)
@@ -515,9 +524,11 @@ def build_plan():
                 s = os.path.join(root, fn)
                 plan.append((s, "/" + os.path.relpath(s, base)))
 
-    # Later entries (overlays) win.
+    # Later entries (overlays) win. No Finder files, from any tree.
     final = {}
     for src, dev in plan:
+        if macos_file(os.path.basename(dev)):
+            continue
         final[dev] = src
     # Files of the original apps we do not redistribute (docs/LEGAL.md).
     for dev in cfg.get("exclude", []):
@@ -661,7 +672,7 @@ def shell_plan(repo=None):
         for root, dirs, files in os.walk(base):
             dirs[:] = sorted(d for d in dirs if d not in skip)
             for fn in sorted(files):
-                if fn in skip:
+                if fn in skip or macos_file(fn):
                     continue
                 full = os.path.join(root, fn)
                 out["/usr/share/phoenix/%s/%s" % (sub, os.path.relpath(full, base).replace(os.sep, "/"))] = full
