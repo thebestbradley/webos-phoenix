@@ -10,7 +10,7 @@
 // target written from the declaration (share.ts shareTarget).
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-import { GENERIC_KINDS } from "./checks";
+import { GENERIC_KINDS, THIRD_PARTY_APP_GROUPS } from "./checks";
 import { shareTarget } from "../share";
 import type { ShareAccepts } from "../types";
 
@@ -59,8 +59,12 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     const shareGroup = service + ".share";
     const phoenix: Record<string, unknown> = { hidden: true };
     if (share) phoenix.shareTargets = [shareTarget({ service, templateIds: [templateId], share: { accepts: SCAFFOLD_ACCEPTS, send: async () => ({}) } }, name)];
+    // The app's own groups (rule C19, checks.ts THIRD_PARTY_APP_GROUPS): none
+    // for the page that only says where the account is added; the compose
+    // page's three with sharing. Always a list: without one the installer
+    // gives the app the public group.
     files["appinfo.json"] = js({ id: appId, version: "0.1.0", vendor: "Example", type: "web", main: "index.html", title: name,
-                                 icon: "icon.png", phoenix, requiredPermissions: ["accounts.transport"].concat(share ? [shareGroup] : []) });
+                                 icon: "icon.png", phoenix, requiredPermissions: share ? [shareGroup].concat(THIRD_PARTY_APP_GROUPS) : [] });
     if (share) Object.assign(files, sharePageFiles());
     else files["index.html"] = "<!doctype html>\n<!-- " + appId + " carries a Synergy connector: add the account in Accounts. -->\n" +
         "<html><head><meta charset=\"utf-8\"><title>" + name + "</title></head><body><p>Add the account in Accounts.</p></body></html>\n";

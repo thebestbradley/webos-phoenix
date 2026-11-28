@@ -14,6 +14,18 @@
 // audience, idempotencyKey}. One key per share, so "Try Again" after an
 // error never posts twice. Plain script, no build: it runs in the
 // connector's own app, as the original's pages ran in theirs.
+//
+// Its calls and the groups the app's requiredPermissions name for them
+// (rule C19, docs/SYNERGY-SDK.md "The compose page"):
+//   <service>/share                      the service's own share group
+//   com.palm.service.accounts/listMyAccounts
+//                                        phoenix.accounts.mine: the accounts
+//                                        the app may read (its template's
+//                                        readPermissions), not every account
+//   com.palm.applicationManager/open     phoenix.appmanager.open: Accounts
+//                                        ({id, params}) and the posted link
+//                                        ({target}); open alone, not launch's
+//                                        group (launch points, handlers)
 
 "use strict";
 
@@ -96,7 +108,7 @@
         $("heading").textContent = heading;
         document.title = target.label || document.title;
         $("setup").addEventListener("click", function () {
-            call("luna://com.palm.applicationManager/launch", { id: "com.palm.app.accounts", params: { templateId: target.templateId } }).then(close);
+            call("luna://com.palm.applicationManager/open", { id: "com.palm.app.accounts", params: { templateId: target.templateId } }).then(close);
         });
         // Launched without a share: where the account is added.
         if (!share) { $("none").hidden = false; return; }
@@ -242,7 +254,7 @@
         $("cancel").addEventListener("click", close);
         $("post").addEventListener("click", post);
 
-        call("luna://com.palm.service.accounts/listAccounts", { templateId: target.templateId }).then(function (r) {
+        call("luna://com.palm.service.accounts/listMyAccounts", { templateId: target.templateId }).then(function (r) {
             accounts = (r.results || []).filter(function (a) { return !a.beingDeleted; });
             if (!accounts.length) { $("none").hidden = false; return; }
             accounts.forEach(function (a) {

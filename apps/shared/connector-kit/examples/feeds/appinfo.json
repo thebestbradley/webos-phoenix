@@ -10,7 +10,5 @@
         "//": "Not in the launcher: the app carries the connector (docs/SYNERGY-SDK.md).",
         "hidden": true
     },
-    "requiredPermissions": [
-        "accounts.transport"
-    ]
+    "requiredPermissions": []
 }
