@@ -490,6 +490,7 @@
             "devices": ["/usr/palm/applications/com.palm.app.clock"],
             "rewrite-css": ["css/clock.css", "dashAlarm/dashAlarm.css"],
             "upscale": [
+                { "art": "icon-48.png", "method": "downscale", "source": "third_party/core-apps/com.palm.app.clock/icon-256x256.png" },
                 { "art": "images/Date_Flipper_Landscape.png", "method": "smooth" },
                 { "art": "images/Flipper_Landscape.png", "method": "smooth" },
                 { "art": "images/clockbg.png", "method": "smooth" },
@@ -507,7 +508,6 @@
             ],
             "skip": [
                 { "art": "icon-256x256.png", "why": "the app's own icon: the shell draws its 256 and 512 px files (docs/spec/app-icons.md)" },
-                { "art": "icon-48.png", "why": "not named by any page or stylesheet the system loads" },
                 { "art": "icon.png", "why": "the app's own icon: the shell draws its 256 and 512 px files (docs/spec/app-icons.md)" },
                 { "art": "images/Date_Flipper_Portrait.png", "why": "not named by any page or stylesheet the system loads" },
                 { "art": "images/Flipper_Portrait.png", "why": "not named by any page or stylesheet the system loads" },

@@ -184,6 +184,23 @@ async function main() {
             await ring.getByText("Dismiss", { exact: true }).click();
             check(await closedAgain, "Dismiss closes it");
         }
+        // Preferences (the app menu's, main.js:285): its header's icon is
+        // drawn. The original named the Calendar's picture a level up
+        // (prefs.js:27, copied from the Calendar, whose window is
+        // app/calendar.html: PreferencesView.js:150), which from the
+        // Clock's main.html is outside the app, and a 404.
+        const main = opened.find((p) => /main\.html/.test(p.url()));
+        if (main) {
+            const missing = [];
+            main.on("response", (r) => { if (r.status() >= 400) missing.push(`${r.status()} ${r.url()}`); });
+            await main.evaluate(() => Object.values(enyo.$).find((c) => c && typeof c.onclick_prefs === "function").onclick_prefs());
+            const icon = await main.waitForFunction(() => {
+                const i = document.querySelector(".prefsIcon");
+                return i && i.complete && i.getBoundingClientRect().width > 0 ? { src: i.getAttribute("src"), w: i.naturalWidth, h: i.naturalHeight } : null;
+            }, null, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+            check(!!icon && icon.w === 48 && icon.h === 48, `Preferences' header icon is drawn (${JSON.stringify(icon)})`);
+            check(!missing.length, "nothing it asks for is missing" + (missing.length ? ": " + missing.join(", ") : ""));
+        }
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
         await browser.close();
     } finally {
